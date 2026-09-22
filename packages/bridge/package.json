@@ -1,0 +1,1 @@
+{"name":"@bob/bridge","version":"0.1.0","private":true,"type":"module","dependencies":{"@bob/protocol":"workspace:*","@bob/types":"workspace:*"},"exports":{".":"./src/server.ts"}}
