@@ -25,7 +25,8 @@ jobs:
         run: pnpm install
 
       - name: Build Windows installer
-        run: pnpm --filter @bob/desktop package
+        working-directory: apps/desktop
+        run: pnpm package
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -35,4 +36,4 @@ jobs:
           name: Bob-Research-Companion-Setup
           path: |
             apps/desktop/dist/*.exe
-            dist/*.exe
+            apps/desktop/dist/**/*.exe
