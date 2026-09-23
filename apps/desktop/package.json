@@ -10,6 +10,11 @@
     "dist": "electron-builder --dir",
     "package": "electron-builder"
   },
+  "dependencies": {},
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  },
   "build": {
     "appId": "com.bob.research",
     "productName": "Bob Research Companion",
