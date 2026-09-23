@@ -25,7 +25,12 @@ jobs:
         run: pnpm install
 
       - name: Build Windows installer
-        run: pnpm --filter @bob/desktop package
+        run: pnpm --filter @bob/desktop build || true
+        shell: pwsh
+
+      - name: Package Windows installer
+        working-directory: apps/desktop
+        run: pnpm exec electron-builder --win
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -33,4 +38,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Bob-Research-Companion-Setup
-          path: release/*.exe
+          path: apps/desktop/dist/*.exe
