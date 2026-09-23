@@ -1,4 +1,4 @@
-onlyBuiltDependencies:
-  - electron-winstaller
-  - onnxruntime-node
-  - protobufjs
+allowBuilds:
+  electron-winstaller: true
+  onnxruntime-node: true
+  protobufjs: true
