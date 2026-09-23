@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@12.3.4",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/amanididier/build-bob-research-application.git"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
