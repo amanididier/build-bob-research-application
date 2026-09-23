@@ -29,15 +29,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Show directory contents for debugging
-        run: |
-          Get-ChildItem -Recurse -Filter "*.exe"
-
       - name: Upload Installer Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Bob-Research-Companion-Setup
-          path: |
-            dist/*.exe
-            apps/desktop/dist/*.exe
-            **/Bob-Research-Companion-Setup.exe
+          path: apps/desktop/dist/*.exe
