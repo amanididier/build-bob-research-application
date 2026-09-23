@@ -32,7 +32,7 @@ jobs:
 
       - name: Build Windows installer
         working-directory: apps/desktop
-        run: pnpm exec electron-builder --win nsis
+        run: pnpm exec electron-builder --win nsis --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
