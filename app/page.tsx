@@ -1,14 +1,38 @@
 import Link from 'next/link'
-import { redirect } from 'next/navigation'
-import { headers } from 'next/headers'
-import { auth } from '@/lib/auth'
-import { getProjects } from '@/app/actions/research'
-import { SignOutButton } from '@/components/sign-out-button'
 
-export default async function Page() {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) redirect('/sign-in')
-  const projects = await getProjects()
+const windowsDownloadUrl = 'https://github.com/amanididier/build-bob-research-application/releases/latest/download/Bob-Research-Companion-Setup.exe'
 
-  return <main className="app-shell"><header className="topbar"><div className="brand-lockup"><div className="brand-mark">B</div><div><p className="eyebrow">Research operating system</p><h1>Bob workspace</h1></div></div><div className="topbar-actions"><span className="user-label">{session.user.email}</span><SignOutButton /></div></header><section className="workspace"><div className="workspace-intro"><div><p className="eyebrow">Your memory, organized</p><h2>What are you investigating?</h2><p className="card-copy">Projects keep your sources, notes, and conversations together across the desktop app and browser companion.</p></div><Link className="primary-link" href="/projects/new">New project <span>+</span></Link></div><div className="project-grid">{projects.length === 0 ? <div className="empty-state"><span className="empty-icon">+</span><h3>Start your first research project</h3><p>Create a project to give Bob context for your next question.</p><Link className="secondary-link" href="/projects/new">Create project</Link></div> : projects.map((project) => <article className="project-card" key={project.id}><div className="project-card-top"><span className={`project-color ${project.color}`} /><span className="project-date">{project.createdAt.toLocaleDateString()}</span></div><h3>{project.name}</h3><p>Research project</p><Link className="card-link" href={`/projects/${project.id}`}>Open workspace <span>→</span></Link></article>)}</div></section><footer><span>Bob Research System</span><span>Phase 02 · Persistent memory</span></footer></main>
+export default function Page() {
+  return (
+    <main className="download-page">
+      <header className="download-nav">
+        <Link className="download-brand" href="/">
+          <span className="download-mark">B</span>
+          <span>Bob</span>
+        </Link>
+        <Link className="download-signin" href="/sign-in">Sign in</Link>
+      </header>
+
+      <section className="download-hero" aria-labelledby="download-title">
+        <div className="download-orb" aria-hidden="true"><span /></div>
+        <p className="download-kicker">Your research, together</p>
+        <h1 id="download-title">Think clearly.<br /><em>Remember everything.</em></h1>
+        <p className="download-lede">Bob brings your browser, notes, and AI conversations into one calm research workspace.</p>
+        <a className="download-button" href={windowsDownloadUrl} download>
+          <span className="windows-glyph" aria-hidden="true">⊞</span>
+          <span><strong>Download for Windows</strong><small>Free to use · Windows 10 or later</small></span>
+          <span className="download-arrow" aria-hidden="true">↓</span>
+        </a>
+        <p className="download-note">No account needed to download. Sign in after installation to sync your workspace.</p>
+      </section>
+
+      <section className="download-features" aria-label="Bob features">
+        <article><span className="feature-icon">⌁</span><h2>Stay in the flow</h2><p>Capture ideas without leaving the pages you are reading.</p></article>
+        <article><span className="feature-icon">✦</span><h2>Make connections</h2><p>See your sources, highlights, and questions in one place.</p></article>
+        <article><span className="feature-icon">◌</span><h2>Keep your memory</h2><p>Return to meaningful research whenever you need it.</p></article>
+      </section>
+
+      <footer className="download-footer"><span>Bob Research System</span><span>Private by design · Free to start</span></footer>
+    </main>
+  )
 }
