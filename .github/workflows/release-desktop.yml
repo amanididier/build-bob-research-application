@@ -2,7 +2,11 @@ name: Release Desktop App
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -14,23 +18,40 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
+        with:
+          version: 12.3.4
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
+          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install
 
       - name: Build Windows installer
-        run: pnpm --filter @bob/desktop package
+        working-directory: apps/desktop
+        run: pnpm exec electron-builder --win nsis
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Inspect generated files
+        shell: pwsh
+        run: |
+          Write-Host "Desktop directory:"
+          Get-ChildItem apps/desktop -Force
+
+          if (-not (Test-Path "apps/desktop/dist")) {
+            Write-Error "apps/desktop/dist was not created"
+          }
+
+          Write-Host "Installer output:"
+          Get-ChildItem apps/desktop/dist -Recurse -Force
 
       - name: Upload Installer Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Bob-Research-Companion-Setup
           path: apps/desktop/dist/*.exe
+          if-no-files-found: error
