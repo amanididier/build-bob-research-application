@@ -1,6 +1,5 @@
 const { app, BrowserWindow, shell, session } = require('electron')
 const http = require('node:http')
-const path = require('node:path')
 const crypto = require('node:crypto')
 
 const PORT = 54321
@@ -45,18 +44,10 @@ function createWindow() {
     } 
   })
 
-  if (app.isPackaged) {
-    // When running from the built installer, load your compiled frontend assets or index.html
-    win.loadFile(path.join(__dirname, 'dist', 'index.html')).catch(() => {
-      // Fallback load if index is nested
-      win.loadURL(`file://${path.join(__dirname, 'index.html')}`)
-    })
-  } else {
-    // During local development, use localhost
-    const url = process.env.BOB_WEB_URL || 'http://localhost:3000'
-    win.loadURL(url)
-  }
-
+  const productionUrl = 'https://build-bob-research-application.vercel.app'
+  const url = app.isPackaged ? productionUrl : (process.env.BOB_WEB_URL || 'http://localhost:3000')
+  
+  win.loadURL(url)
   win.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' } })
 }
 
