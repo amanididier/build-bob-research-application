@@ -2,12 +2,7 @@ name: Release Desktop App
 
 on:
   push:
-    branches:
-      - main
-  workflow_dispatch:
-
-permissions:
-  contents: read
+    branches: [ main ]
 
 jobs:
   build:
@@ -20,23 +15,26 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 12.3.4
+          version: latest
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install
 
       - name: Build Windows installer
         run: pnpm --filter @bob/desktop package
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload installer artifact
+      - name: Upload Installer Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Bob-Research-Companion-Setup
-          path: apps/desktop/dist/*.exe
-          if-no-files-found: error
+          path: |
+            apps/desktop/dist/*.exe
+            dist/*.exe
