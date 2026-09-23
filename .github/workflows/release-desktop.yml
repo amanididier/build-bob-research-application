@@ -28,10 +28,11 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --no-frozen-lockfile --config.only-built-dependencies=electron
 
       - name: Build Windows installer
-        run: pnpm --filter @bob/desktop package
+        working-directory: apps/desktop
+        run: pnpm exec electron-builder --win nsis
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
