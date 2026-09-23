@@ -5,6 +5,10 @@
   "author": "Bob",
   "private": true,
   "main": "main.cjs",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/amanididier/build-bob-research-application.git"
+  },
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder --dir",
@@ -12,8 +16,8 @@
   },
   "dependencies": {},
   "devDependencies": {
-    "electron": "^33.0.0",
-    "electron-builder": "^25.1.8"
+    "electron": "44.4.3",
+    "electron-builder": "^26.15.3"
   },
   "build": {
     "appId": "com.bob.research",
