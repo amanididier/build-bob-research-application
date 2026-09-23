@@ -5,11 +5,11 @@
   "author": "Bob",
   "private": true,
   "main": "main.cjs",
-  "scripts": {
-    "start": "electron .",
-    "dist": "electron-builder --dir",
-    "package": "electron-builder --output release"
-  },
+ "scripts": {
+  "start": "electron .",
+  "dist": "electron-builder --dir",
+  "package": "electron-builder --output release-builds"
+},
   "build": {
     "appId": "com.bob.research",
     "productName": "Bob Research Companion",
