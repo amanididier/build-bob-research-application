@@ -1,7 +1,4 @@
-packages:
-  - apps/*
-  - packages/*
-allowBuilds:
-  electron-winstaller: set this to true or false
-  onnxruntime-node: set this to true or false
-  protobufjs: set this to true or false
+onlyBuiltDependencies:
+  - electron-winstaller
+  - onnxruntime-node
+  - protobufjs
