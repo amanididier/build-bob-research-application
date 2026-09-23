@@ -33,4 +33,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Bob-Research-Companion-Setup
-          path: apps/desktop/release-builds/*.exe
+          path: apps/desktop/dist/*.exe
