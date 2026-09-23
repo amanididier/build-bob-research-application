@@ -6,3 +6,6 @@ allowBuilds:
   electron-winstaller: true
   onnxruntime-node: true
   protobufjs: true
+
+onlyBuiltDependencies:
+  - electron
