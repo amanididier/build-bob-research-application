@@ -24,7 +24,8 @@
     "productName": "Bob Research Companion",
     "executableName": "bob-research-companion",
     "files": [
-      "main.cjs"
+      "main.cjs",
+      "../out/**/*"
     ],
     "directories": {
       "output": "dist"
