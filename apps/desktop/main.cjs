@@ -1,5 +1,6 @@
 const { app, BrowserWindow, shell, session } = require('electron')
 const http = require('node:http')
+const path = require('node:path')
 const crypto = require('node:crypto')
 
 const PORT = 54321
@@ -44,10 +45,20 @@ function createWindow() {
     } 
   })
 
-  const productionUrl = 'https://build-bob-research-application.vercel.app'
-  const url = app.isPackaged ? productionUrl : (process.env.BOB_WEB_URL || 'http://localhost:3000')
-  
-  win.loadURL(url)
+  // Completely removes the top menu bar (File, Edit, View, Window)
+  win.setMenu(null)
+
+  if (app.isPackaged) {
+    // Load local compiled static output files
+    win.loadFile(path.join(__dirname, '../out/index.html')).catch(() => {
+      win.loadURL(`file://${path.join(__dirname, '../index.html')}`)
+    })
+  } else {
+    // Local development fallback
+    const url = process.env.BOB_WEB_URL || 'http://localhost:3000'
+    win.loadURL(url)
+  }
+
   win.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' } })
 }
 
