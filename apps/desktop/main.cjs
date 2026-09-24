@@ -1,7 +1,6 @@
 const { app, BrowserWindow, shell, session } = require('electron')
 const http = require('node:http')
 const path = require('node:path')
-const crypto = require('node:crypto')
 
 const PORT = 54321
 const token = process.env.BOB_BRIDGE_TOKEN || 'development-token'
@@ -47,15 +46,11 @@ function createWindow() {
 
   // Completely removes the top menu bar (File, Edit, View, Window)
   win.setMenu(null)
-// THIS WILL FORCE THE CONSOLE TO OPEN AUTOMATICALLY
-  win.webContents.openDevTools()
+
   if (app.isPackaged) {
-    // Load local compiled static output files
-    win.loadFile(path.join(__dirname, '../out/index.html')).catch(() => {
-      win.loadURL(`file://${path.join(__dirname, '../index.html')}`)
-    })
+    // Point to your production deployment or standalone local server instance
+    win.loadURL('https://build-bob-research-application.vercel.app')
   } else {
-    // Local development fallback
     const url = process.env.BOB_WEB_URL || 'http://localhost:3000'
     win.loadURL(url)
   }
@@ -72,4 +67,3 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
 process.env.BOB_BRIDGE_TOKEN = token
-console.log(`[bob] bridge token: ${token}`)
