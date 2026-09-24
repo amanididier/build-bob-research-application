@@ -24,10 +24,7 @@
     "productName": "Bob Research Companion",
     "executableName": "bob-research-companion",
     "files": [
-      "main.cjs",
-      "../../.next/standalone/**/*",
-      "../../.next/static/**/*",
-      "../../public/**/*"
+      "main.cjs"
     ],
     "directories": {
       "output": "dist"
