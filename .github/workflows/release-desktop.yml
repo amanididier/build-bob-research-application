@@ -3,7 +3,7 @@ name: Release Desktop App
 on:
   push:
     tags:
-      - 'v*'  # Triggers whenever you version tag like v1.0.0
+      - 'v*'  # Triggers whenever you push a version tag like v1.0.8
   workflow_dispatch:
 
 permissions:
@@ -31,7 +31,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
-      - name: Build Next.js app (Static Export)
+      - name: Build Next.js static export
         run: pnpm build
 
       - name: Build Windows installer
