@@ -47,7 +47,8 @@ function createWindow() {
 
   // Completely removes the top menu bar (File, Edit, View, Window)
   win.setMenu(null)
-
+// THIS WILL FORCE THE CONSOLE TO OPEN AUTOMATICALLY
+  win.webContents.openDevTools()
   if (app.isPackaged) {
     // Load local compiled static output files
     win.loadFile(path.join(__dirname, '../out/index.html')).catch(() => {
