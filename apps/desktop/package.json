@@ -25,7 +25,9 @@
     "executableName": "bob-research-companion",
     "files": [
       "main.cjs",
-      "../../out/**/*"
+      "../../.next/standalone/**/*",
+      "../../.next/static/**/*",
+      "../../public/**/*"
     ],
     "directories": {
       "output": "dist"
