@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'export', // Required to generate local static files for Electron
+  // Server-side API routes and Better Auth are fully supported here
   typescript: {
     ignoreBuildErrors: true,
   },
