@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Server-side API routes and Better Auth are fully supported here
+  output: 'standalone', // Automatically packages your server routes and pages into a self-contained local folder
   typescript: {
     ignoreBuildErrors: true,
   },
