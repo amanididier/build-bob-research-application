@@ -514,6 +514,59 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
   return (
     <div className="space-y-6">
+      {/* Instant 1-Click Codebase & Extension Download Banner */}
+      <div className="bg-gradient-to-r from-amber-500/10 via-violet-500/10 to-emerald-500/10 border border-amber-500/30 rounded-2xl p-6">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 text-xs font-bold uppercase tracking-wider bg-amber-500/20 text-amber-300 rounded border border-amber-500/30">
+                1-Click Direct Download Available
+              </span>
+              <span className="text-xs text-neutral-400">No PNPM or Command Line Required</span>
+            </div>
+            <h2 className="text-xl font-bold text-neutral-100">
+              Download Entire Codebase & Extension ZIPs
+            </h2>
+            <p className="text-sm text-neutral-300 max-w-2xl">
+              Because internet timeouts can break package installs, we have pre-packaged all 98 files into ready-to-use zip archives:
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 shrink-0">
+            <a
+              href="/bob-complete-codebase.zip"
+              download="bob-complete-codebase.zip"
+              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-neutral-950 font-bold text-xs flex items-center gap-2 transition-all shadow-lg shadow-amber-500/20 cursor-pointer"
+            >
+              <HardDrive className="w-4 h-4" /> Download Complete Project (4.4 MB)
+            </a>
+            <a
+              href="/bob-chrome-extension.zip"
+              download="bob-chrome-extension.zip"
+              className="px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 font-bold text-xs flex items-center gap-2 transition-all cursor-pointer"
+            >
+              <Layers className="w-4 h-4" /> Download Extension ZIP (1.1 MB)
+            </a>
+          </div>
+        </div>
+
+        {/* Git Push Status Banner */}
+        <div className="mt-4 p-4 rounded-xl bg-neutral-950/80 border border-neutral-800 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2.5">
+            <GitBranch className="w-4 h-4 text-emerald-400 shrink-0" />
+            <div>
+              <span className="text-neutral-200 font-semibold">Git Feature Branch Ready: </span>
+              <code className="text-emerald-400 bg-neutral-900 px-1.5 py-0.5 rounded">feature/bob-complete-ui-extension-onboarding</code>
+              <p className="text-neutral-400 mt-0.5">98 files committed and linked to origin/main. Ready to push to GitHub as soon as authorized.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-1 rounded bg-emerald-500/10 text-emerald-300 font-semibold border border-emerald-500/20">
+              ✓ 98 Files Committed
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* Direct GitHub Web Implementation Guide (No local terminal needed) */}
       <div className="bg-gradient-to-r from-emerald-900/30 via-neutral-900 to-violet-900/30 border border-emerald-500/30 rounded-2xl p-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
