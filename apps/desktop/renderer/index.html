@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'" />
+  <title>Bob Research Companion</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <aside>
+    <h1>Bob</h1>
+    <p class="status" id="status">Offline workspace</p>
+    <nav>
+      <button data-tab="notes" class="active">Notes</button>
+      <button data-tab="sources">Sources</button>
+      <button data-tab="captures">Captures</button>
+      <button data-tab="ask">Ask</button>
+    </nav>
+    <button id="cloud" class="ghost">Open Bob online</button>
+    <small id="version"></small>
+  </aside>
+  <main>
+    <input id="search" placeholder="Search everything..." />
+    <section id="notes" class="tab active">
+      <form id="noteForm"><input name="title" placeholder="Note title" required /><textarea name="body" placeholder="Write a note..." rows="4"></textarea><button>Add note</button></form>
+      <ul id="noteList"></ul>
+    </section>
+    <section id="sources" class="tab">
+      <form id="sourceForm"><input name="title" placeholder="Source title" required /><input name="url" placeholder="https://..." /><button>Add source</button></form>
+      <ul id="sourceList"></ul>
+    </section>
+    <section id="captures" class="tab">
+      <p class="hint">Highlights sent from the Bob browser extension appear here.</p>
+      <ul id="captureList"></ul>
+    </section>
+    <section id="ask" class="tab">
+      <form id="askForm"><input name="q" placeholder="Ask about your saved research..." required /><button>Ask</button></form>
+      <div id="answer"></div>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

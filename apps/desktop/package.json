@@ -1,6 +1,6 @@
 {
   "name": "@bob/desktop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Bob desktop research companion",
   "author": "Bob",
   "private": true,
@@ -24,7 +24,9 @@
     "productName": "Bob Research Companion",
     "executableName": "bob-research-companion",
     "files": [
-      "main.cjs"
+      "main.cjs",
+      "preload.cjs",
+      "renderer/**"
     ],
     "directories": {
       "output": "dist"
