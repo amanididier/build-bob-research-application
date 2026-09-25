@@ -19,17 +19,17 @@
     "electron": "44.4.3",
     "electron-builder": "^26.15.3"
   },
-  "build": {
+ "build": {
     "appId": "com.bob.research",
     "productName": "Bob Research Companion",
     "executableName": "bob-research-companion",
     "files": [
       "main.cjs",
       "preload.cjs",
-      "renderer/**"
+      "../../dist/**/*"
     ],
     "directories": {
-      "output": "dist"
+      "output": "dist-electron"
     },
     "win": {
       "target": "nsis",
