@@ -1,0 +1,69 @@
+#bob-selection-bubble {
+  position: absolute;
+  z-index: 2147483647;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  user-select: none;
+}
+
+#bob-selection-bubble.bob-bubble-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+}
+
+.bob-bubble-inner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #1e1d1b;
+  color: #f5f4f0;
+  padding: 4px 8px;
+  border-radius: 20px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 11.5px;
+}
+
+.bob-bubble-mascot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-left: 2px;
+}
+
+.bob-bubble-action {
+  background: transparent;
+  border: none;
+  color: #e5e5df;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 7px;
+  border-radius: 12px;
+  font-size: 11.5px;
+  font-weight: 500;
+  transition: background 0.12s, color 0.12s;
+}
+
+.bob-bubble-action:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+}
+
+.bob-bubble-action.primary {
+  color: #f4bc18;
+  font-weight: 600;
+}
+
+.bob-bubble-action.primary:hover {
+  background: rgba(244, 188, 24, 0.2);
+  color: #fbd65b;
+}
+
+.bob-divider {
+  width: 1px;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.2);
+}

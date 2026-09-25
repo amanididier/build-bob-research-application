@@ -1,0 +1,6 @@
+{
+  "name": "Bob — Focus Workspace",
+  "description": "Offline-ready desktop research assistant with adaptive local AI brain, browser extension bridge, and cloud sync.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

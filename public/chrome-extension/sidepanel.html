@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bob Side Panel</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <div class="sidepanel-root">
+    <!-- Header -->
+    <header class="sp-header">
+      <div class="sp-brand">
+        <div class="sp-mascot">
+          <img src="icons/icon48.png" alt="Bob" class="sp-avatar" id="bob-avatar-img">
+        </div>
+        <div class="sp-meta">
+          <div class="sp-name">Bob Research</div>
+          <div class="sp-status"><span class="dot active"></span> Connected to Desktop</div>
+        </div>
+      </div>
+      <div class="sp-actions">
+        <button id="btn-sync-desktop" title="Sync with Desktop App" class="btn-icon">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Active Research Workspace Banner -->
+    <div class="sp-context-banner">
+      <div class="context-label">ACTIVE RESEARCH</div>
+      <div class="context-title" id="active-project-title">AI research companion</div>
+      <div class="context-sub" id="active-tab-title">Reading current webpage...</div>
+    </div>
+
+    <!-- Quick Action Pills -->
+    <div class="sp-quick-actions">
+      <button class="pill" id="btn-summarize">✦ Summarize page</button>
+      <button class="pill" id="btn-extract-claims">Extract key claims</button>
+      <button class="pill" id="btn-save-tab">+ Save to Tabs</button>
+    </div>
+
+    <!-- Main Content Area -->
+    <main class="sp-main">
+      <!-- Conversation / Notes stream -->
+      <div class="sp-stream" id="chat-stream">
+        <div class="sp-msg bob-msg">
+          <div class="msg-bubble">
+            <p>I'm looking at this page with you. What would you like to explore or cross-reference with your research project?</p>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Captured Highlights Drawer / Toggle -->
+    <div class="sp-notes-preview" id="notes-preview">
+      <div class="notes-header">
+        <span class="notes-count" id="notes-count">2 saved notes</span>
+        <button id="toggle-notes-view" class="text-btn">View notes</button>
+      </div>
+    </div>
+
+    <!-- Bottom Input -->
+    <footer class="sp-footer">
+      <div class="sp-composer">
+        <textarea id="prompt-input" placeholder="Ask Bob about this page..." rows="1"></textarea>
+        <button id="btn-send" class="btn-send" title="Send query">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          </svg>
+        </button>
+      </div>
+    </footer>
+  </div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>
