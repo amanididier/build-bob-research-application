@@ -1,43 +1,242 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'" />
-  <title>Bob Research Companion</title>
-  <link rel="stylesheet" href="styles.css" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Bob — Focus Workspace</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <aside>
-    <h1>Bob</h1>
-    <p class="status" id="status">Offline workspace</p>
-    <nav>
-      <button data-tab="notes" class="active">Notes</button>
-      <button data-tab="sources">Sources</button>
-      <button data-tab="captures">Captures</button>
-      <button data-tab="ask">Ask</button>
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="side" id="side">
+    <div class="brand"><div class="bob">🤖</div>Bob</div>
+    <div class="searchMini" id="searchMini">
+      <span>⌕</span>
+      <span style="font-size:13px;flex:1">Search</span>
+      <kbd>⌘ K</kbd>
+    </div>
+    <nav class="nav">
+      <button class="active" data-page="chat">✦ New research</button>
+      <button data-page="dashboard">⌂ Dashboard</button>
+      <button data-page="tasks">✓ Due soon</button>
+      <button data-page="chrome">◉ Chrome side panel</button>
     </nav>
-    <button id="cloud" class="ghost">Open Bob online</button>
-    <small id="version"></small>
+    <div class="section">RECENT PROJECTS</div>
+    <div class="recent" id="recentProjects">
+      <button data-page="chat"><i class="dot"></i>AI research companion</button>
+      <button data-page="summary"><i class="dot" style="background:#4b83f5"></i>Urugendo transport study</button>
+      <button data-page="chat"><i class="dot" style="background:#8b5cf6"></i>Bob AI startup study</button>
+    </div>
+    <div class="bottom">
+      <button id="theme">☾ Appearance</button>
+      <button id="settingsBtn">⚙ Settings</button>
+      <div class="upgrade">
+        🚀 <div><b>Upgrade</b><small>More research power</small></div>
+        <span class="pro">PRO</span>
+      </div>
+    </div>
   </aside>
-  <main>
-    <input id="search" placeholder="Search everything..." />
-    <section id="notes" class="tab active">
-      <form id="noteForm"><input name="title" placeholder="Note title" required /><textarea name="body" placeholder="Write a note..." rows="4"></textarea><button>Add note</button></form>
-      <ul id="noteList"></ul>
-    </section>
-    <section id="sources" class="tab">
-      <form id="sourceForm"><input name="title" placeholder="Source title" required /><input name="url" placeholder="https://..." /><button>Add source</button></form>
-      <ul id="sourceList"></ul>
-    </section>
-    <section id="captures" class="tab">
-      <p class="hint">Highlights sent from the Bob browser extension appear here.</p>
-      <ul id="captureList"></ul>
-    </section>
-    <section id="ask" class="tab">
-      <form id="askForm"><input name="q" placeholder="Ask about your saved research..." required /><button>Ask</button></form>
-      <div id="answer"></div>
-    </section>
+
+  <!-- MAIN -->
+  <main class="main">
+    <header class="top">
+      <button class="door" id="door">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M8 4h10v16H8"/><path d="M4 12h10"/><path d="m10 8 4 4-4 4"/>
+        </svg>
+      </button>
+      <span class="topTitle" id="title">Research workspace</span>
+      <div class="actions">
+        <button class="round notify" id="notify" title="Notifications">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+            <path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z"/><path d="M10 21h4"/>
+          </svg>
+        </button>
+        <button class="round share" id="share">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/>
+            <path d="m8.2 10.8 7.4-4.1M8.2 13.2l7.4 4.1"/>
+          </svg>
+        </button>
+        <div class="profile">
+          <button class="avatar">🙂</button>
+          <div class="profileCard">
+            <b id="userBadgeName">Amani</b>
+            <p>Research workspace</p>
+            <div data-page="profile">Profile & preferences</div>
+            <div data-page="notifications">Notifications <span style="float:right">3</span></div>
+            <div data-page="settings">Settings</div>
+            <div id="cloudSyncBtn">Cloud Database Sync</div>
+            <div id="signOutBtn">Sign out</div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <section class="content" id="content"></section>
+
+    <button class="chromeLauncher" id="chrome" title="Open Bob in Chrome">
+      <span class="chromeMark"><i></i></span>
+    </button>
+
+    <div class="composer" id="composer">
+      <textarea id="prompt" placeholder="Ask Bob anything about your research..."></textarea>
+      <div class="composerBar">
+        <button class="toolBtn" id="add">＋</button>
+        <button class="toolBtn" id="tools">✦</button>
+        <span class="spacer"></span>
+        <button class="toolBtn mic" title="Voice">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="8" y="3" width="8" height="12" rx="4"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/>
+          </svg>
+        </button>
+        <button class="send" id="send">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 11.5 20 4l-3.5 16-4.3-6.1L4 11.5Z"/><path d="m12.2 13.8 4.2-4.2"/>
+          </svg>
+        </button>
+      </div>
+      <div class="hint">Connected context · tabs · AI conversations · tasks · deadlines</div>
+    </div>
   </main>
-  <script src="app.js"></script>
+</div>
+
+<!-- TOOLS POPOVER MENU -->
+<div class="menu" id="menu">
+  <h4>Bob tools</h4>
+  <div class="item" id="notesToolBtn">
+    <div class="itemIcon">▤</div>
+    <div><b>Notes</b><small>Capture a thought without leaving research.</small></div>
+  </div>
+  <div class="item" id="bridgeBtn">
+    <div class="itemIcon">↔</div>
+    <div><b>Bridge</b><small>Move context from one AI to another.</small></div>
+  </div>
+  <div class="item" data-page="dashboard">
+    <div class="itemIcon">◎</div>
+    <div><b>Focus & goals</b><small>See progress toward what matters.</small></div>
+  </div>
+  <div class="item" data-page="tasks">
+    <div class="itemIcon">✓</div>
+    <div><b>Tasks & deadlines</b><small>Turn research into finishable actions.</small></div>
+  </div>
+</div>
+
+<!-- BRIDGE OVERLAY -->
+<div class="bridge" id="bridge">
+  <div class="bridgeHead">
+    <div><b>Bridge context</b><span style="color:#999;font-size:9px"> · clean AI handoff</span></div>
+    <button class="close" id="bridgeClose">×</button>
+  </div>
+  <div class="bridgeLine">
+    <span class="pill claude">CLAUDE</span>
+    <input class="field yellow" id="bridgeFrom" value="Initial AI: compare user problems and evidence">
+    <span>→</span>
+    <span class="pill chatgpt">CHATGPT</span>
+  </div>
+  <input class="field" id="bridgePrompt" style="width:100%" value="Continue from this context and identify the strongest next step.">
+  <div class="bridgeActions">
+    <button id="copy">Copy bridge</button>
+    <button class="primary" id="bridgeSend">Send to next AI</button>
+  </div>
+</div>
+
+<!-- SELECTION BUBBLE -->
+<div class="selectionBubble" id="selectionBubble">
+  <button id="copySelection">Copy</button>
+  <button class="saveSel" id="saveSelection">Add to Bob</button>
+</div>
+
+<!-- SEARCH OVERLAY -->
+<div class="overlay" id="searchOverlay">
+  <div class="searchBox">
+    <div class="bigSearch">
+      <span>⌕</span>
+      <input id="search" placeholder="Search your research, tabs, tasks and AI conversations...">
+      <kbd>ESC</kbd>
+    </div>
+    <div class="results" id="results"></div>
+    <div class="foot">Search updates as you type · click a result to open it</div>
+  </div>
+</div>
+
+<!-- UPLOAD OVERLAY -->
+<div class="overlay" id="uploadOverlay">
+  <div class="upload">
+    <div style="display:flex;justify-content:space-between">
+      <div>
+        <b style="font-size:15px">Add research files</b>
+        <p style="font-size:10px;color:#999">Give Bob another piece of context.</p>
+      </div>
+      <button class="close" id="uploadClose">×</button>
+    </div>
+    <div class="drop">
+      <div class="uploadIcon">↑</div>
+      <b>Drop files here</b>
+      <p>PDF, DOCX, TXT, CSV, images</p>
+      <input id="files" type="file" multiple hidden>
+      <button class="primary" style="padding:9px 13px;border-radius:9px;font-size:10px" id="choose">Choose files</button>
+    </div>
+    <div class="files" id="fileList"></div>
+    <div style="text-align:right;margin-top:12px">
+      <button id="cancel">Cancel</button>
+      <button class="primary" style="padding:9px 13px;border-radius:9px;margin-left:6px" id="done">Add to research</button>
+    </div>
+  </div>
+</div>
+
+<!-- TAB PICKER OVERLAY -->
+<div class="overlay" id="tabPickerOverlay">
+  <div class="tabPicker">
+    <div class="tabPickerHead">
+      <div>
+        <b>Select research tabs</b>
+        <small>Choose the pages Bob should read and connect to your question.</small>
+      </div>
+      <button class="close" id="tabPickerClose">×</button>
+    </div>
+    <div class="tabList" id="tabPickerList">
+      <label class="tabChoice">
+        <input type="checkbox" checked>
+        <span class="tabFavicon">R</span>
+        <div><b>Transport booking research</b><small>research.example.com/transport-booking · Current tab</small></div>
+      </label>
+      <label class="tabChoice">
+        <input type="checkbox" checked>
+        <span class="tabFavicon">C</span>
+        <div><b>ChatGPT — transport research</b><small>chatgpt.com · 2 useful mentions</small></div>
+      </label>
+      <label class="tabChoice">
+        <input type="checkbox">
+        <span class="tabFavicon">N</span>
+        <div><b>Rwanda transport notes</b><small>docs.example.com · 5 highlights</small></div>
+      </label>
+    </div>
+    <div class="tabPickerFoot">
+      <span id="selectedTabCount">2 tabs selected</span>
+      <div>
+        <button id="tabPickerCancel">Cancel</button>
+        <button class="primaryPick" id="tabPickerApply">Use selected tabs</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- THINKING POPOVER -->
+<div class="thinking" id="thinking">
+  <div class="thinkTop">
+    <button class="thinkClose" id="thinkClose" title="Close">×</button>
+    <div class="thinkBob">🤖</div>
+    <div>
+      <b id="thinkTitle">Bob is thinking</b>
+      <small id="thinkSub">Connecting your research...</small>
+    </div>
+  </div>
+  <div class="load"><i></i></div>
+  <div class="step" id="step">Reading connected context</div>
+</div>
+
+<script src="app.js"></script>
 </body>
 </html>
