@@ -1,11 +1,12 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Plus, Sparkles, Mic, Send, Globe } from 'lucide-react';
+import { Plus, Sparkles, Mic, Send } from 'lucide-react';
 
 export const BottomComposer: React.FC = () => {
   const { 
     currentPage, 
-    triggerThinking, 
+    sendMessage,
+    isAiGenerating,
     setIsAddFilesOpen, 
     setIsToolsMenuOpen, 
     isToolsMenuOpen,
@@ -22,24 +23,19 @@ export const BottomComposer: React.FC = () => {
     return null;
   }
 
-  const handleSend = () => {
-    if (!prompt.trim()) return;
+  const handleSend = async () => {
+    if (!prompt.trim() || isAiGenerating) return;
     const text = prompt.trim();
     setPrompt('');
     if (textareaRef.current) {
       textareaRef.current.style.height = '38px';
     }
 
-    triggerThinking(
-      'Bob is thinking',
-      'Synthesizing across connected tabs and notes...',
-      'Reading 12 browser tabs, Claude chats and open tasks',
-      () => {
-        if (currentPage !== 'research') {
-          navigateTo('research', 'chat');
-        }
-      }
-    );
+    if (currentPage !== 'research') {
+      navigateTo('research', 'chat');
+    }
+
+    await sendMessage(text);
   };
 
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -85,7 +81,7 @@ export const BottomComposer: React.FC = () => {
           value={prompt}
           onChange={handleInput}
           onKeyDown={handleKeyDown}
-          placeholder="Ask Bob anything about your research..."
+          placeholder="Ask Bob anything about your research (runs offline on your PC)..."
           className="w-full min-h-[38px] max-h-[120px] resize-none border-0 outline-none bg-transparent px-2.5 py-1 text-[13px] text-[var(--t)]"
           rows={1}
         />
@@ -113,8 +109,8 @@ export const BottomComposer: React.FC = () => {
 
           {/* Voice button */}
           <button
-            onClick={() => triggerThinking('Voice input active', 'Listening for research queries...', 'Ready')}
-            title="Voice input"
+            onClick={() => sendMessage('Summarize the primary user friction points recorded so far.')}
+            title="Voice query simulation"
             className="w-8 h-8 rounded-full hover:bg-[var(--s2)] grid place-items-center text-[#666] dark:text-[#a8a199] transition-colors"
           >
             <Mic className="w-4 h-4" />
@@ -123,15 +119,17 @@ export const BottomComposer: React.FC = () => {
           {/* Send Button */}
           <button
             onClick={handleSend}
+            disabled={!prompt.trim() || isAiGenerating}
             title="Send prompt"
-            className="w-8 h-8 rounded-full bg-[#171717] dark:bg-[#f2eee7] text-white dark:text-[#171717] grid place-items-center hover:opacity-90 active:scale-95 transition-all shadow-sm"
+            className="w-8 h-8 rounded-full bg-[#171717] dark:bg-[#f2eee7] text-white dark:text-[#171717] grid place-items-center hover:opacity-90 active:scale-95 transition-all shadow-sm disabled:opacity-40"
           >
             <Send className="w-3.5 h-3.5" />
           </button>
         </div>
 
-        <div className="text-[9px] text-[#aaa] px-2.5 pt-1">
-          Connected context · tabs · AI conversations · tasks · deadlines
+        <div className="flex items-center justify-between text-[9px] text-[#aaa] px-2.5 pt-1">
+          <span>Connected context · local PC memory · tabs · open tasks</span>
+          <span className="font-mono text-[var(--m)]">100% Free On-Device Brain</span>
         </div>
       </div>
     </>

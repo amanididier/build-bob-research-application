@@ -1,300 +1,225 @@
 import React, { useState } from 'react';
-import { useTheme } from '../../context/ThemeContext';
 import { useApp } from '../../context/AppContext';
 import { 
-  Sun, 
-  Moon, 
-  Monitor, 
   Cpu, 
+  HardDrive, 
   ShieldCheck, 
   Globe, 
   Bell, 
-  Check, 
-  Activity,
-  Sliders,
-  Sparkles
+  Terminal, 
+  Sparkles,
+  DownloadCloud,
+  CheckCircle2,
+  Database
 } from 'lucide-react';
+import { detectSystemHardware, MODEL_CATALOG } from '../../lib/hardware';
 
 export const SettingsPage: React.FC = () => {
-  const { theme, setTheme, isDark } = useTheme();
-  const { triggerThinking, navigateTo, startOnboarding, openChromeBridge } = useApp();
+  const { 
+    openChromeBridge, 
+    navigateTo, 
+    aiDownloadStatus, 
+    memoryStats 
+  } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'general' | 'appearance' | 'ai' | 'research' | 'browser' | 'privacy' | 'notifications' | 'diagnostics'>('appearance');
-
-  // Toggle states
+  const [activeTab, setActiveTab] = useState<'ai' | 'memory' | 'browser' | 'privacy' | 'notifications' | 'diagnostics'>('ai');
   const [openChromeByDefault, setOpenChromeByDefault] = useState(true);
-  const [showConnectedContext, setShowConnectedContext] = useState(true);
-  const [proactiveResearch, setProactiveResearch] = useState(true);
-  const [confidenceSignals, setConfidenceSignals] = useState(true);
   const [localOnlyMode, setLocalOnlyMode] = useState(true);
   const [deadlineAlerts, setDeadlineAlerts] = useState(true);
+
+  const [hardware] = useState(() => detectSystemHardware());
+  const activeProfile = MODEL_CATALOG[aiDownloadStatus.tier];
 
   return (
     <div className="max-w-[1130px] mx-auto px-6 md:px-10 py-7 pb-36">
       {/* Header */}
-      <div className="flex items-start justify-between gap-6 pb-6 border-b border-[var(--line)] mb-8">
-        <div>
-          <div className="text-[10px] tracking-[0.08em] text-[#999] uppercase font-semibold">
-            BOB SETTINGS
-          </div>
-          <h1 className="text-[32px] tracking-[-1px] font-extrabold my-1.5 text-[var(--t)]">
-            Settings & Preferences
-          </h1>
-          <p className="text-[var(--m)] text-[13px] leading-relaxed max-w-[620px] m-0">
-            Quiet controls for how Bob works, looks, and stays connected to your research and local hardware.
-          </p>
+      <div className="py-3 pb-6 border-b border-[var(--line)] mb-6">
+        <div className="text-[10px] tracking-[0.08em] text-[#999] uppercase font-semibold">
+          SYSTEM PREFERENCES
         </div>
-
-        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#d9e7ff] to-[#f2d4bb] text-neutral-800 font-extrabold text-lg grid place-items-center shadow-sm">
-          A
-        </div>
+        <h1 className="text-[31px] tracking-[-1px] font-extrabold my-2 text-[var(--t)]">
+          Settings & Local Hardware
+        </h1>
+        <p className="text-[var(--m)] text-[13px] leading-relaxed max-w-[620px] m-0">
+          Bob is engineered to run free on your PC hardware without external server costs. Manage your local reasoning model, PC memory bank, and privacy.
+        </p>
       </div>
 
-      {/* Settings Layout: Left Nav + Right Content */}
-      <div className="grid grid-cols-1 md:grid-cols-[210px_1fr] gap-10">
-        {/* Settings Sub-navigation */}
-        <aside className="space-y-1">
-          <button
-            onClick={() => setActiveTab('appearance')}
-            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-[12px] font-medium transition-colors ${
-              activeTab === 'appearance'
-                ? 'bg-[var(--s2)] text-[var(--t)] font-bold'
-                : 'text-[var(--m)] hover:bg-[var(--s2)]/60 hover:text-[var(--t)]'
-            }`}
-          >
-            Appearance & Theme
-          </button>
-          <button
-            onClick={() => setActiveTab('general')}
-            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-[12px] font-medium transition-colors ${
-              activeTab === 'general'
-                ? 'bg-[var(--s2)] text-[var(--t)] font-bold'
-                : 'text-[var(--m)] hover:bg-[var(--s2)]/60 hover:text-[var(--t)]'
-            }`}
-          >
-            Workspace Behavior
-          </button>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+        {/* Navigation Sidebar */}
+        <div className="space-y-1">
           <button
             onClick={() => setActiveTab('ai')}
-            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-[12px] font-medium transition-colors ${
+            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-[12px] font-semibold flex items-center gap-2.5 transition-colors ${
               activeTab === 'ai'
-                ? 'bg-[var(--s2)] text-[var(--t)] font-bold'
-                : 'text-[var(--m)] hover:bg-[var(--s2)]/60 hover:text-[var(--t)]'
+                ? 'bg-[var(--s)] text-[var(--t)] shadow-sm'
+                : 'text-[var(--m)] hover:text-[var(--t)] hover:bg-[var(--s2)]'
             }`}
           >
-            AI Models & Brain
+            <Cpu className="w-4 h-4 text-[var(--y)]" />
+            <span>AI Brain & Hardware</span>
           </button>
+
+          <button
+            onClick={() => setActiveTab('memory')}
+            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-[12px] font-semibold flex items-center gap-2.5 transition-colors ${
+              activeTab === 'memory'
+                ? 'bg-[var(--s)] text-[var(--t)] shadow-sm'
+                : 'text-[var(--m)] hover:text-[var(--t)] hover:bg-[var(--s2)]'
+            }`}
+          >
+            <Database className="w-4 h-4 text-[#8b5cf6]" />
+            <span>PC Research Memory</span>
+          </button>
+
           <button
             onClick={() => setActiveTab('browser')}
-            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-[12px] font-medium transition-colors ${
+            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-[12px] font-semibold flex items-center gap-2.5 transition-colors ${
               activeTab === 'browser'
-                ? 'bg-[var(--s2)] text-[var(--t)] font-bold'
-                : 'text-[var(--m)] hover:bg-[var(--s2)]/60 hover:text-[var(--t)]'
+                ? 'bg-[var(--s)] text-[var(--t)] shadow-sm'
+                : 'text-[var(--m)] hover:text-[var(--t)] hover:bg-[var(--s2)]'
             }`}
           >
-            Browser & Chrome Bridge
+            <Globe className="w-4 h-4 text-[var(--b)]" />
+            <span>Chrome Bridge</span>
           </button>
+
           <button
             onClick={() => setActiveTab('privacy')}
-            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-[12px] font-medium transition-colors ${
+            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-[12px] font-semibold flex items-center gap-2.5 transition-colors ${
               activeTab === 'privacy'
-                ? 'bg-[var(--s2)] text-[var(--t)] font-bold'
-                : 'text-[var(--m)] hover:bg-[var(--s2)]/60 hover:text-[var(--t)]'
+                ? 'bg-[var(--s)] text-[var(--t)] shadow-sm'
+                : 'text-[var(--m)] hover:text-[var(--t)] hover:bg-[var(--s2)]'
             }`}
           >
-            Privacy & Offline Data
+            <ShieldCheck className="w-4 h-4 text-[var(--g)]" />
+            <span>Privacy & Local Storage</span>
           </button>
-          <button
-            onClick={() => setActiveTab('notifications')}
-            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-[12px] font-medium transition-colors ${
-              activeTab === 'notifications'
-                ? 'bg-[var(--s2)] text-[var(--t)] font-bold'
-                : 'text-[var(--m)] hover:bg-[var(--s2)]/60 hover:text-[var(--t)]'
-            }`}
-          >
-            Notifications
-          </button>
+
           <button
             onClick={() => setActiveTab('diagnostics')}
-            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-[12px] font-medium transition-colors ${
+            className={`w-full text-left px-3.5 py-2.5 rounded-xl text-[12px] font-semibold flex items-center gap-2.5 transition-colors ${
               activeTab === 'diagnostics'
-                ? 'bg-[var(--s2)] text-[var(--t)] font-bold'
-                : 'text-[var(--m)] hover:bg-[var(--s2)]/60 hover:text-[var(--t)]'
+                ? 'bg-[var(--s)] text-[var(--t)] shadow-sm'
+                : 'text-[var(--m)] hover:text-[var(--t)] hover:bg-[var(--s2)]'
             }`}
           >
-            System Diagnostics
+            <Terminal className="w-4 h-4 text-neutral-400" />
+            <span>Diagnostics</span>
           </button>
-        </aside>
+        </div>
 
-        {/* Settings Body */}
-        <div className="space-y-8 max-w-[720px]">
-          {/* Appearance Section */}
-          {activeTab === 'appearance' && (
-            <div className="space-y-6">
-              <div className="border-b border-[var(--line)] pb-4">
-                <h3 className="text-[17px] font-bold text-[var(--t)] m-0 mb-1">Appearance</h3>
-                <p className="text-[12px] text-[var(--m)] m-0">
-                  Select your interface theme or let Bob adapt to your operating system.
-                </p>
-              </div>
-
-              {/* Theme Selector Cards */}
-              <div className="grid grid-cols-3 gap-3">
-                <button
-                  onClick={() => setTheme('light')}
-                  className={`p-4 rounded-2xl border text-center transition-all ${
-                    theme === 'light'
-                      ? 'border-[var(--y)] bg-[var(--s)] shadow-md ring-2 ring-[var(--y)]/20'
-                      : 'border-[var(--line)] bg-[var(--s2)] hover:bg-[var(--s)]'
-                  }`}
-                >
-                  <Sun className={`w-6 h-6 mx-auto mb-2 ${theme === 'light' ? 'text-[var(--y)]' : 'text-[var(--m)]'}`} />
-                  <b className="block text-[12px] text-[var(--t)]">Light Mode</b>
-                  <small className="text-[10px] text-[var(--m)]">Clean & bright</small>
-                </button>
-
-                <button
-                  onClick={() => setTheme('dark')}
-                  className={`p-4 rounded-2xl border text-center transition-all ${
-                    theme === 'dark'
-                      ? 'border-[var(--y)] bg-[var(--s)] shadow-md ring-2 ring-[var(--y)]/20'
-                      : 'border-[var(--line)] bg-[var(--s2)] hover:bg-[var(--s)]'
-                  }`}
-                >
-                  <Moon className={`w-6 h-6 mx-auto mb-2 ${theme === 'dark' ? 'text-[var(--y)]' : 'text-[var(--m)]'}`} />
-                  <b className="block text-[12px] text-[var(--t)]">Dark Mode</b>
-                  <small className="text-[10px] text-[var(--m)]">Warm night contrast</small>
-                </button>
-
-                <button
-                  onClick={() => setTheme('system')}
-                  className={`p-4 rounded-2xl border text-center transition-all ${
-                    theme === 'system'
-                      ? 'border-[var(--y)] bg-[var(--s)] shadow-md ring-2 ring-[var(--y)]/20'
-                      : 'border-[var(--line)] bg-[var(--s2)] hover:bg-[var(--s)]'
-                  }`}
-                >
-                  <Monitor className={`w-6 h-6 mx-auto mb-2 ${theme === 'system' ? 'text-[var(--y)]' : 'text-[var(--m)]'}`} />
-                  <b className="block text-[12px] text-[var(--t)]">System Auto</b>
-                  <small className="text-[10px] text-[var(--m)]">Follows Windows</small>
-                </button>
-              </div>
-
-              {/* Setting rows */}
-              <div className="bg-[var(--s)] border border-[var(--line)] rounded-[18px] divide-y divide-[var(--line)] overflow-hidden">
-                <div className="p-4 flex items-center justify-between">
-                  <div>
-                    <b className="text-[12px] text-[var(--t)] block">High Contrast Highlights</b>
-                    <small className="text-[10px] text-[var(--m)]">Use saturated green and amber for research text highlights.</small>
-                  </div>
-                  <button
-                    onClick={() => setConfidenceSignals(!confidenceSignals)}
-                    className={`w-10 h-6 rounded-full p-1 transition-colors ${
-                      confidenceSignals ? 'bg-[#171717] dark:bg-[var(--y)]' : 'bg-neutral-300 dark:bg-neutral-700'
-                    }`}
-                  >
-                    <div
-                      className={`w-4 h-4 rounded-full bg-white dark:bg-neutral-900 shadow-sm transition-transform ${
-                        confidenceSignals ? 'translate-x-4' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* General Workspace Section */}
-          {activeTab === 'general' && (
-            <div className="space-y-6">
-              <div className="border-b border-[var(--line)] pb-4">
-                <h3 className="text-[17px] font-bold text-[var(--t)] m-0 mb-1">Workspace Behavior</h3>
-                <p className="text-[12px] text-[var(--m)] m-0">
-                  Configure default research flows and context display.
-                </p>
-              </div>
-
-              <div className="bg-[var(--s)] border border-[var(--line)] rounded-[18px] divide-y divide-[var(--line)] overflow-hidden">
-                <div className="p-4 flex items-center justify-between">
-                  <div>
-                    <b className="text-[12px] text-[var(--t)] block">Show Connected Context Rail</b>
-                    <small className="text-[10px] text-[var(--m)]">Display tabs, AI chats, tasks, and goals under responses.</small>
-                  </div>
-                  <button
-                    onClick={() => setShowConnectedContext(!showConnectedContext)}
-                    className={`w-10 h-6 rounded-full p-1 transition-colors ${
-                      showConnectedContext ? 'bg-[#171717] dark:bg-[var(--y)]' : 'bg-neutral-300 dark:bg-neutral-700'
-                    }`}
-                  >
-                    <div className={`w-4 h-4 rounded-full bg-white dark:bg-neutral-900 shadow-sm transition-transform ${showConnectedContext ? 'translate-x-4' : 'translate-x-0'}`} />
-                  </button>
-                </div>
-
-                <div className="p-4 flex items-center justify-between">
-                  <div>
-                    <b className="text-[12px] text-[var(--t)] block">Proactive Research Synthesis</b>
-                    <small className="text-[10px] text-[var(--m)]">Allow Bob to surface contradictions across open tabs automatically.</small>
-                  </div>
-                  <button
-                    onClick={() => setProactiveResearch(!proactiveResearch)}
-                    className={`w-10 h-6 rounded-full p-1 transition-colors ${
-                      proactiveResearch ? 'bg-[#171717] dark:bg-[var(--y)]' : 'bg-neutral-300 dark:bg-neutral-700'
-                    }`}
-                  >
-                    <div className={`w-4 h-4 rounded-full bg-white dark:bg-neutral-900 shadow-sm transition-transform ${proactiveResearch ? 'translate-x-4' : 'translate-x-0'}`} />
-                  </button>
-                </div>
-
-                <div className="p-4 flex items-center justify-between">
-                  <div>
-                    <b className="text-[12px] text-[var(--t)] block">Bob Introduction Tour</b>
-                    <small className="text-[10px] text-[var(--m)]">Revisit the first-launch interactive onboarding guide.</small>
-                  </div>
-                  <button
-                    onClick={startOnboarding}
-                    className="h-8 px-3 rounded-lg bg-[var(--s2)] hover:bg-[var(--line)]/60 text-[11px] font-bold text-[var(--t)] border border-[var(--line)] transition-colors flex items-center gap-1.5"
-                  >
-                    <Sparkles className="w-3 h-3 text-[var(--y)]" />
-                    <span>Replay Tour</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* AI Models Section */}
+        {/* Tab Content Panels */}
+        <div className="md:col-span-3">
+          {/* AI & Hardware Section */}
           {activeTab === 'ai' && (
             <div className="space-y-6">
-              <div className="border-b border-[var(--line)] pb-4 flex items-center justify-between">
-                <div>
-                  <h3 className="text-[17px] font-bold text-[var(--t)] m-0 mb-1">AI Models & Hardware</h3>
-                  <p className="text-[12px] text-[var(--m)] m-0">
-                    Bob operates locally with small efficient language models that run offline.
-                  </p>
-                </div>
-                <button
-                  onClick={() => navigateTo('diagnostics')}
-                  className="px-3 py-1.5 rounded-xl bg-[var(--ys)] text-[#765700] text-[11px] font-bold"
-                >
-                  Open AI Benchmark
-                </button>
+              <div className="border-b border-[var(--line)] pb-4">
+                <h3 className="text-[17px] font-bold text-[var(--t)] m-0 mb-1">
+                  Local AI Brain & Hardware Allocation
+                </h3>
+                <p className="text-[12px] text-[var(--m)] m-0">
+                  Bob auto-selected this model based on your PC's available memory, ensuring fast responses without crashing.
+                </p>
               </div>
 
-              <div className="bg-[var(--s)] border border-[var(--line)] rounded-[18px] p-5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
+              {/* Hardware Detected Card */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="p-4 rounded-2xl bg-[var(--s)] border border-[var(--line)] space-y-1">
+                  <span className="text-[10px] font-bold uppercase text-[var(--m)]">Detected RAM</span>
+                  <div className="text-[20px] font-extrabold text-[var(--t)]">{hardware.detectedRamGb} GB</div>
+                  <span className="text-[10px] text-[var(--m)]">{hardware.detectedRamGb <= 4 ? '4GB Tier (Fast & Light)' : '8GB+ Tier (Full Reasoning)'}</span>
+                </div>
+                <div className="p-4 rounded-2xl bg-[var(--s)] border border-[var(--line)] space-y-1">
+                  <span className="text-[10px] font-bold uppercase text-[var(--m)]">CPU Cores</span>
+                  <div className="text-[20px] font-extrabold text-[var(--t)]">{hardware.cpuCores} Threads</div>
+                  <span className="text-[10px] text-[var(--m)]">Parallel thread execution</span>
+                </div>
+                <div className="p-4 rounded-2xl bg-[var(--s)] border border-[var(--line)] space-y-1">
+                  <span className="text-[10px] font-bold uppercase text-[var(--m)]">Inference Cost</span>
+                  <div className="text-[20px] font-extrabold text-[var(--g)]">$0.00 / mo</div>
+                  <span className="text-[10px] text-[var(--m)]">100% on-device private</span>
+                </div>
+              </div>
+
+              {/* Model Profile Details */}
+              <div className="bg-[var(--s)] border border-[var(--line)] rounded-[20px] p-5 space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-[var(--line)]">
+                  <div className="flex items-center gap-3">
                     <span className="p-2 rounded-xl bg-[var(--ys)] text-[#765700]">
                       <Cpu className="w-5 h-5 text-[var(--y)]" />
                     </span>
                     <div>
-                      <b className="text-[13px] text-[var(--t)] block">Active Tier: Balanced 8GB RAM</b>
-                      <small className="text-[10px] text-[var(--m)]">Qwen 2.5 1.5B (4-bit quantized) · ~420MB RAM</small>
+                      <b className="text-[14px] text-[var(--t)] block">{activeProfile.name}</b>
+                      <small className="text-[11px] text-[var(--m)]">
+                        {activeProfile.parameters} · {activeProfile.quantization} · {activeProfile.memoryUsageMb}MB RAM
+                      </small>
                     </div>
                   </div>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#e6f7ed] text-[#14844d] font-bold">
-                    ONLINE & READY
+                  <span className="text-[10px] font-mono px-2.5 py-1 rounded-full bg-[#e6f7ed] text-[#14844d] font-bold flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>CACHED ON PC</span>
                   </span>
                 </div>
+
+                <p className="text-[12.5px] text-[var(--m)] leading-relaxed m-0">
+                  {activeProfile.description}
+                </p>
+
+                <div className="p-3 bg-[var(--s2)] rounded-xl flex items-center justify-between text-[11px] text-[var(--m)]">
+                  <span>Speed: ~{activeProfile.tokensPerSec} tokens / second</span>
+                  <span>Minimum RAM: {activeProfile.minRamGb} GB</span>
+                </div>
+              </div>
+
+              {/* Future Cloud AI Architecture note */}
+              <div className="p-4 rounded-2xl bg-[var(--s2)] border border-[var(--line)] space-y-2">
+                <div className="flex items-center gap-2 text-[12px] font-bold text-[var(--t)]">
+                  <Sparkles className="w-4 h-4 text-[var(--b)]" />
+                  <span>Modular AI Provider Architecture</span>
+                </div>
+                <p className="text-[11.5px] text-[var(--m)] leading-relaxed m-0">
+                  Bob's reasoning layer is designed with a pluggable architecture. It currently uses your local PC model to keep usage completely free and private. When you decide to scale to cloud APIs in the future, it seamlessly supports instant cloud-to-local fallback when credits are depleted.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* PC Research Memory Section */}
+          {activeTab === 'memory' && (
+            <div className="space-y-6">
+              <div className="border-b border-[var(--line)] pb-4">
+                <h3 className="text-[17px] font-bold text-[var(--t)] m-0 mb-1">
+                  Local PC Research Memory Bank
+                </h3>
+                <p className="text-[12px] text-[var(--m)] m-0">
+                  Bob's memory of your research stays directly on this PC, customized to your specific topics and past readings.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="p-4 rounded-2xl bg-[var(--s)] border border-[var(--line)] space-y-1">
+                  <span className="text-[10px] font-bold uppercase text-[var(--m)]">Total Memory Nodes</span>
+                  <div className="text-[20px] font-extrabold text-[var(--t)]">{memoryStats.totalNodes}</div>
+                  <span className="text-[10px] text-[var(--m)]">Notes, quotes & synthesis</span>
+                </div>
+                <div className="p-4 rounded-2xl bg-[var(--s)] border border-[var(--line)] space-y-1">
+                  <span className="text-[10px] font-bold uppercase text-[var(--m)]">Disk Space Used</span>
+                  <div className="text-[20px] font-extrabold text-[var(--t)]">{memoryStats.storageSizeKb} KB</div>
+                  <span className="text-[10px] text-[var(--m)]">Stored in local IndexedDB</span>
+                </div>
+                <div className="p-4 rounded-2xl bg-[var(--s)] border border-[var(--line)] space-y-1">
+                  <span className="text-[10px] font-bold uppercase text-[var(--m)]">Telemetry & Privacy</span>
+                  <div className="text-[20px] font-extrabold text-[var(--g)]">0 bytes</div>
+                  <span className="text-[10px] text-[var(--m)]">No data sent to outside servers</span>
+                </div>
+              </div>
+
+              <div className="bg-[var(--s)] border border-[var(--line)] rounded-[20px] p-5 space-y-3">
+                <h4 className="text-[13px] font-bold text-[var(--t)] m-0">How Bob uses local memory:</h4>
+                <p className="text-[12px] text-[var(--m)] leading-relaxed m-0">
+                  Whenever you ask Bob a question, Bob queries your PC's local memory bank first. It pulls the most relevant quotes and facts from your notes and browser tabs to ground its reasoning, preventing hallucinations and giving you specialized answers tailored to your research.
+                </p>
               </div>
             </div>
           )}
@@ -370,35 +295,6 @@ export const SettingsPage: React.FC = () => {
             </div>
           )}
 
-          {/* Notifications Section */}
-          {activeTab === 'notifications' && (
-            <div className="space-y-6">
-              <div className="border-b border-[var(--line)] pb-4">
-                <h3 className="text-[17px] font-bold text-[var(--t)] m-0 mb-1">Notification Preferences</h3>
-                <p className="text-[12px] text-[var(--m)] m-0">
-                  Choose when Bob nudges you regarding research findings and tasks.
-                </p>
-              </div>
-
-              <div className="bg-[var(--s)] border border-[var(--line)] rounded-[18px] divide-y divide-[var(--line)] overflow-hidden">
-                <div className="p-4 flex items-center justify-between">
-                  <div>
-                    <b className="text-[12px] text-[var(--t)] block">Task Deadlines & Due Alerts</b>
-                    <small className="text-[10px] text-[var(--m)]">Get notified when an attached task is due today.</small>
-                  </div>
-                  <button
-                    onClick={() => setDeadlineAlerts(!deadlineAlerts)}
-                    className={`w-10 h-6 rounded-full p-1 transition-colors ${
-                      deadlineAlerts ? 'bg-[#171717] dark:bg-[var(--y)]' : 'bg-neutral-300 dark:bg-neutral-700'
-                    }`}
-                  >
-                    <div className={`w-4 h-4 rounded-full bg-white dark:bg-neutral-900 shadow-sm transition-transform ${deadlineAlerts ? 'translate-x-4' : 'translate-x-0'}`} />
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Diagnostics Section */}
           {activeTab === 'diagnostics' && (
             <div className="space-y-6">
@@ -412,20 +308,20 @@ export const SettingsPage: React.FC = () => {
               <div className="bg-[var(--s)] border border-[var(--line)] rounded-[18px] p-5 space-y-4">
                 <div className="grid grid-cols-2 gap-3 text-[11px]">
                   <div className="p-3 bg-[var(--s2)] rounded-xl">
-                    <span className="text-[var(--m)] block">Electron Framework</span>
-                    <b className="text-[var(--t)] text-[13px]">v34.0.0 (Chromium 132)</b>
+                    <span className="text-[var(--m)] block">Offline Brain Tier</span>
+                    <b className="text-[var(--t)] text-[13px]">{aiDownloadStatus.tier}</b>
+                  </div>
+                  <div className="p-3 bg-[var(--s2)] rounded-xl">
+                    <span className="text-[var(--m)] block">Memory Bank Status</span>
+                    <b className="text-[var(--g)] text-[13px]">{memoryStats.totalNodes} Nodes Indexed</b>
                   </div>
                   <div className="p-3 bg-[var(--s2)] rounded-xl">
                     <span className="text-[var(--m)] block">Chrome Extension Bridge</span>
                     <b className="text-[var(--g)] text-[13px]">Connected (:54321)</b>
                   </div>
                   <div className="p-3 bg-[var(--s2)] rounded-xl">
-                    <span className="text-[var(--m)] block">Local SQLite DB</span>
-                    <b className="text-[var(--t)] text-[13px]">Healthy (42kb)</b>
-                  </div>
-                  <div className="p-3 bg-[var(--s2)] rounded-xl">
                     <span className="text-[var(--m)] block">Hardware Acceleration</span>
-                    <b className="text-[var(--t)] text-[13px]">WebGPU Active</b>
+                    <b className="text-[var(--t)] text-[13px]">WebGPU / SIMD Active</b>
                   </div>
                 </div>
 
