@@ -81,8 +81,8 @@ export const BottomComposer: React.FC = () => {
           value={prompt}
           onChange={handleInput}
           onKeyDown={handleKeyDown}
-          placeholder="Ask Bob anything about your research (runs offline on your PC)..."
-          className="w-full min-h-[38px] max-h-[120px] resize-none border-0 outline-none bg-transparent px-2.5 py-1 text-[13px] text-[var(--t)]"
+          placeholder="Message Bob..."
+          className="w-full min-h-[38px] max-h-[120px] resize-none border-0 outline-none focus:outline-none bg-transparent px-2.5 py-1 text-[13.5px] text-[var(--t)] leading-normal"
           rows={1}
         />
 
@@ -109,8 +109,8 @@ export const BottomComposer: React.FC = () => {
 
           {/* Voice button */}
           <button
-            onClick={() => sendMessage('Summarize the primary user friction points recorded so far.')}
-            title="Voice query simulation"
+            onClick={() => handleSend()}
+            title="Voice input"
             className="w-8 h-8 rounded-full hover:bg-[var(--s2)] grid place-items-center text-[#666] dark:text-[#a8a199] transition-colors"
           >
             <Mic className="w-4 h-4" />
@@ -125,11 +125,6 @@ export const BottomComposer: React.FC = () => {
           >
             <Send className="w-3.5 h-3.5" />
           </button>
-        </div>
-
-        <div className="flex items-center justify-between text-[9px] text-[#aaa] px-2.5 pt-1">
-          <span>Connected context · local PC memory · tabs · open tasks</span>
-          <span className="font-mono text-[var(--m)]">100% Free On-Device Brain</span>
         </div>
       </div>
     </>

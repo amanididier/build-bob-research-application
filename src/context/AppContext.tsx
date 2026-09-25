@@ -92,6 +92,10 @@ interface AppContextType {
   setIsChromeModalOpen: (open: boolean) => void;
   openChromeBridge: () => void;
 
+  // Auth modal after first response
+  isAuthModalOpen: boolean;
+  setIsAuthModalOpen: (open: boolean) => void;
+
   // Onboarding
   isOnboardingOpen: boolean;
   setIsOnboardingOpen: (open: boolean) => void;
@@ -158,6 +162,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isTabPickerOpen, setIsTabPickerOpen] = useState<boolean>(false);
   const [isToolsMenuOpen, setIsToolsMenuOpen] = useState<boolean>(false);
   const [isChromeModalOpen, setIsChromeModalOpen] = useState<boolean>(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
 
   // Onboarding state
   const [userName, setUserName] = useState<string>(() => {
@@ -215,8 +220,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [thinkingState, setThinkingState] = useState<ThinkingState>({
     show: false,
     title: 'Bob is thinking',
-    sub: 'Connecting your research...',
-    step: 'Reading connected context',
+    sub: 'Synthesizing context...',
+    step: 'Generating response',
   });
 
   const [unreadNotifications, setUnreadNotifications] = useState(3);
@@ -252,43 +257,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     },
   ]);
 
-  // Dynamic Chat Messages with initial greeting and synthesis card
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 'm-init',
-      role: 'assistant',
-      text: 'I found a few threads across your research on **Urugendo transport study**. What should we focus on first?',
-      timestamp: 'Today, 10:00 AM',
-    },
-    {
-      id: 'm-user-seed',
-      role: 'user',
-      text: 'Help me understand the strongest ideas and turn them into a plan I can actually finish.',
-      timestamp: 'Today, 10:01 AM',
-    },
-    {
-      id: 'm-synth-seed',
-      role: 'assistant',
-      text: 'Your sources are converging around three themes. I can compare them, surface contradictions, and turn the useful parts into concrete next steps:\n\n' +
-        '• **Problem:** Research is scattered across 12 tabs and 3 AI chats.\n' +
-        '• **Signal:** Independent evidence confirms booking and pricing friction before complexity is added.\n' +
-        '• **Next move:** Validate the highest-impact assumption with 2 user interviews.',
-      timestamp: 'Today, 10:01 AM',
-      sources: [
-        { title: 'Why people abandon online transport booking', url: 'https://research.example.com/transport-booking', snippet: 'Users leave booking flows when prices or seat availability are unclear.' },
-        { title: 'Transport booking research notes', url: 'https://docs.google.com/document/transport', snippet: 'Comparing passages reveals repeated passenger friction.' },
-      ],
-      modelTier: 'ultra-light-4gb',
-      tokensPerSec: 42,
-      memoryNodesUsed: 3,
-    },
-  ]);
-
+  // Clean Zero-State initial chat messages (no pre-loaded synthesis cards)
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isAiGenerating, setIsAiGenerating] = useState(false);
 
   // Dynamic interactive chat send
   const sendMessage = async (promptText: string) => {
     if (!promptText.trim()) return;
+
+    const isFirstConversation = messages.filter((m) => m.role === 'assistant').length === 0;
 
     const userMsg: ChatMessage = {
       id: `u-${Date.now()}`,
@@ -299,12 +276,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setMessages((prev) => [...prev, userMsg]);
     setIsAiGenerating(true);
-
-    triggerThinking(
-      'Bob is thinking',
-      'Synthesizing across local memory & connected tabs...',
-      'Running local inference on PC...'
-    );
 
     try {
       const response: AiSynthesisResponse = await bobAi.generateResearchAnswer(
@@ -325,31 +296,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       setMessages((prev) => [...prev, assistantMsg]);
 
-      // Save user question & synthesis into PC's local research memory bank
-      localMemoryBank.addMemory({
-        type: 'chat',
-        title: promptText.slice(0, 40) + '...',
-        content: response.answer.slice(0, 300),
-        projectId: activeResearchId,
-        tags: ['chat-synthesis', activeResearchId],
-        relevanceWeight: 0.9,
-      });
-      refreshMemoryStats();
+      // Pop up real Google/Auth sign-in card on first response if user not logged in
+      if (isFirstConversation && typeof window !== 'undefined' && !localStorage.getItem('bob_auth_user')) {
+        setTimeout(() => {
+          setIsAuthModalOpen(true);
+        }, 800);
+      }
     } finally {
       setIsAiGenerating(false);
-      closeThinking();
     }
   };
 
   const clearChat = () => {
-    setMessages([
-      {
-        id: `m-${Date.now()}`,
-        role: 'assistant',
-        text: `New research session opened for **${projects.find((p) => p.id === activeResearchId)?.title || 'your project'}**. Ask Bob anything or capture new evidence from Chrome.`,
-        timestamp: 'Just now',
-      },
-    ]);
+    setMessages([]);
   };
 
   // Seed Tasks
@@ -375,14 +334,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       title: 'Compare 3 competitor ticket dispatch apps',
       dueDate: 'Tomorrow',
       sourceConnection: 'Connected to 4 tabs',
-      completed: false,
-      projectId: 'urugendo',
-    },
-    {
-      id: 't-4',
-      title: 'Interview 2 station dispatchers',
-      dueDate: 'Friday',
-      sourceConnection: 'Validate assumption #2',
       completed: false,
       projectId: 'urugendo',
     },
@@ -414,18 +365,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       color: 'emerald',
       createdAt: 'Yesterday, 3:20 PM',
     },
-    {
-      id: 'n-3',
-      title: 'Cross-tab evidence corroboration',
-      selectedText:
-        'The strongest evidence appears when several independent sources point to the same friction. Comparing those passages helps a researcher distinguish repeated assumptions from meaningful signals.',
-      sourceTitle: 'Transport booking research notes',
-      sourceUrl: 'docs.example.com/transport-notes',
-      projectId: 'urugendo',
-      relevance: 84,
-      color: 'blue',
-      createdAt: '2 days ago',
-    },
   ]);
 
   const toggleSidebar = () => {
@@ -439,8 +378,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setTimeout(() => {
         setThinkingState((prev) => ({ ...prev, show: false }));
         if (callback) callback();
-      }, 900);
-    }, 1100);
+      }, 700);
+    }, 900);
   };
 
   const closeThinking = () => {
@@ -465,7 +404,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  // Software: manual task creation
   const addTask = (title: string, dueDate: string = 'Today', projectId: string = activeResearchId) => {
     if (!title.trim()) return;
     const newTask: ResearchTaskItem = {
@@ -480,9 +418,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTasks((prev) => [newTask, ...prev]);
   };
 
-  // Hybrid: AI-extracted tasks from local PC notes & tabs
   const extractAiTasks = async (): Promise<number> => {
-    triggerThinking('Extracting tasks', 'Analyzing notes and evidence on this PC...', 'Generating concrete steps');
+    triggerThinking('Extracting tasks', 'Analyzing evidence...', 'Generating checklist items');
     const suggestions = await bobAi.extractTasksFromContext(activeResearchId);
 
     const newTasks: ResearchTaskItem[] = suggestions.map((s, idx) => ({
@@ -499,7 +436,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return newTasks.length;
   };
 
-  // Software: manual note addition
   const addNote = (noteData: Omit<ResearchNoteItem, 'id' | 'createdAt'>) => {
     const newNote: ResearchNoteItem = {
       ...noteData,
@@ -508,7 +444,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setNotes((prev) => [newNote, ...prev]);
 
-    // Also persist into local research memory bank
     localMemoryBank.addMemory({
       type: 'note',
       title: newNote.title,
@@ -521,12 +456,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshMemoryStats();
   };
 
-  // Hybrid: AI Note Polishing & Structuring
   const polishNote = async (noteId: string) => {
     const target = notes.find((n) => n.id === noteId);
     if (!target) return;
 
-    triggerThinking('Polishing Note', 'Structuring takeaways and cross-referencing PC memory...', 'Formatting markdown');
+    triggerThinking('Polishing Note', 'Structuring takeaways and findings...', 'Formatting');
     const polished = await bobAi.polishResearchNote(target.title, target.selectedText);
 
     setNotes((prev) =>
@@ -552,7 +486,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentPage(page);
     if (subView) setResearchSubView(subView);
     if (projectId) setActiveResearchId(projectId);
-    // close modals upon navigation
     setIsSearchOpen(false);
     setIsToolsMenuOpen(false);
     setIsBridgeOpen(false);
@@ -585,6 +518,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isChromeModalOpen,
         setIsChromeModalOpen,
         openChromeBridge,
+        isAuthModalOpen,
+        setIsAuthModalOpen,
         isOnboardingOpen,
         setIsOnboardingOpen,
         startOnboarding,

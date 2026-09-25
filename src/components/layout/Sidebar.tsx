@@ -7,8 +7,6 @@ import {
   Home, 
   BookOpen, 
   CheckSquare, 
-  Globe, 
-  Cpu, 
   Moon, 
   Sun, 
   Settings, 
@@ -98,18 +96,6 @@ export const Sidebar: React.FC = () => {
         >
           <CheckSquare className="w-4 h-4 text-[var(--m)]" />
           <span>✓ Due soon</span>
-        </button>
-
-        <button
-          onClick={() => navigateTo('diagnostics')}
-          className={`w-full text-left px-3 py-2 rounded-xl text-[13px] flex items-center gap-2.5 font-medium transition-colors ${
-            currentPage === 'diagnostics'
-              ? 'bg-[var(--s2)] text-[var(--t)] font-semibold'
-              : 'text-[var(--t)] hover:bg-[var(--s2)]'
-          }`}
-        >
-          <Cpu className="w-4 h-4 text-[var(--y)]" />
-          <span>⚡ Diagnostics & Brain</span>
         </button>
       </nav>
 

@@ -1,18 +1,17 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { BobAvatar } from '../../components/BobAvatar';
+import { AuthModal } from '../../components/modals/AuthModal';
 import { 
-  Sparkles, 
-  ExternalLink, 
-  Bookmark, 
-  Layers, 
-  GitFork, 
   Copy, 
   Check, 
+  Bookmark, 
+  CheckSquare, 
   RotateCcw,
-  CheckSquare,
-  Cpu,
-  Database
+  Sparkles,
+  ChevronDown,
+  ChevronRight,
+  ExternalLink
 } from 'lucide-react';
 
 export const ChatView: React.FC = () => {
@@ -20,19 +19,21 @@ export const ChatView: React.FC = () => {
     activeResearchId, 
     projects, 
     triggerThinking, 
-    openSubtopic, 
     addNote, 
     addTask,
-    navigateTo,
     messages,
     isAiGenerating,
     sendMessage,
-    memoryStats
+    userName
   } = useApp();
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [savedNotes, setSavedNotes] = useState<Record<string, boolean>>({});
   const [extractedTasks, setExtractedTasks] = useState<Record<string, boolean>>({});
+  const [expandedReasoning, setExpandedReasoning] = useState<Record<string, boolean>>({});
+  
+  // Auth pop-up after first response
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
 
   const project = projects.find((p) => p.id === activeResearchId) || projects[0];
 
@@ -42,184 +43,287 @@ export const ChatView: React.FC = () => {
     setTimeout(() => setCopiedId(null), 1800);
   };
 
-  const handleSaveToNotes = (cardId: string, title: string, text: string) => {
+  const handleSaveToNotes = (cardId: string, text: string) => {
     addNote({
-      title,
+      title: `Synthesis on ${project.title}`,
       selectedText: text,
-      sourceTitle: `${project.title} · Local PC Synthesis`,
-      sourceUrl: 'bob.local/memory/' + project.id,
+      sourceTitle: `${project.title} · Research Notebook`,
+      sourceUrl: 'bob.local/' + project.id,
       projectId: project.id,
       relevance: 95,
       color: 'emerald',
     });
     setSavedNotes((prev) => ({ ...prev, [cardId]: true }));
-    triggerThinking('Saved to Notes', 'Added evidence card to your research notebook and local PC memory.', 'Writing note entry');
+    triggerThinking('Saved to Notes', 'Added to your research notebook.', 'Writing note');
   };
 
   const handleExtractTask = (cardId: string, text: string) => {
-    addTask(`Validate findings: ${text.slice(0, 45)}...`, 'Due tomorrow', project.id);
+    addTask(`Follow up on: ${text.slice(0, 48)}...`, 'Due tomorrow', project.id);
     setExtractedTasks((prev) => ({ ...prev, [cardId]: true }));
-    triggerThinking('Task created', 'Added research action item to your tasks list.', 'Task logged');
+    triggerThinking('Task created', 'Added research action item to your tasks.', 'Task logged');
   };
+
+  const toggleReasoning = (id: string) => {
+    setExpandedReasoning((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  // Helper to render markdown tables and formatted text cleanly like ChatGPT
+  const renderMessageContent = (text: string) => {
+    const lines = text.split('\n');
+    const elements: React.ReactNode[] = [];
+    let tableBuffer: string[] = [];
+    let inTable = false;
+
+    const flushTable = (key: number) => {
+      if (tableBuffer.length < 2) {
+        elements.push(
+          <p key={key} className="my-2 leading-relaxed">
+            {tableBuffer.join('\n')}
+          </p>
+        );
+        tableBuffer = [];
+        return;
+      }
+
+      // Parse markdown table
+      const headerLine = tableBuffer[0];
+      const headers = headerLine
+        .split('|')
+        .map((h) => h.trim())
+        .filter(Boolean);
+
+      const rows = tableBuffer.slice(2).map((rowLine) =>
+        rowLine
+          .split('|')
+          .map((c) => c.trim())
+          .filter((_, idx, arr) => idx > 0 && idx < arr.length - 1 || arr.length <= 2)
+      );
+
+      elements.push(
+        <div key={key} className="my-3 overflow-x-auto rounded-xl border border-[var(--line)] shadow-sm">
+          <table className="w-full text-left border-collapse text-[12px]">
+            <thead>
+              <tr className="bg-[var(--s2)] border-b border-[var(--line)]">
+                {headers.map((h, i) => (
+                  <th key={i} className="py-2.5 px-3.5 font-bold text-[var(--t)]">
+                    {h.replace(/\*\*/g, '')}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--line)] bg-[var(--s)]">
+              {rows.map((row, rIdx) => (
+                <tr key={rIdx} className="hover:bg-[var(--s2)]/50 transition-colors">
+                  {row.map((cell, cIdx) => (
+                    <td key={cIdx} className="py-2 px-3.5 text-[#444] dark:text-[#ccc]">
+                      {cell.replace(/\*\*/g, '')}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+      tableBuffer = [];
+    };
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
+        inTable = true;
+        tableBuffer.push(line);
+        continue;
+      } else if (inTable) {
+        inTable = false;
+        flushTable(i);
+      }
+
+      if (line.startsWith('### ')) {
+        elements.push(
+          <h4 key={i} className="text-[14px] font-bold text-[var(--t)] mt-3 mb-1">
+            {line.replace('### ', '')}
+          </h4>
+        );
+      } else if (line.startsWith('* ') || line.startsWith('• ') || line.startsWith('- ')) {
+        elements.push(
+          <li key={i} className="ml-4 list-disc text-[12.5px] leading-relaxed my-0.5 text-[var(--t)]">
+            {line.replace(/^(\*|•|-)\s+/, '')}
+          </li>
+        );
+      } else if (line.trim() === '') {
+        elements.push(<div key={i} className="h-1.5" />);
+      } else {
+        elements.push(
+          <p key={i} className="text-[12.5px] leading-relaxed my-1 text-[var(--t)]">
+            {line}
+          </p>
+        );
+      }
+    }
+
+    if (inTable) {
+      flushTable(lines.length);
+    }
+
+    return elements;
+  };
+
+  const starterPrompts = [
+    'Help me understand the core problems in my research',
+    'Compare the evidence across my tabs into a table',
+    'What are the strongest next steps I should take?',
+  ];
 
   return (
     <div className="max-w-[850px] mx-auto py-2">
-      {/* Hero */}
-      <div className="py-3 pb-7">
-        <div className="flex items-center justify-between">
-          <div className="text-[10px] tracking-[0.08em] text-[#999] uppercase font-semibold">
-            TODAY · FOCUSED ON-DEVICE RESEARCH
-          </div>
-          <div className="flex items-center gap-2 text-[10px] text-[var(--m)] font-mono bg-[var(--s2)] px-2.5 py-1 rounded-full border border-[var(--line)]">
-            <Database className="w-3 h-3 text-[var(--y)]" />
-            <span>{memoryStats.totalNodes} local memory items on PC</span>
-          </div>
+      {/* Introduction Hero - Clean & Zero Data Initial State */}
+      <div className="py-4 pb-6">
+        <div className="text-[10px] tracking-[0.08em] text-[#999] uppercase font-semibold">
+          TODAY · FOCUSED RESEARCH
         </div>
-
         <h1 className="text-[31px] tracking-[-1px] font-extrabold my-2 text-[var(--t)]">
           What are you trying to understand?
         </h1>
-        <p className="text-[var(--m)] leading-relaxed max-w-[680px] text-[13px]">
-          Bob connects what you are reading, notes stored on your PC, and what you need to finish next.
+        <p className="text-[var(--m)] leading-relaxed max-w-[640px] text-[13px]">
+          Bob connects what you are reading, what you have saved, and turns it into clear answers.
         </p>
 
-        <div className="flex gap-2 flex-wrap mt-4">
-          <span className="text-[10px] px-2.5 py-1 rounded-full bg-[var(--s2)] text-[#666] dark:text-[#cfc7be]">
-            {project.sourceCount} browser tabs
-          </span>
-          <span className="text-[10px] px-2.5 py-1 rounded-full bg-[var(--s2)] text-[#666] dark:text-[#cfc7be]">
-            {memoryStats.notesCount} local notes
-          </span>
-          <span className="text-[10px] px-2.5 py-1 rounded-full bg-[var(--s2)] text-[#666] dark:text-[#cfc7be]">
-            100% offline & private
-          </span>
-        </div>
+        {/* Suggestion Starter Pills */}
+        {messages.length === 0 && (
+          <div className="flex flex-wrap gap-2 mt-5">
+            {starterPrompts.map((p, idx) => (
+              <button
+                key={idx}
+                onClick={() => sendMessage(p)}
+                className="px-3.5 py-2 rounded-xl bg-[var(--s)] border border-[var(--line)] hover:border-[#bbb] dark:hover:border-[#555] text-[12px] text-[var(--t)] font-medium transition-all shadow-sm hover:shadow"
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Messages Feed */}
-      <div className="space-y-5">
+      <div className="space-y-6">
         {messages.map((msg) => {
           if (msg.role === 'user') {
             return (
               <div key={msg.id} className="flex gap-3 items-start justify-end">
-                <div className="max-w-[78%] bg-[var(--bs)] text-[#1e3a8a] dark:text-[#bfdbfe] px-4 py-3 rounded-[17px] text-[12.5px] leading-relaxed shadow-sm">
+                <div className="max-w-[80%] bg-[var(--bs)] text-[#1e3a8a] dark:text-[#bfdbfe] px-4 py-3 rounded-[18px] text-[13px] leading-relaxed shadow-sm">
                   {msg.text}
                 </div>
               </div>
             );
           }
 
-          // Assistant synthesis message
+          // ChatGPT-Style Assistant Response
           return (
-            <div key={msg.id} className="space-y-3">
-              <div className="flex gap-3 items-start">
+            <div key={msg.id} className="space-y-2">
+              <div className="flex gap-3.5 items-start">
                 <BobAvatar size={28} />
-                <div className="flex-1 bg-[var(--s)] border border-[var(--line)] rounded-[19px] p-5 shadow-[0_5px_25px_rgba(0,0,0,0.03)] space-y-3.5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-[var(--y)]" />
-                      <h3 className="text-[15px] font-bold text-[var(--t)] m-0">
-                        Bob Synthesis & Reasoning
-                      </h3>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {msg.tokensPerSec && (
-                        <span className="text-[9px] font-mono text-[var(--m)]">
-                          {msg.tokensPerSec} t/s
-                        </span>
-                      )}
-                      <span className="text-[9px] font-semibold tracking-wider uppercase text-[var(--y)] bg-[var(--ys)] dark:bg-[#4a3818] px-2 py-0.5 rounded-full">
-                        Local PC Model
-                      </span>
-                    </div>
-                  </div>
 
-                  <div className="text-[12.5px] text-[#50504b] dark:text-[#d3ccc3] leading-relaxed whitespace-pre-line">
-                    {msg.text}
-                  </div>
-
-                  {/* Sources Rail if available */}
+                <div className="flex-1 space-y-3">
+                  {/* Subtle, Encapsulated Thought Toggle (Like ChatGPT / Claude) */}
                   {msg.sources && msg.sources.length > 0 && (
-                    <div className="pt-2 border-t border-[var(--line)]">
-                      <div className="text-[10px] font-bold text-[var(--m)] uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                        <Database className="w-3 h-3 text-[var(--b)]" />
-                        <span>Grounded in Evidence from Your PC:</span>
-                      </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {msg.sources.map((s, idx) => (
-                          <div
-                            key={idx}
-                            title={s.snippet || s.url}
-                            className="px-2.5 py-1 bg-[var(--s2)] border border-[var(--line)] rounded-[9px] text-[10.5px] text-[#555] dark:text-[#ccc] flex items-center gap-1.5"
-                          >
-                            <ExternalLink className="w-3 h-3 text-[var(--y)]" />
-                            <span className="truncate max-w-[200px] font-medium">{s.title}</span>
+                    <div>
+                      <button
+                        onClick={() => toggleReasoning(msg.id)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] text-[var(--m)] hover:text-[var(--t)] bg-[var(--s2)] border border-[var(--line)]/60 transition-colors"
+                      >
+                        <Sparkles className="w-3 h-3 text-[var(--y)]" />
+                        <span>Analyzed {msg.sources.length} sources</span>
+                        {expandedReasoning[msg.id] ? (
+                          <ChevronDown className="w-3 h-3 ml-0.5" />
+                        ) : (
+                          <ChevronRight className="w-3 h-3 ml-0.5" />
+                        )}
+                      </button>
+
+                      {/* Collapsed Details only shown when user explicitly clicks */}
+                      {expandedReasoning[msg.id] && (
+                        <div className="mt-2 p-3 bg-[var(--s2)] rounded-xl border border-[var(--line)] space-y-2 animate-in fade-in duration-150">
+                          <div className="text-[10.5px] font-bold text-[var(--m)] uppercase">
+                            Referenced Sources:
                           </div>
-                        ))}
-                      </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {msg.sources.map((s, sIdx) => (
+                              <a
+                                key={sIdx}
+                                href={s.url || '#'}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="px-2 py-1 rounded-md bg-[var(--s)] border border-[var(--line)] text-[10.5px] text-[var(--t)] hover:underline flex items-center gap-1"
+                              >
+                                <ExternalLink className="w-2.5 h-2.5 text-[var(--m)]" />
+                                <span className="truncate max-w-[180px]">{s.title}</span>
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  {/* Action Row */}
-                  <div className="flex items-center gap-1.5 pt-3 border-t border-[var(--line)]">
-                    <button
-                      onClick={() => handleCopy(msg.id, msg.text)}
-                      title="Copy text"
-                      className="p-1.5 rounded-lg hover:bg-[var(--s2)] text-[#777] hover:text-[var(--t)] transition-colors"
-                    >
-                      {copiedId === msg.id ? <Check className="w-4 h-4 text-[var(--g)]" /> : <Copy className="w-4 h-4 text-[var(--m)]" />}
-                    </button>
+                  {/* Clean Formatted Response Card */}
+                  <div className="bg-[var(--s)] border border-[var(--line)] rounded-[20px] p-5 shadow-[0_5px_25px_rgba(0,0,0,0.02)] space-y-3">
+                    <div className="text-[13px] leading-relaxed">
+                      {renderMessageContent(msg.text)}
+                    </div>
 
-                    <button
-                      onClick={() =>
-                        handleSaveToNotes(
-                          msg.id,
-                          `Synthesis on ${project.title}`,
-                          msg.text.slice(0, 240) + '...'
-                        )
-                      }
-                      className={`p-1.5 rounded-lg transition-colors flex items-center gap-1 text-[11px] font-medium ${
-                        savedNotes[msg.id]
-                          ? 'text-[var(--g)] bg-[var(--s2)]'
-                          : 'hover:bg-[var(--s2)] text-[#777] hover:text-[var(--t)]'
-                      }`}
-                      title="Save to Notes"
-                    >
-                      <Bookmark className="w-3.5 h-3.5" />
-                      <span>{savedNotes[msg.id] ? 'Saved to Notes' : 'Save to Notes'}</span>
-                    </button>
+                    {/* Bottom Action Bar */}
+                    <div className="flex items-center gap-2 pt-3 border-t border-[var(--line)] text-[11.5px]">
+                      <button
+                        onClick={() => handleCopy(msg.id, msg.text)}
+                        className="p-1.5 rounded-lg hover:bg-[var(--s2)] text-[var(--m)] hover:text-[var(--t)] transition-colors flex items-center gap-1 font-medium"
+                        title="Copy message"
+                      >
+                        {copiedId === msg.id ? (
+                          <Check className="w-3.5 h-3.5 text-[var(--g)]" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5" />
+                        )}
+                        <span>{copiedId === msg.id ? 'Copied' : 'Copy'}</span>
+                      </button>
 
-                    <button
-                      onClick={() => handleExtractTask(msg.id, msg.text)}
-                      className={`p-1.5 rounded-lg transition-colors flex items-center gap-1 text-[11px] font-medium ${
-                        extractedTasks[msg.id]
-                          ? 'text-[var(--g)] bg-[var(--s2)]'
-                          : 'hover:bg-[var(--s2)] text-[#777] hover:text-[var(--t)]'
-                      }`}
-                      title="Turn into Task"
-                    >
-                      <CheckSquare className="w-3.5 h-3.5 text-[var(--b)]" />
-                      <span>{extractedTasks[msg.id] ? 'Task Logged' : 'Turn into Task'}</span>
-                    </button>
+                      <button
+                        onClick={() => handleSaveToNotes(msg.id, msg.text)}
+                        className={`p-1.5 rounded-lg transition-colors flex items-center gap-1 font-medium ${
+                          savedNotes[msg.id]
+                            ? 'text-[var(--g)] bg-[var(--s2)]'
+                            : 'hover:bg-[var(--s2)] text-[var(--m)] hover:text-[var(--t)]'
+                        }`}
+                        title="Save to notes"
+                      >
+                        <Bookmark className="w-3.5 h-3.5" />
+                        <span>{savedNotes[msg.id] ? 'Saved' : 'Save to Notes'}</span>
+                      </button>
 
-                    <button
-                      onClick={() => openSubtopic('Focused investigation')}
-                      className="p-1.5 rounded-lg hover:bg-[var(--s2)] text-[#777] hover:text-[var(--t)] transition-colors flex items-center gap-1 text-[11px] font-medium"
-                      title="Create Subtopic"
-                    >
-                      <GitFork className="w-3.5 h-3.5 text-[var(--y)]" />
-                      <span>Subtopic</span>
-                    </button>
+                      <button
+                        onClick={() => handleExtractTask(msg.id, msg.text)}
+                        className={`p-1.5 rounded-lg transition-colors flex items-center gap-1 font-medium ${
+                          extractedTasks[msg.id]
+                            ? 'text-[var(--g)] bg-[var(--s2)]'
+                            : 'hover:bg-[var(--s2)] text-[var(--m)] hover:text-[var(--t)]'
+                        }`}
+                        title="Convert into actionable task"
+                      >
+                        <CheckSquare className="w-3.5 h-3.5 text-[var(--b)]" />
+                        <span>{extractedTasks[msg.id] ? 'Task Added' : 'Turn into Task'}</span>
+                      </button>
 
-                    <span className="flex-1" />
+                      <span className="flex-1" />
 
-                    <button
-                      onClick={() => sendMessage('Can you re-synthesize this focusing on the biggest contradictions?')}
-                      className="p-1.5 rounded-lg hover:bg-[var(--s2)] text-[#777] hover:text-[var(--t)] transition-colors"
-                      title="Re-synthesize"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                    </button>
+                      <button
+                        onClick={() => sendMessage('Can you rephrase this with a comparison table?')}
+                        className="p-1.5 rounded-lg hover:bg-[var(--s2)] text-[var(--m)] hover:text-[var(--t)] transition-colors flex items-center gap-1"
+                        title="Regenerate response"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -227,24 +331,33 @@ export const ChatView: React.FC = () => {
           );
         })}
 
-        {/* AI Generating Skeleton state */}
+        {/* AI Generating Indicator */}
         {isAiGenerating && (
-          <div className="flex gap-3 items-start animate-pulse">
+          <div className="flex gap-3.5 items-start animate-pulse">
             <BobAvatar size={28} />
-            <div className="flex-1 bg-[var(--s)] border border-[var(--line)] rounded-[19px] p-5 space-y-3">
+            <div className="flex-1 bg-[var(--s)] border border-[var(--line)] rounded-[20px] p-5 space-y-3">
               <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-[var(--y)] animate-ping" />
-                <span className="text-[12px] font-semibold text-[var(--t)]">
-                  Bob is running local on-device reasoning...
+                <span className="w-2 h-2 rounded-full bg-[var(--y)] animate-ping" />
+                <span className="text-[12.5px] font-semibold text-[var(--t)]">
+                  Bob is thinking...
                 </span>
               </div>
               <div className="h-3 bg-[var(--s2)] rounded w-3/4" />
               <div className="h-3 bg-[var(--s2)] rounded w-5/6" />
-              <div className="h-3 bg-[var(--s2)] rounded w-1/2" />
             </div>
           </div>
         )}
       </div>
+
+      {/* Auth Pop-up Card on First Response */}
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        onSuccess={(user) => {
+          setIsAuthOpen(false);
+          triggerThinking('Account Synced', `Welcome back, ${user.name}! Workspace records synced.`, 'Ready');
+        }}
+      />
     </div>
   );
 };

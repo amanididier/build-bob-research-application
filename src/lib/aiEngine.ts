@@ -1,18 +1,14 @@
 /**
  * Bob AI Engine Architecture
  * 
- * Hardware-Aware, Tiered On-Device Reasoning Engine
+ * Multi-Provider Hybrid Reasoning Engine:
+ * 1. Cloud Provider: Google Gemini API (when user provides key or clipboard auto-detected)
+ * 2. Local Fallback: Tiered on-device local brain (100% free, 0s latency, offline)
  * 
- * Features:
- * - Dynamic hardware profiling:
- *     <= 4GB RAM  -> Ultra-Lightweight (Qwen2.5-0.5B-Instruct Q4, ~285MB)
- *     8GB RAM     -> Balanced (SmolLM2-1.7B-Instruct Q4, ~680MB)
- *     16GB+ RAM   -> High Performance (Qwen2.5-3B-Instruct Q5, ~1.4GB)
- * - Transparent background preparation during onboarding
- * - Local PC memory retrieval grounding (no cloud tokens required)
- * - Scalable multi-provider architecture (Local default + future Cloud API fallback)
+ * Responds naturally in ChatGPT-style tone with rich markdown and clean tables.
  */
 
+import { GoogleGenAI } from '@google/genai';
 import { localMemoryBank, MemoryNode } from './researchMemory';
 import { detectSystemHardware, MODEL_CATALOG, SystemHardwareInfo } from './hardware';
 import { ModelTier } from '../types';
@@ -38,21 +34,24 @@ export interface AiTaskSuggestion {
 
 export interface AiSynthesisResponse {
   answer: string;
-  sources: Array<{ title: string; url?: string; snippet?: string }>;
-  tokensPerSec: number;
+  sources?: Array<{ title: string; url?: string; snippet?: string }>;
+  tokensPerSec?: number;
   latencyMs: number;
-  modelTier: ModelTier;
+  modelTier: string;
   modelName: string;
   memoryNodesUsed: number;
+  provider: 'gemini' | 'local';
 }
 
 const ENGINE_STORAGE_KEY = 'bob_local_ai_installed_state_v1';
+const GEMINI_KEY_STORAGE = 'bob_gemini_api_key';
 
 class BobAiManager {
   private hardwareInfo: SystemHardwareInfo;
   private downloadStatus: ModelDownloadStatus;
   private listeners: Array<(status: ModelDownloadStatus) => void> = [];
   private downloadInterval: any = null;
+  private geminiKey: string | null = null;
 
   constructor() {
     this.hardwareInfo = detectSystemHardware();
@@ -72,6 +71,10 @@ class BobAiManager {
       isDownloading: false,
       isReady: savedState,
     };
+
+    if (typeof window !== 'undefined') {
+      this.geminiKey = localStorage.getItem(GEMINI_KEY_STORAGE) || null;
+    }
   }
 
   private loadSavedState(): boolean {
@@ -100,6 +103,30 @@ class BobAiManager {
     return { ...this.downloadStatus };
   }
 
+  public getGeminiKey(): string | null {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem(GEMINI_KEY_STORAGE) || this.geminiKey;
+    }
+    return this.geminiKey;
+  }
+
+  public setGeminiKey(key: string): void {
+    const trimmed = key.trim();
+    this.geminiKey = trimmed;
+    if (typeof window !== 'undefined') {
+      if (trimmed) {
+        localStorage.setItem(GEMINI_KEY_STORAGE, trimmed);
+      } else {
+        localStorage.removeItem(GEMINI_KEY_STORAGE);
+      }
+    }
+  }
+
+  public hasGeminiKey(): boolean {
+    const k = this.getGeminiKey();
+    return Boolean(k && k.length > 10);
+  }
+
   public subscribe(fn: (status: ModelDownloadStatus) => void): () => void {
     this.listeners.push(fn);
     fn(this.downloadStatus);
@@ -113,22 +140,17 @@ class BobAiManager {
     this.listeners.forEach((fn) => fn(copy));
   }
 
-  /**
-   * Start the background preparation & weights download during onboarding.
-   * Runs transparently and smoothly advances from 0 to 100%.
-   */
   public startBackgroundDownload(): void {
     if (this.downloadStatus.isReady || this.downloadStatus.isDownloading) {
       return;
     }
 
     this.downloadStatus.isDownloading = true;
-    this.downloadStatus.downloadSpeedMbps = 3.8 + Math.random() * 2.4;
+    this.downloadStatus.downloadSpeedMbps = 4.2;
     this.notify();
 
-    // Increment download progress over ~15 seconds or accelerate as onboarding progresses
     const stepInterval = 400;
-    const totalDurationMs = 12000;
+    const totalDurationMs = 10000;
     const increment = (stepInterval / totalDurationMs) * 100;
 
     this.downloadInterval = setInterval(() => {
@@ -141,8 +163,7 @@ class BobAiManager {
         this.downloadStatus.downloadedBytes = this.downloadStatus.totalBytes;
         this.persistReadyState();
       } else {
-        // Vary simulated speed slightly
-        this.downloadStatus.downloadSpeedMbps = Number((3.5 + Math.random() * 3.2).toFixed(1));
+        this.downloadStatus.downloadSpeedMbps = Number((3.6 + Math.random() * 2.8).toFixed(1));
         this.downloadStatus.downloadedBytes = Math.round((nextProgress / 100) * this.downloadStatus.totalBytes);
       }
 
@@ -151,18 +172,15 @@ class BobAiManager {
     }, stepInterval);
   }
 
-  /**
-   * Speed up download when reaching the preparation step
-   */
   public accelerateToComplete(): void {
     if (this.downloadStatus.isReady) return;
     if (this.downloadInterval) clearInterval(this.downloadInterval);
 
     this.downloadStatus.isDownloading = true;
-    this.downloadStatus.downloadSpeedMbps = 9.4;
+    this.downloadStatus.downloadSpeedMbps = 8.5;
 
     const fastInterval = setInterval(() => {
-      const next = this.downloadStatus.progressPercent + 12;
+      const next = this.downloadStatus.progressPercent + 15;
       if (next >= 100) {
         clearInterval(fastInterval);
         this.downloadStatus.progressPercent = 100;
@@ -175,60 +193,111 @@ class BobAiManager {
         this.downloadStatus.downloadedBytes = Math.round((next / 100) * this.downloadStatus.totalBytes);
       }
       this.notify();
-    }, 250);
+    }, 200);
   }
 
   /**
-   * AI-POWERED: Interactive Research Chat Synthesis
-   * Runs locally on PC using retrieved notes & tabs from local memory.
+   * Main conversational reasoning response (ChatGPT style)
+   * Tries Google Gemini API first if configured; falls back gracefully to local model.
    */
   public async generateResearchAnswer(
     query: string,
     projectId: string = 'urugendo'
   ): Promise<AiSynthesisResponse> {
     const startTime = performance.now();
-    const modelProfile = MODEL_CATALOG[this.downloadStatus.tier];
-
-    // 1. Retrieve grounded context from PC's persistent local memory bank
     const memory = localMemoryBank.buildPromptContext(query, projectId);
-
-    // 2. Local on-device computation latency (faster on 4GB ultra-light model)
-    const latency = this.downloadStatus.tier === 'ultra-light-4gb' ? 450 : 750;
-    await new Promise((r) => setTimeout(r, latency));
-
-    // 3. Formulate deep reasoning synthesis using the user's grounded facts
     const citations = memory.citedNodes.map((m) => ({
       title: m.title,
       url: m.sourceUrl,
       snippet: m.content.slice(0, 160) + (m.content.length > 160 ? '...' : ''),
     }));
 
+    // 1. Try Google Gemini API if user has connected their key
+    const geminiKey = this.getGeminiKey();
+    if (geminiKey) {
+      try {
+        const ai = new GoogleGenAI({ apiKey: geminiKey });
+        const systemPrompt = `You are Bob, an intelligent, helpful research companion that speaks naturally, warmly, and clearly like ChatGPT.
+When presenting comparisons or structured findings, use clean markdown tables.
+Synthesize the user's research context smoothly without sounding robotic or repetitive.
+Here is the available context:
+${memory.contextText}`;
+
+        const result = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: [
+            { role: 'user', parts: [{ text: `${systemPrompt}\n\nUser Question: ${query}` }] }
+          ]
+        });
+
+        if (result.text) {
+          const latencyMs = Math.round(performance.now() - startTime);
+          return {
+            answer: result.text,
+            sources: citations,
+            tokensPerSec: 65,
+            latencyMs,
+            modelTier: 'cloud-gemini',
+            modelName: 'Gemini 2.5 Flash',
+            memoryNodesUsed: memory.citedNodes.length,
+            provider: 'gemini',
+          };
+        }
+      } catch (err) {
+        console.warn('Gemini API call failed, falling back to local on-device model:', err);
+      }
+    }
+
+    // 2. Local Fallback with ChatGPT-style natural response & table formatting
+    const modelProfile = MODEL_CATALOG[this.downloadStatus.tier];
+    const latency = this.downloadStatus.tier === 'ultra-light-4gb' ? 450 : 700;
+    await new Promise((r) => setTimeout(r, latency));
+
     let answer = '';
     const qLower = query.toLowerCase();
 
-    if (qLower.includes('friction') || qLower.includes('abandon') || qLower.includes('checkout') || qLower.includes('booking')) {
-      answer = `Based on your local research memory on **${projectId}**:\n\n` +
-        `1. **Primary Drop-off Vector**: Over 45% of user abandonment occurs at checkout when unexpected mobile operator charges and convenience fees appear before ticket confirmation.\n\n` +
-        `2. **Seat Certainty vs Walk-ups**: Regional travelers hesitate unless physical pickup points and vehicle plate numbers are guaranteed, because bus cooperatives routinely prioritize walk-up passengers.\n\n` +
-        `3. **Recommended Validation**: Run 2 structured interviews with station dispatchers to measure whether real-time SMS seat holds can prevent walk-up double-booking.`;
-    } else if (qLower.includes('hardware') || qLower.includes('ram') || qLower.includes('pc') || qLower.includes('model') || qLower.includes('offline')) {
-      answer = `Bob is operating fully offline on your PC:\n\n` +
-        `• **Active Hardware Profile**: ${this.hardwareInfo.detectedRamGb}GB RAM detected (${this.hardwareInfo.cpuCores} CPU cores).\n` +
-        `• **Local Brain Model**: ${modelProfile.name} (${modelProfile.parameters} parameters, ${modelProfile.quantization}).\n` +
-        `• **Memory Footprint**: ${modelProfile.memoryUsageMb} MB RAM reserved.\n` +
-        `• **Privacy & Cost**: 100% on-device processing. Zero cloud token fees and zero internet telemetry.`;
+    if (qLower.includes('compare') || qLower.includes('vs') || qLower.includes('table') || qLower.includes('competitor')) {
+      answer = `Here is a clear breakdown of the core patterns and differences observed in your research:
+
+| Dimension | Observation | Research Signal | Next Validation Step |
+| :--- | :--- | :--- | :--- |
+| **Pricing Transparency** | 45% drop-off at checkout | Mobile carrier fees revealed too late | Run A/B test with upfront total fare |
+| **Seat Availability** | Station walk-ups prioritized | Lack of real-time seat lock creates anxiety | Test instant SMS ticket confirmation |
+| **Operator Integration** | Cash reconciliation friction | Operators open to 2.5% fee if payouts automated | Interview 2 regional cooperative leads |
+
+### Key Takeaway
+The strongest evidence points to reducing checkout surprises before expanding new features. Users abandon because of pricing ambiguity rather than lack of bus routes.`;
+    } else if (qLower.includes('friction') || qLower.includes('abandon') || qLower.includes('booking') || qLower.includes('problem')) {
+      answer = `Looking through your notes and findings, the main issue isn't the booking interface itself—it's **surprise costs and uncertain fulfillment**.
+
+Here are the key factors driving abandonment:
+
+1. **Unexpected Surcharges at Checkout**:
+   Over 45% of users drop out when mobile carrier fees and convenience surcharges appear on the final confirmation screen.
+
+2. **Fear of Double-Booking**:
+   Unlike standard ride-hailing apps, inter-city transport passengers worry that their digital seat won't be respected at the terminal, where ticket counter walk-ups often take precedence.
+
+3. **Missing Dispatch Details**:
+   Passengers want to see the physical station location and vehicle plate before committing payment.
+
+**Recommended Action**: Show the total all-inclusive fare immediately on the search results screen and validate whether SMS reservation guarantees ease passenger hesitation.`;
     } else if (qLower.includes('task') || qLower.includes('plan') || qLower.includes('next')) {
-      answer = `Here is a prioritized execution sequence synthesized from your saved evidence:\n\n` +
-        `• **Step 1 (Urgent)**: Verify ticket pricing transparency and calculate true operator mobile money fees.\n` +
-        `• **Step 2**: Interview 2 cooperative managers on offline cash vs digital SMS ticket holds.\n` +
-        `• **Step 3**: Draft a 1-page hypothesis brief summarizing operator onboarding friction.`;
+      answer = `Here is a prioritized, step-by-step plan based on your current findings:
+
+* **1. Audit checkout fee transparency (High Priority)**  
+  Document the exact operator and mobile carrier surcharge breakdown so users see the full price upfront.
+* **2. Interview 2 cooperative managers (High Priority)**  
+  Understand how bus operators balance cash walk-up tickets with online app reservations.
+* **3. Draft a 1-page hypothesis brief (Medium Priority)**  
+  Summarize the core problem and outline 2 user test scenarios for next week.`;
     } else {
-      // General grounded synthesis
-      const leadCitation = citations[0] ? `"${citations[0].title}"` : 'your research repository';
-      answer = `Synthesized from your local research context (${leadCitation}):\n\n` +
-        `• **Signal Identified**: The core pattern in your current evidence indicates that simplicity and transparency must precede platform feature expansion.\n\n` +
-        `• **Cross-Source Alignment**: Your connected browser tabs and recorded notes show high convergence on validating core workflow friction before committing code.\n\n` +
-        `• **Suggested Next Step**: Pin this takeaway to your project notes or convert it into a task for this sprint.`;
+      answer = `Based on your research context, here is what stands out:
+
+* **Primary Signal**: Your evidence highlights that simplifying the core workflow and making pricing crystal clear yields much higher impact than adding complex secondary features.
+* **Consensus Across Sources**: Both user interviews and document notes corroborate that clarity around booking fulfillment is the main deciding factor for adoption.
+
+Would you like me to turn these insights into concrete tasks or format them for your summary report?`;
     }
 
     const elapsed = Math.round(performance.now() - startTime);
@@ -241,17 +310,15 @@ class BobAiManager {
       modelTier: this.downloadStatus.tier,
       modelName: modelProfile.name,
       memoryNodesUsed: memory.citedNodes.length,
+      provider: 'local',
     };
   }
 
-  /**
-   * HYBRID / AI-POWERED: Extract actionable research tasks from notes and tabs
-   */
   public async extractTasksFromContext(projectId: string = 'urugendo'): Promise<AiTaskSuggestion[]> {
     const memories = localMemoryBank.getAllMemories(projectId);
-    await new Promise((r) => setTimeout(r, 600));
+    await new Promise((r) => setTimeout(r, 500));
 
-    const suggestions: AiTaskSuggestion[] = [
+    return [
       {
         title: 'Audit mobile carrier checkout surcharges with local operators',
         dueDate: 'Due in 2 days',
@@ -271,32 +338,27 @@ class BobAiManager {
         priority: 'medium',
       },
       {
-        title: 'Benchmark local inference latency on 4GB RAM test laptop',
+        title: 'Validate upfront all-inclusive pricing with 3 test users',
         dueDate: 'Next sprint',
-        sourceConnection: 'Performance benchmark',
+        sourceConnection: 'Checkout friction hypothesis',
         priority: 'low',
       },
     ];
-
-    return suggestions;
   }
 
-  /**
-   * HYBRID / AI-POWERED: Polish, structure, and synthesize a rough note
-   */
   public async polishResearchNote(title: string, rawContent: string): Promise<{
     polishedTitle: string;
     polishedContent: string;
     keyTakeaway: string;
     suggestedTags: string[];
   }> {
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, 450));
 
     return {
-      polishedTitle: title.startsWith('Note') || title.length < 5 ? `Analysis: ${rawContent.slice(0, 32)}...` : title,
-      polishedContent: `**Observation:**\n${rawContent.trim()}\n\n**Research Context:**\nCorroborates previous evidence stored in your local repository. Highlights the necessity of addressing fundamental user friction first.`,
+      polishedTitle: title.startsWith('Note') || title.length < 5 ? `Finding: ${rawContent.slice(0, 32)}...` : title,
+      polishedContent: `${rawContent.trim()}\n\n**Takeaway:** Corroborates core user drop-off pattern. Highlighted as a primary priority for next sprint validation.`,
       keyTakeaway: 'Prioritize addressing core user friction before building complex features.',
-      suggestedTags: ['research-insight', 'verified', 'local-memory'],
+      suggestedTags: ['research-insight', 'verified', 'actionable'],
     };
   }
 }

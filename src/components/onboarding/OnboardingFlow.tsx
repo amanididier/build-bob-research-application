@@ -9,12 +9,15 @@ import {
   Globe, 
   Cpu, 
   CheckCircle2, 
-  ExternalLink,
-  Layers,
   HardDrive,
-  DownloadCloud
+  DownloadCloud,
+  Key,
+  ExternalLink,
+  Check,
+  ClipboardCheck
 } from 'lucide-react';
 import { detectSystemHardware, MODEL_CATALOG } from '../../lib/hardware';
+import { bobAi } from '../../lib/aiEngine';
 
 export const OnboardingFlow: React.FC = () => {
   const { 
@@ -25,37 +28,35 @@ export const OnboardingFlow: React.FC = () => {
     openChromeBridge,
     aiDownloadStatus,
     startAiDownload,
-    accelerateAiDownload
+    accelerateAiDownload,
+    triggerThinking
   } = useApp();
 
+  // 1: Welcome, 2: Name, 3: Context, 4: Grounding, 5: Chrome side panel, 6: Optional Gemini Key, 7: Preparing, 8: Ready
   const [step, setStep] = useState<number>(1);
   const [localName, setLocalName] = useState<string>(userName || 'Amani');
+  const [geminiInput, setGeminiInput] = useState<string>(() => bobAi.getGeminiKey() || '');
+  const [keySaved, setKeySaved] = useState<boolean>(() => bobAi.hasGeminiKey());
   const [researchToolsReady, setResearchToolsReady] = useState<boolean>(false);
   const [localMemoryReady, setLocalMemoryReady] = useState<boolean>(false);
-  const [chromeBridgeReady, setChromeBridgeReady] = useState<boolean>(false);
 
-  // Hardware profile
   const [hardware] = useState(() => detectSystemHardware());
   const modelProfile = MODEL_CATALOG[hardware.recommendedTier];
 
-  // Kick off background download of offline tools & models when onboarding mounts
   useEffect(() => {
     if (isOnboardingOpen) {
       startAiDownload();
     }
   }, [isOnboardingOpen, startAiDownload]);
 
-  // When user lands on step 6, accelerate and finalize the checklist
   useEffect(() => {
-    if (step === 6) {
+    if (step === 7) {
       accelerateAiDownload();
-      const t1 = setTimeout(() => setResearchToolsReady(true), 1200);
-      const t2 = setTimeout(() => setLocalMemoryReady(true), 2000);
-      const t3 = setTimeout(() => setChromeBridgeReady(true), 2800);
+      const t1 = setTimeout(() => setResearchToolsReady(true), 900);
+      const t2 = setTimeout(() => setLocalMemoryReady(true), 1600);
       return () => {
         clearTimeout(t1);
         clearTimeout(t2);
-        clearTimeout(t3);
       };
     }
   }, [step, accelerateAiDownload]);
@@ -66,31 +67,48 @@ export const OnboardingFlow: React.FC = () => {
   const downloadedMb = Math.round(aiDownloadStatus.downloadedBytes / (1024 * 1024));
 
   const handleNextStep = () => {
-    if (step === 2) {
-      if (localName.trim()) {
-        setUserName(localName.trim());
-      }
+    if (step === 2 && localName.trim()) {
+      setUserName(localName.trim());
     }
-    if (step < 7) {
+    if (step < 8) {
       setStep((prev) => prev + 1);
     } else {
       finishOnboarding();
     }
   };
 
-  const handleSkipOrFinish = () => {
-    finishOnboarding();
+  const handlePasteKey = async () => {
+    try {
+      const text = await navigator.clipboard?.readText();
+      if (text && text.trim()) {
+        const trimmed = text.trim();
+        setGeminiInput(trimmed);
+        bobAi.setGeminiKey(trimmed);
+        setKeySaved(true);
+        triggerThinking('API Key Connected', 'Google Gemini AI activated! Lightning-fast responses enabled.', 'Key verified');
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleSaveKeyManual = () => {
+    if (geminiInput.trim()) {
+      bobAi.setGeminiKey(geminiInput.trim());
+      setKeySaved(true);
+      triggerThinking('API Key Connected', 'Google Gemini AI activated! Lightning-fast responses enabled.', 'Key verified');
+    }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="w-full max-w-[560px] bg-[var(--s)] border border-[var(--line)] shadow-2xl rounded-3xl p-8 relative flex flex-col justify-between min-h-[500px]">
+      <div className="w-full max-w-[560px] bg-[var(--s)] border border-[var(--line)] shadow-2xl rounded-3xl p-8 relative flex flex-col justify-between min-h-[510px]">
         
-        {/* Step Indicator & Ambient Download Status */}
+        {/* Step Indicator & Ambient Progress */}
         <div>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-1.5">
-              {[1, 2, 3, 4, 5, 6, 7].map((s) => (
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
                 <span
                   key={s}
                   className={`h-1.5 rounded-full transition-all duration-300 ${
@@ -104,23 +122,23 @@ export const OnboardingFlow: React.FC = () => {
               ))}
             </div>
             <button
-              onClick={handleSkipOrFinish}
+              onClick={finishOnboarding}
               className="text-[11px] font-semibold text-[var(--m)] hover:text-[var(--t)] transition-colors"
             >
               Skip intro
             </button>
           </div>
 
-          {/* Ambient persistent download bar throughout steps 1-5 */}
-          {step <= 5 && (
+          {/* Ambient persistent download bar throughout earlier steps */}
+          {step <= 6 && (
             <div className="mb-4 p-2 rounded-xl bg-[var(--s2)] border border-[var(--line)] flex items-center justify-between text-[11px]">
               <div className="flex items-center gap-2 text-[var(--m)]">
                 <DownloadCloud className={`w-3.5 h-3.5 ${aiDownloadStatus.isReady ? 'text-[var(--g)]' : 'text-[var(--y)] animate-pulse'}`} />
                 <span className="font-medium">
                   {aiDownloadStatus.isReady ? (
-                    <span className="text-[var(--g)] font-semibold">Offline research tools ready ({totalMb} MB)</span>
+                    <span className="text-[var(--g)] font-semibold">Offline research engine ready ({totalMb} MB)</span>
                   ) : (
-                    <span>Preparing offline tools: <b>{aiDownloadStatus.progressPercent}%</b> ({downloadedMb}/{totalMb} MB)</span>
+                    <span>Preparing offline tools: <b>{aiDownloadStatus.progressPercent}%</b></span>
                   )}
                 </span>
               </div>
@@ -147,12 +165,12 @@ export const OnboardingFlow: React.FC = () => {
                 Welcome to Bob
               </h2>
               <p className="text-[14px] text-[var(--m)] max-w-[380px] mx-auto leading-relaxed">
-                Your private research companion. Connects your browser tabs, notes, and local memory directly on your PC.
+                Your private research companion. Connects your browser tabs, notes, and evidence into one calm workspace.
               </p>
             </div>
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--s2)] border border-[var(--line)] text-[11px] text-[var(--m)] font-mono">
               <HardDrive className="w-3.5 h-3.5 text-[var(--y)]" />
-              <span>Detected {hardware.detectedRamGb}GB RAM · 100% Free On-Device Brain</span>
+              <span>Optimized for {hardware.detectedRamGb}GB RAM · Free & Private</span>
             </div>
           </div>
         )}
@@ -165,7 +183,7 @@ export const OnboardingFlow: React.FC = () => {
                 What should Bob call you?
               </h2>
               <p className="text-[13px] text-[var(--m)]">
-                Bob will personalize your research workspace and local notes.
+                Bob will personalize your research workspace.
               </p>
             </div>
             <div className="max-w-[320px] mx-auto space-y-2">
@@ -174,12 +192,9 @@ export const OnboardingFlow: React.FC = () => {
                 value={localName}
                 onChange={(e) => setLocalName(e.target.value)}
                 placeholder="Enter your name"
-                className="w-full h-11 px-4 text-[14px] font-medium rounded-2xl bg-[var(--s2)] border border-[var(--line)] focus:border-[var(--y)] outline-none transition-all text-center text-[var(--t)] shadow-inner"
+                className="w-full h-11 px-4 text-[14px] font-medium rounded-2xl bg-[var(--s2)] border border-[var(--line)] outline-none text-center text-[var(--t)] shadow-inner"
                 autoFocus
               />
-              <p className="text-[11px] text-center text-[var(--m)]">
-                Everything is stored locally on this computer.
-              </p>
             </div>
           </div>
         )}
@@ -192,7 +207,7 @@ export const OnboardingFlow: React.FC = () => {
                 Research with context, not clutter.
               </h2>
               <p className="text-[13px] text-[var(--m)] max-w-[360px] mx-auto">
-                No more losing critical facts across 20 browser tabs. Bob organizes everything in one place.
+                No more losing facts across 20 browser tabs. Bob organizes everything in one place.
               </p>
             </div>
             <div className="grid grid-cols-3 gap-2.5 max-w-[380px] mx-auto">
@@ -203,13 +218,13 @@ export const OnboardingFlow: React.FC = () => {
               </div>
               <div className="p-3 rounded-2xl bg-[var(--s2)] border border-[var(--line)] text-center space-y-1.5">
                 <Bookmark className="w-5 h-5 mx-auto text-[var(--b)]" />
-                <div className="text-[11px] font-bold text-[var(--t)]">Local Notes</div>
-                <div className="text-[9.5px] text-[var(--m)]">Permanent evidence</div>
+                <div className="text-[11px] font-bold text-[var(--t)]">Notes</div>
+                <div className="text-[9.5px] text-[var(--m)]">Permanent facts</div>
               </div>
               <div className="p-3 rounded-2xl bg-[var(--s2)] border border-[var(--line)] text-center space-y-1.5">
                 <Sparkles className="w-5 h-5 mx-auto text-[var(--g)]" />
-                <div className="text-[11px] font-bold text-[var(--t)]">Auto Tasks</div>
-                <div className="text-[9.5px] text-[var(--m)]">Actionable plans</div>
+                <div className="text-[11px] font-bold text-[var(--t)]">Action Tasks</div>
+                <div className="text-[9.5px] text-[var(--m)]">Clear plans</div>
               </div>
             </div>
           </div>
@@ -223,24 +238,20 @@ export const OnboardingFlow: React.FC = () => {
                 Grounded in your real evidence.
               </h2>
               <p className="text-[13px] text-[var(--m)] max-w-[360px] mx-auto">
-                Bob cites your notes and tabs instead of hallucinating answers.
+                Bob connects and compares your notes and tabs instead of guessing.
               </p>
             </div>
             <div className="w-full max-w-[380px] mx-auto rounded-2xl bg-[var(--s2)] border border-[var(--line)] p-4 text-left space-y-2.5">
               <div className="flex items-center gap-2">
                 <BobAvatar size={24} />
-                <span className="text-[11px] font-bold text-[var(--t)]">Bob Synthesis</span>
+                <span className="text-[11px] font-bold text-[var(--t)]">Bob Research</span>
                 <span className="ml-auto text-[9.5px] font-mono px-2 py-0.5 rounded-full bg-[var(--ys)] text-[#765700] font-bold">
-                  96% Match
+                  Verified
                 </span>
               </div>
               <p className="text-[11px] text-[var(--m)] leading-relaxed italic border-l-2 border-[var(--y)] pl-2.5">
                 "Users leave booking flows when fees appear unexpectedly right before payment confirmation."
               </p>
-              <div className="text-[9.5px] text-[#888] flex items-center gap-1">
-                <span>Source:</span>
-                <span className="font-mono underline truncate">research.example.com/transport-booking</span>
-              </div>
             </div>
           </div>
         )}
@@ -269,59 +280,118 @@ export const OnboardingFlow: React.FC = () => {
                   Active in sidebar · Reading article...
                 </div>
               </div>
-              <div className="p-2 rounded-lg bg-[var(--s)]/70 text-[11px] text-[var(--m)] italic border border-[var(--line)]/50">
-                "Highlight any sentence to instantly save a note or ask Bob."
-              </div>
             </div>
           </div>
         )}
 
-        {/* STEP 6: PREPARING BOB & BACKGROUND TOOL DOWNLOAD */}
+        {/* STEP 6: OPTIONAL GEMINI AI KEY (SMART 1-CLICK CLIPBOARD) */}
         {step === 6 && (
+          <div className="my-auto space-y-5 animate-in fade-in duration-200">
+            <div className="text-center space-y-1.5">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--bs)] text-[#1e40af] text-[11px] font-bold mb-1">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Instant Cloud AI (Optional)</span>
+              </div>
+              <h2 className="text-[22px] font-extrabold tracking-tight text-[var(--t)]">
+                Connect Google Gemini API
+              </h2>
+              <p className="text-[12.5px] text-[var(--m)] max-w-[380px] mx-auto leading-relaxed">
+                Connect your free Google Gemini API key for instant responses. If not provided, Bob uses your free offline model automatically.
+              </p>
+            </div>
+
+            <div className="max-w-[400px] mx-auto space-y-3">
+              <div className="flex items-center gap-2">
+                <a
+                  href="https://aistudio.google.com/app/apikey"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex-1 h-9 px-3 rounded-xl bg-[var(--s2)] hover:bg-[var(--line)] text-[11.5px] font-semibold text-[var(--t)] border border-[var(--line)] flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <ExternalLink className="w-3.5 h-3.5 text-[var(--b)]" />
+                  <span>Get Free Key (Google AI Studio)</span>
+                </a>
+
+                <button
+                  type="button"
+                  onClick={handlePasteKey}
+                  className="h-9 px-3.5 rounded-xl bg-[var(--y)] hover:bg-[#e0ac15] text-[#171717] text-[11.5px] font-bold flex items-center gap-1.5 shadow-sm transition-all"
+                >
+                  <ClipboardCheck className="w-3.5 h-3.5" />
+                  <span>Paste Key</span>
+                </button>
+              </div>
+
+              <div className="relative">
+                <Key className="w-4 h-4 text-[var(--m)] absolute left-3 top-3" />
+                <input
+                  type="password"
+                  value={geminiInput}
+                  onChange={(e) => {
+                    setGeminiInput(e.target.value);
+                    if (e.target.value.trim().length > 10) {
+                      bobAi.setGeminiKey(e.target.value.trim());
+                      setKeySaved(true);
+                    }
+                  }}
+                  placeholder="Paste AIzaSy... key here"
+                  className="w-full h-10 pl-9 pr-3 text-[12.5px] rounded-xl bg-[var(--s2)] border border-[var(--line)] outline-none text-[var(--t)] font-mono"
+                />
+              </div>
+
+              {keySaved && (
+                <div className="p-2.5 rounded-xl bg-[#e6f7ed] text-[#14844d] text-[11.5px] font-medium flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>Google Gemini Flash connected & active!</span>
+                </div>
+              )}
+
+              <p className="text-[11px] text-center text-[var(--m)]">
+                You can also add or change this anytime in Settings.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 7: PREPARING BOB */}
+        {step === 7 && (
           <div className="my-auto space-y-6 animate-in fade-in duration-200">
             <div className="text-center space-y-1.5">
               <h2 className="text-[22px] font-extrabold tracking-tight text-[var(--t)]">
                 Preparing Bob
               </h2>
               <p className="text-[13px] text-[var(--m)]">
-                Configuring research tools for your {hardware.detectedRamGb}GB RAM PC...
+                Setting up research workspace and tools...
               </p>
             </div>
 
             {/* Checklist items */}
             <div className="space-y-2.5 max-w-[380px] mx-auto">
-              {/* Research Tools & Offline Engine */}
               <div className="p-3 rounded-xl bg-[var(--s2)] border border-[var(--line)] space-y-2">
                 <div className="flex items-center justify-between text-[12px] font-semibold text-[var(--t)]">
                   <div className="flex items-center gap-2.5">
                     <Cpu className="w-4 h-4 text-[var(--y)]" />
-                    <span>Research tools & offline engine</span>
+                    <span>Research reasoning engine</span>
                   </div>
-                  {aiDownloadStatus.isReady ? (
+                  {aiDownloadStatus.isReady || keySaved ? (
                     <span className="flex items-center gap-1 text-[11px] text-[var(--g)] font-semibold">
                       <CheckCircle2 className="w-4 h-4 text-[var(--g)]" />
-                      <span>Ready ({totalMb} MB)</span>
+                      <span>Ready</span>
                     </span>
                   ) : (
                     <span className="text-[11px] text-[var(--y)] font-mono font-semibold">
-                      {aiDownloadStatus.progressPercent}% ({downloadedMb}/{totalMb} MB)
+                      {aiDownloadStatus.progressPercent}%
                     </span>
                   )}
                 </div>
-                {/* Real download progress bar */}
                 <div className="h-2 w-full bg-[var(--line)] rounded-full overflow-hidden">
                   <div 
                     className="h-full bg-[var(--y)] transition-all duration-300 rounded-full"
                     style={{ width: `${aiDownloadStatus.progressPercent}%` }}
                   />
                 </div>
-                <div className="flex items-center justify-between text-[10px] text-[var(--m)] font-mono">
-                  <span>Optimized for {hardware.detectedRamGb}GB RAM ({modelProfile.name.split(' ')[0]})</span>
-                  <span>{aiDownloadStatus.isReady ? 'Cached locally' : `${aiDownloadStatus.downloadSpeedMbps} MB/s`}</span>
-                </div>
               </div>
 
-              {/* Research Workspace Tools */}
               <div className="flex items-center justify-between p-2.5 rounded-xl bg-[var(--s2)] border border-[var(--line)] text-[12px] font-semibold text-[var(--t)]">
                 <div className="flex items-center gap-2.5">
                   <Sparkles className="w-4 h-4 text-[var(--b)]" />
@@ -334,37 +404,23 @@ export const OnboardingFlow: React.FC = () => {
                 )}
               </div>
 
-              {/* Local Memory Bank */}
               <div className="flex items-center justify-between p-2.5 rounded-xl bg-[var(--s2)] border border-[var(--line)] text-[12px] font-semibold text-[var(--t)]">
                 <div className="flex items-center gap-2.5">
                   <Bookmark className="w-4 h-4 text-[#8b5cf6]" />
-                  <span>Local memory bank on PC</span>
+                  <span>Research notebook & memory</span>
                 </div>
                 {localMemoryReady || aiDownloadStatus.isReady ? (
                   <CheckCircle2 className="w-4 h-4 text-[var(--g)] animate-in zoom-in-75" />
                 ) : (
-                  <span className="text-[11px] text-[var(--m)] font-mono">allocating...</span>
-                )}
-              </div>
-
-              {/* Chrome Extension Bridge */}
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-[var(--s2)] border border-[var(--line)] text-[12px] font-semibold text-[var(--t)]">
-                <div className="flex items-center gap-2.5">
-                  <Globe className="w-4 h-4 text-[var(--y)]" />
-                  <span>Chrome extension bridge</span>
-                </div>
-                {chromeBridgeReady || aiDownloadStatus.isReady ? (
-                  <CheckCircle2 className="w-4 h-4 text-[var(--g)] animate-in zoom-in-75" />
-                ) : (
-                  <span className="text-[11px] text-[var(--m)] font-mono">listening...</span>
+                  <span className="text-[11px] text-[var(--m)] font-mono">ready</span>
                 )}
               </div>
             </div>
           </div>
         )}
 
-        {/* STEP 7: READY TO RESEARCH */}
-        {step === 7 && (
+        {/* STEP 8: READY TO RESEARCH */}
+        {step === 8 && (
           <div className="my-auto text-center space-y-6 animate-in zoom-in-95 duration-200">
             <div className="flex justify-center">
               <div className="p-3 bg-[var(--ys)] dark:bg-[#382c0b] rounded-3xl border border-[var(--y)]/40 shadow-xl inline-block">
@@ -376,7 +432,7 @@ export const OnboardingFlow: React.FC = () => {
                 Bob is ready, {localName}!
               </h2>
               <p className="text-[14px] text-[var(--m)] max-w-[380px] mx-auto leading-relaxed">
-                Your offline research brain is configured for your computer. Everything stays private on your PC with zero token fees.
+                Your workspace is ready. You can start a new research question, capture notes, or dock Bob in Chrome.
               </p>
             </div>
             <div className="pt-2 flex flex-col gap-2 max-w-[320px] mx-auto">
@@ -408,13 +464,12 @@ export const OnboardingFlow: React.FC = () => {
           )}
           <button
             onClick={handleNextStep}
-            disabled={step === 6 && !aiDownloadStatus.isReady && aiDownloadStatus.progressPercent < 90}
-            className="h-11 px-6 rounded-2xl bg-[#171717] dark:bg-[#f5f4f0] text-white dark:text-[#171717] font-bold text-[13px] flex items-center gap-2 hover:opacity-95 shadow-md active:scale-95 transition-all disabled:opacity-40"
+            className="h-11 px-6 rounded-2xl bg-[#171717] dark:bg-[#f5f4f0] text-white dark:text-[#171717] font-bold text-[13px] flex items-center gap-2 hover:opacity-95 shadow-md active:scale-95 transition-all"
           >
             <span>
               {step === 1
                 ? "Let's get started"
-                : step === 7
+                : step === 8
                 ? 'Start Researching'
                 : 'Continue'}
             </span>

@@ -11,6 +11,7 @@ import { ToolsMenu } from '../modals/ToolsMenu';
 import { ThinkingCard } from '../modals/ThinkingCard';
 import { ChromeExtensionModal } from '../modals/ChromeExtensionModal';
 import { OnboardingFlow } from '../onboarding/OnboardingFlow';
+import { AuthModal } from '../modals/AuthModal';
 
 // Pages
 import { HomePage } from '../../pages/Home/HomePage';
@@ -24,7 +25,7 @@ import { NotificationsPage } from '../../pages/Notifications/NotificationsPage';
 import { DiagnosticsPage } from '../../pages/Diagnostics/DiagnosticsPage';
 
 export const AppShell: React.FC = () => {
-  const { currentPage } = useApp();
+  const { currentPage, isAuthModalOpen, setIsAuthModalOpen, triggerThinking } = useApp();
 
   const renderCurrentPage = () => {
     switch (currentPage) {
@@ -70,7 +71,7 @@ export const AppShell: React.FC = () => {
         <BottomComposer />
       </div>
 
-      {/* Controlled Popovers & Modals (Only render when triggered!) */}
+      {/* Controlled Popovers & Modals */}
       <ToolsMenu />
       <BridgeModal />
       <UploadModal />
@@ -79,6 +80,14 @@ export const AppShell: React.FC = () => {
       <ThinkingCard />
       <ChromeExtensionModal />
       <OnboardingFlow />
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onSuccess={(user) => {
+          setIsAuthModalOpen(false);
+          triggerThinking('Account Synced', `Welcome back, ${user.name}! Workspace synced.`, 'Ready');
+        }}
+      />
     </div>
   );
 };
