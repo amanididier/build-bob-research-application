@@ -26,7 +26,7 @@ jobs:
           node --check preload.cjs
 
       - name: Install root dependencies
-        run: npm install --no-audit --no-fund
+        run: npm install --no-audit --no-fund --legacy-peer-deps
 
       - name: Build root Vite application
         run: npm run build
