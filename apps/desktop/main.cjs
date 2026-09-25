@@ -1,5 +1,5 @@
 // Bob Research Companion - Desktop Main Process (v1.0.12)
-// Bundles offline interface (renderer/index.html) so it NEVER opens to a blank screen.
+// Bundles offline interface from the root Vite build (dist/index.html)
 const { app, BrowserWindow, shell, ipcMain } = require('electron')
 const http = require('node:http')
 const fs = require('node:fs')
@@ -30,7 +30,7 @@ let store = {
 function log(...args) {
   try {
     const logPath = path.join(app.getPath('userData'), 'bob.log')
-    fs.appendFileSync(logPath, `[${new Date().toISOString()}] ${args.join(' ')}\n`)
+    fs.appendFileSync(logPath, `[\({new Date().toISOString()}]\){args.join(' ')}\n`)
   } catch {}
   console.log(...args)
 }
@@ -205,8 +205,8 @@ function createWindow() {
     return { action: 'deny' }
   })
 
-  // ALWAYS load the bundled offline interface:
-  const rendererPath = path.join(__dirname, 'renderer', 'index.html')
+  // Points directly to the root Vite build output index.html
+  const rendererPath = path.join(__dirname, '../../dist/index.html')
   win.loadFile(rendererPath)
 }
 
