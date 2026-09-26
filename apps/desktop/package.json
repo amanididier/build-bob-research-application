@@ -25,7 +25,7 @@
     "appId": "com.bob.research",
     "productName": "Bob Research Companion",
     "executableName": "bob-research-companion",
-    "icon": "icon.ico",
+    "icon": "bob-logo.png",
     "publish": {
       "provider": "github",
       "owner": "amanididier",
@@ -34,8 +34,8 @@
     "files": [
       "main.cjs",
       "preload.cjs",
-      "icon.ico",
-      "icon.png",
+      "bob-logo.png",
+      "bob-logo.png",
       "renderer/**",
       {
         "from": "../../dist",
@@ -51,17 +51,17 @@
     },
     "win": {
       "target": "nsis",
-      "icon": "icon.ico",
+      "icon": "bob-logo.png",
       "artifactName": "Bob-Research-Companion-Setup.exe"
     },
     "mac": {
       "category": "public.app-category.productivity",
-      "icon": "icon.png"
+      "icon": "bob-logo.png"
     },
     "linux": {
       "target": "AppImage",
       "category": "Office",
-      "icon": "icon.png"
+      "icon": "bob-logo.png"
     }
   }
 }
