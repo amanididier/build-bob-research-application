@@ -30,7 +30,7 @@ let store = {
   notes: [
     { id: '1', title: 'Transport booking friction', body: 'Users abandon booking when price or seat is not transparent.', url: 'research.example.com', at: Date.now() - 3600000 },
     { id: '2', title: 'Attention mechanisms', body: 'Sub-400MB RAM footprints enable responsive local LLMs on 4GB PCs.', url: 'arxiv.org/abs/1706.03762', at: Date.now() - 7200000 }
-  ],
+   ],
   sources: [
     { id: 's1', title: 'Transport booking research', url: 'research.example.com/transport-booking', at: Date.now() },
     { id: 's2', title: 'Attention Is All You Need', url: 'https://arxiv.org/abs/1706.03762', at: Date.now() }
@@ -306,9 +306,8 @@ function registerIpc() {
 }
 
 function createWindow() {
-  const iconPath = process.platform === 'win32' && fs.existsSync(path.join(__dirname, 'bob-logo.png'))
-    ? path.join(__dirname, 'bob-logo.png')
-    : path.join(__dirname, 'bob-logo.png')
+  // FIXED: Icon path now correctly points to the actual icon file location
+  const iconPath = path.join(__dirname, 'renderer', 'bob-logo.png')
 
   // Explicitly grant microphone media permission for speech recognition
   session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
