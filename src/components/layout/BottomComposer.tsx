@@ -1,6 +1,7 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Plus, Sparkles, Mic, Send } from 'lucide-react';
+import { Plus, Sparkles, Mic, MicOff, Send } from 'lucide-react';
+import { bobVoice } from '../../lib/voiceAgent';
 
 export const BottomComposer: React.FC = () => {
   const { 
@@ -12,16 +13,47 @@ export const BottomComposer: React.FC = () => {
     isToolsMenuOpen,
     navigateTo,
     isSidebarClosed,
-    openChromeBridge
+    openChromeBridge,
+    triggerThinking
   } = useApp();
 
   const [prompt, setPrompt] = useState('');
+  const [isListening, setIsListening] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const unsub = bobVoice.subscribe((speaking, listening) => {
+      setIsListening(listening);
+    });
+    return unsub;
+  }, []);
 
   // Do not show on Chrome side panel page because that page has its own dedicated dock composer
   if (currentPage === 'chrome') {
     return null;
   }
+
+  const handleToggleVoice = () => {
+    if (isListening) {
+      bobVoice.stopListening();
+    } else {
+      const started = bobVoice.startListening(
+        (transcript, isFinal) => {
+          setPrompt(transcript);
+          if (textareaRef.current) {
+            textareaRef.current.style.height = 'auto';
+            textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
+          }
+        },
+        (error) => {
+          triggerThinking('Voice Input', error || 'Microphone error', 'Voice ready');
+        }
+      );
+      if (started) {
+        triggerThinking('Bob Voice Listening', 'Speak naturally, Bob is transcribing...', 'Listening');
+      }
+    }
+  };
 
   const handleSend = async () => {
     if (!prompt.trim() || isAiGenerating) return;
@@ -109,11 +141,15 @@ export const BottomComposer: React.FC = () => {
 
           {/* Voice button */}
           <button
-            onClick={() => handleSend()}
-            title="Voice input"
-            className="w-8 h-8 rounded-full hover:bg-[var(--s2)] grid place-items-center text-[#666] dark:text-[#a8a199] transition-colors"
+            onClick={handleToggleVoice}
+            title={isListening ? 'Stop listening' : 'Speak to Bob (Hands-free voice agent)'}
+            className={`w-8 h-8 rounded-full grid place-items-center transition-all ${
+              isListening
+                ? 'bg-rose-500 text-white animate-pulse shadow-md shadow-rose-500/30'
+                : 'hover:bg-[var(--s2)] text-[#666] dark:text-[#a8a199]'
+            }`}
           >
-            <Mic className="w-4 h-4" />
+            {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
           </button>
 
           {/* Send Button */}

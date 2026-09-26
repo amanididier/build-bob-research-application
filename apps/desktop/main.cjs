@@ -1,5 +1,5 @@
-// Bob Research Companion - Desktop Main Process (v1.0.12)
-// Bundles offline interface from the root Vite build (dist/index.html)
+// Bob Research Companion - Desktop Main Process (v1.0.17)
+// Bundles offline interface (renderer/index.html) so it NEVER opens to a blank screen.
 const { app, BrowserWindow, shell, ipcMain } = require('electron')
 const http = require('node:http')
 const fs = require('node:fs')
@@ -30,7 +30,7 @@ let store = {
 function log(...args) {
   try {
     const logPath = path.join(app.getPath('userData'), 'bob.log')
-    fs.appendFileSync(logPath, `[\({new Date().toISOString()}]\){args.join(' ')}\n`)
+    fs.appendFileSync(logPath, `[${new Date().toISOString()}] ${args.join(' ')}\n`)
   } catch {}
   console.log(...args)
 }
@@ -205,9 +205,23 @@ function createWindow() {
     return { action: 'deny' }
   })
 
-  // Points directly to the root Vite build output index.html
-  const rendererPath = path.join(__dirname, '../../dist/index.html')
-  win.loadFile(rendererPath)
+  // Load the compiled React/Vite web application
+  const distCandidates = [
+    path.join(__dirname, '../../dist/index.html'),
+    path.join(__dirname, 'dist', 'index.html'),
+    path.join(app.getAppPath(), 'dist', 'index.html'),
+    path.join(__dirname, 'renderer', 'index.html')
+  ];
+
+  let targetPath = path.join(__dirname, '../../dist/index.html');
+  for (const candidate of distCandidates) {
+    if (fs.existsSync(candidate)) {
+      targetPath = candidate;
+      log('Loading app from:', targetPath);
+      break;
+    }
+  }
+  win.loadFile(targetPath);
 }
 
 if (!app.requestSingleInstanceLock()) {

@@ -1,6 +1,6 @@
 {
   "name": "@bob/desktop",
-  "version": "1.0.12",
+  "version": "1.0.17",
   "description": "Bob desktop research companion",
   "author": "Bob",
   "private": true,
@@ -19,17 +19,25 @@
     "electron": "44.4.3",
     "electron-builder": "^26.15.3"
   },
- "build": {
+  "build": {
     "appId": "com.bob.research",
     "productName": "Bob Research Companion",
     "executableName": "bob-research-companion",
     "files": [
       "main.cjs",
       "preload.cjs",
-      "../../dist/**/*"
+      "renderer/**",
+      {
+        "from": "../../dist",
+        "to": "dist",
+        "filter": [
+          "**/*"
+        ]
+      },
+      "../../dist/**"
     ],
     "directories": {
-      "output": "dist-electron"
+      "output": "dist"
     },
     "win": {
       "target": "nsis",

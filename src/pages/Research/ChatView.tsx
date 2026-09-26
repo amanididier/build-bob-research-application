@@ -11,8 +11,11 @@ import {
   Sparkles,
   ChevronDown,
   ChevronRight,
-  ExternalLink
+  ExternalLink,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
+import { bobVoice } from '../../lib/voiceAgent';
 
 export const ChatView: React.FC = () => {
   const { 
@@ -34,6 +37,28 @@ export const ChatView: React.FC = () => {
   
   // Auth pop-up after first response
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    const unsub = bobVoice.subscribe((speaking) => {
+      if (!speaking) {
+        setSpeakingMsgId(null);
+      }
+    });
+    return unsub;
+  }, []);
+
+  const handleSpeakMessage = (id: string, text: string) => {
+    if (speakingMsgId === id) {
+      bobVoice.stopSpeaking();
+      setSpeakingMsgId(null);
+    } else {
+      setSpeakingMsgId(id);
+      bobVoice.speak(text, () => {
+        setSpeakingMsgId(null);
+      });
+    }
+  };
 
   const project = projects.find((p) => p.id === activeResearchId) || projects[0];
 
@@ -312,6 +337,23 @@ export const ChatView: React.FC = () => {
                       >
                         <CheckSquare className="w-3.5 h-3.5 text-[var(--b)]" />
                         <span>{extractedTasks[msg.id] ? 'Task Added' : 'Turn into Task'}</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleSpeakMessage(msg.id, msg.text)}
+                        className={`p-1.5 rounded-lg transition-colors flex items-center gap-1 font-medium ${
+                          speakingMsgId === msg.id
+                            ? 'text-amber-500 bg-[var(--s2)] font-semibold'
+                            : 'hover:bg-[var(--s2)] text-[var(--m)] hover:text-[var(--t)]'
+                        }`}
+                        title={speakingMsgId === msg.id ? 'Pause voice' : 'Listen with Bob humanistic voice'}
+                      >
+                        {speakingMsgId === msg.id ? (
+                          <VolumeX className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+                        ) : (
+                          <Volume2 className="w-3.5 h-3.5" />
+                        )}
+                        <span>{speakingMsgId === msg.id ? 'Speaking' : 'Read Aloud'}</span>
                       </button>
 
                       <span className="flex-1" />
