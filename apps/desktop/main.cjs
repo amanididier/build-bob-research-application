@@ -306,9 +306,9 @@ function registerIpc() {
 }
 
 function createWindow() {
-  const iconPath = process.platform === 'win32' && fs.existsSync(path.join(__dirname, 'icon.ico'))
-    ? path.join(__dirname, 'icon.ico')
-    : path.join(__dirname, 'icon.png')
+  const iconPath = process.platform === 'win32' && fs.existsSync(path.join(__dirname, 'bob-logo.png'))
+    ? path.join(__dirname, 'bob-logo.png')
+    : path.join(__dirname, 'bob-logo.png')
 
   // Explicitly grant microphone media permission for speech recognition
   session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
