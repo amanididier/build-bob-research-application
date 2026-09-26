@@ -1,6 +1,6 @@
 {
   "name": "@bob/desktop",
-  "version": "1.0.17",
+  "version": "1.0.18",
   "description": "Bob desktop research companion",
   "author": "Bob",
   "private": true,
@@ -14,7 +14,9 @@
     "dist": "electron-builder --dir",
     "package": "electron-builder"
   },
-  "dependencies": {},
+  "dependencies": {
+    "electron-updater": "^6.8.9"
+  },
   "devDependencies": {
     "electron": "44.4.3",
     "electron-builder": "^26.15.3"
@@ -23,9 +25,17 @@
     "appId": "com.bob.research",
     "productName": "Bob Research Companion",
     "executableName": "bob-research-companion",
+    "icon": "icon.ico",
+    "publish": {
+      "provider": "github",
+      "owner": "amanididier",
+      "repo": "build-bob-research-application"
+    },
     "files": [
       "main.cjs",
       "preload.cjs",
+      "icon.ico",
+      "icon.png",
       "renderer/**",
       {
         "from": "../../dist",
@@ -41,14 +51,17 @@
     },
     "win": {
       "target": "nsis",
+      "icon": "icon.ico",
       "artifactName": "Bob-Research-Companion-Setup.exe"
     },
     "mac": {
-      "category": "public.app-category.productivity"
+      "category": "public.app-category.productivity",
+      "icon": "icon.png"
     },
     "linux": {
       "target": "AppImage",
-      "category": "Office"
+      "category": "Office",
+      "icon": "icon.png"
     }
   }
 }

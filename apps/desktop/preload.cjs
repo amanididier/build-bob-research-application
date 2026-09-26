@@ -7,4 +7,11 @@ contextBridge.exposeInMainWorld('bob', {
   openWeb: (sub) => ipcRenderer.invoke('bob:openWeb', sub),
   info: () => ipcRenderer.invoke('bob:info'),
   onChange: (fn) => ipcRenderer.on('bob:changed', () => fn()),
+  checkForUpdates: () => ipcRenderer.invoke('bob:checkUpdates'),
+  installUpdate: () => ipcRenderer.invoke('bob:installUpdate'),
+  onUpdateStatus: (fn) => {
+    const handler = (_event, status) => fn(status)
+    ipcRenderer.on('bob:updateStatus', handler)
+    return () => ipcRenderer.removeListener('bob:updateStatus', handler)
+  }
 })

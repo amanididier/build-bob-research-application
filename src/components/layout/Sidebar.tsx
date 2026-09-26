@@ -123,34 +123,44 @@ export const Sidebar: React.FC = () => {
         ))}
       </div>
 
-      {/* Bottom Controls */}
-      <div className="mt-auto pt-3 border-t border-[var(--line)] space-y-1">
+      {/* Bottom Controls & User Profile */}
+      <div className="mt-auto pt-3 border-t border-[var(--line)] space-y-1.5">
         <button
           onClick={toggleTheme}
-          className="w-full text-left px-3 py-2 rounded-xl text-[12px] flex items-center gap-2.5 hover:bg-[var(--s2)] text-[var(--t)] transition-colors"
+          className="w-full text-left px-3 py-2 rounded-xl text-[12px] flex items-center gap-2.5 hover:bg-[var(--s2)] text-[var(--m)] hover:text-[var(--t)] transition-colors"
         >
           {isDark ? <Sun className="w-4 h-4 text-[var(--y)]" /> : <Moon className="w-4 h-4 text-[var(--m)]" />}
-          <span>{isDark ? '☀ Light mode' : '☾ Appearance'}</span>
+          <span>{isDark ? 'Light mode' : 'Dark appearance'}</span>
         </button>
 
-        <button
-          onClick={() => navigateTo('settings')}
-          className="w-full text-left px-3 py-2 rounded-xl text-[12px] flex items-center gap-2.5 hover:bg-[var(--s2)] text-[var(--t)] transition-colors"
-        >
-          <Settings className="w-4 h-4 text-[var(--m)]" />
-          <span>⚙ Settings</span>
-        </button>
+        {/* User Profile Card with Clean Settings Gear Icon */}
+        <div className="flex items-center justify-between p-2 rounded-2xl hover:bg-[var(--s2)] transition-colors">
+          <button
+            onClick={() => navigateTo('profile')}
+            className="flex items-center gap-2.5 text-left flex-1 min-w-0"
+            title="Profile & Preferences"
+          >
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#d9e7ff] to-[#f2d4bb] text-neutral-800 font-extrabold text-[12px] grid place-items-center shadow-sm shrink-0">
+              A
+            </div>
+            <div className="flex-1 min-w-0">
+              <span className="block text-[13px] font-bold text-[var(--t)] truncate leading-tight">
+                Amani
+              </span>
+              <span className="block text-[10.5px] text-[var(--m)] truncate leading-tight">
+                Research workspace
+              </span>
+            </div>
+          </button>
 
-        {/* Pro Upgrade Pill */}
-        <div className="mt-2 bg-[#171717] dark:bg-[#2b2018] text-white dark:border dark:border-[#4a3021] rounded-[17px] p-3 flex items-center gap-2.5 shadow-sm">
-          <Rocket className="w-5 h-5 text-[var(--y)] flex-shrink-0" />
-          <div className="flex-1 min-w-0">
-            <b className="block text-[12px] font-bold">Upgrade</b>
-            <small className="block text-[9px] text-[#aaa]">More research power</small>
-          </div>
-          <span className="bg-[var(--y)] text-neutral-900 rounded-full px-2 py-0.5 text-[9px] font-black tracking-wider">
-            PRO
-          </span>
+          <button
+            onClick={() => navigateTo('settings')}
+            className="w-8 h-8 rounded-xl hover:bg-[var(--line)]/60 text-[var(--m)] hover:text-[var(--t)] grid place-items-center transition-colors shrink-0"
+            title="Settings"
+            aria-label="Settings"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
         </div>
       </div>
     </aside>

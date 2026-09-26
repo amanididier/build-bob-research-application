@@ -37,29 +37,17 @@ export const OnboardingFlow: React.FC = () => {
   const [localName, setLocalName] = useState<string>(userName || 'Amani');
   const [geminiInput, setGeminiInput] = useState<string>(() => bobAi.getGeminiKey() || '');
   const [keySaved, setKeySaved] = useState<boolean>(() => bobAi.hasGeminiKey());
-  const [researchToolsReady, setResearchToolsReady] = useState<boolean>(false);
-  const [localMemoryReady, setLocalMemoryReady] = useState<boolean>(false);
+  const [researchToolsReady, setResearchToolsReady] = useState<boolean>(true);
+  const [localMemoryReady, setLocalMemoryReady] = useState<boolean>(true);
+  const [ollamaDetected, setOllamaDetected] = useState<{ running: boolean; models: string[] }>({ running: false, models: [] });
 
   const [hardware] = useState(() => detectSystemHardware());
-  const modelProfile = MODEL_CATALOG[hardware.recommendedTier];
 
   useEffect(() => {
-    if (isOnboardingOpen) {
-      startAiDownload();
-    }
-  }, [isOnboardingOpen, startAiDownload]);
-
-  useEffect(() => {
-    if (step === 7) {
-      accelerateAiDownload();
-      const t1 = setTimeout(() => setResearchToolsReady(true), 900);
-      const t2 = setTimeout(() => setLocalMemoryReady(true), 1600);
-      return () => {
-        clearTimeout(t1);
-        clearTimeout(t2);
-      };
-    }
-  }, [step, accelerateAiDownload]);
+    bobAi.checkOllama().then((res) => {
+      setOllamaDetected(res);
+    });
+  }, []);
 
   if (!isOnboardingOpen) return null;
 
@@ -129,25 +117,22 @@ export const OnboardingFlow: React.FC = () => {
             </button>
           </div>
 
-          {/* Ambient persistent download bar throughout earlier steps */}
+          {/* Transparent Status Chip during onboarding */}
           {step <= 6 && (
-            <div className="mb-4 p-2 rounded-xl bg-[var(--s2)] border border-[var(--line)] flex items-center justify-between text-[11px]">
+            <div className="mb-4 p-2 px-3 rounded-xl bg-[var(--s2)] border border-[var(--line)] flex items-center justify-between text-[11px]">
               <div className="flex items-center gap-2 text-[var(--m)]">
-                <DownloadCloud className={`w-3.5 h-3.5 ${aiDownloadStatus.isReady ? 'text-[var(--g)]' : 'text-[var(--y)] animate-pulse'}`} />
-                <span className="font-medium">
-                  {aiDownloadStatus.isReady ? (
-                    <span className="text-[var(--g)] font-semibold">Offline research engine ready ({totalMb} MB)</span>
-                  ) : (
-                    <span>Preparing offline tools: <b>{aiDownloadStatus.progressPercent}%</b></span>
-                  )}
+                <HardDrive className="w-3.5 h-3.5 text-[var(--y)]" />
+                <span>
+                  {ollamaDetected.running
+                    ? `Ollama local daemon detected (${ollamaDetected.models[0] || 'ready'})`
+                    : keySaved
+                    ? 'Google Gemini Cloud API active'
+                    : 'Private offline reasoning ready · No cloud dependencies'}
                 </span>
               </div>
-              <div className="w-24 h-1.5 bg-[var(--line)] rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-[var(--y)] transition-all duration-300 rounded-full"
-                  style={{ width: `${aiDownloadStatus.progressPercent}%` }}
-                />
-              </div>
+              <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded-full bg-[var(--s)] text-[var(--g)] font-bold">
+                Ready
+              </span>
             </div>
           )}
         </div>
@@ -367,29 +352,21 @@ export const OnboardingFlow: React.FC = () => {
 
             {/* Checklist items */}
             <div className="space-y-2.5 max-w-[380px] mx-auto">
-              <div className="p-3 rounded-xl bg-[var(--s2)] border border-[var(--line)] space-y-2">
-                <div className="flex items-center justify-between text-[12px] font-semibold text-[var(--t)]">
-                  <div className="flex items-center gap-2.5">
-                    <Cpu className="w-4 h-4 text-[var(--y)]" />
-                    <span>Research reasoning engine</span>
-                  </div>
-                  {aiDownloadStatus.isReady || keySaved ? (
-                    <span className="flex items-center gap-1 text-[11px] text-[var(--g)] font-semibold">
-                      <CheckCircle2 className="w-4 h-4 text-[var(--g)]" />
-                      <span>Ready</span>
-                    </span>
-                  ) : (
-                    <span className="text-[11px] text-[var(--y)] font-mono font-semibold">
-                      {aiDownloadStatus.progressPercent}%
-                    </span>
-                  )}
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-[var(--s2)] border border-[var(--line)] text-[12px] font-semibold text-[var(--t)]">
+                <div className="flex items-center gap-2.5">
+                  <Cpu className="w-4 h-4 text-[var(--y)]" />
+                  <span>
+                    {ollamaDetected.running
+                      ? `Ollama Local (${ollamaDetected.models[0] || 'active'})`
+                      : keySaved
+                      ? 'Google Gemini Cloud Brain'
+                      : 'Built-in Offline Synthesis'}
+                  </span>
                 </div>
-                <div className="h-2 w-full bg-[var(--line)] rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-[var(--y)] transition-all duration-300 rounded-full"
-                    style={{ width: `${aiDownloadStatus.progressPercent}%` }}
-                  />
-                </div>
+                <span className="flex items-center gap-1 text-[11px] text-[var(--g)] font-semibold">
+                  <CheckCircle2 className="w-4 h-4 text-[var(--g)]" />
+                  <span>Ready</span>
+                </span>
               </div>
 
               <div className="flex items-center justify-between p-2.5 rounded-xl bg-[var(--s2)] border border-[var(--line)] text-[12px] font-semibold text-[var(--t)]">

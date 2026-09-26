@@ -153,6 +153,19 @@ export const ChatView: React.FC = () => {
       tableBuffer = [];
     };
 
+    const formatInline = (str: string) => {
+      const parts = str.split(/(\*\*.*?\*\*|`.*?`)/g);
+      return parts.map((part, pIdx) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+          return <strong key={pIdx} className="font-bold text-[var(--t)]">{part.slice(2, -2)}</strong>;
+        }
+        if (part.startsWith('`') && part.endsWith('`')) {
+          return <code key={pIdx} className="px-1.5 py-0.5 rounded bg-[var(--s2)] font-mono text-[11.5px] border border-[var(--line)]">{part.slice(1, -1)}</code>;
+        }
+        return part;
+      });
+    };
+
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
 
@@ -167,22 +180,34 @@ export const ChatView: React.FC = () => {
 
       if (line.startsWith('### ')) {
         elements.push(
-          <h4 key={i} className="text-[14px] font-bold text-[var(--t)] mt-3 mb-1">
-            {line.replace('### ', '')}
+          <h4 key={i} className="text-[14.5px] font-bold text-[var(--t)] mt-3.5 mb-1.5">
+            {formatInline(line.replace('### ', ''))}
           </h4>
+        );
+      } else if (line.startsWith('## ')) {
+        elements.push(
+          <h3 key={i} className="text-[16px] font-bold text-[var(--t)] mt-4 mb-2">
+            {formatInline(line.replace('## ', ''))}
+          </h3>
         );
       } else if (line.startsWith('* ') || line.startsWith('• ') || line.startsWith('- ')) {
         elements.push(
-          <li key={i} className="ml-4 list-disc text-[12.5px] leading-relaxed my-0.5 text-[var(--t)]">
-            {line.replace(/^(\*|•|-)\s+/, '')}
+          <li key={i} className="ml-4 list-disc text-[13px] leading-relaxed my-1 text-[var(--t)]">
+            {formatInline(line.replace(/^(\*|•|-)\s+/, ''))}
+          </li>
+        );
+      } else if (/^\d+\.\s+/.test(line)) {
+        elements.push(
+          <li key={i} className="ml-4 list-decimal text-[13px] leading-relaxed my-1 text-[var(--t)]">
+            {formatInline(line.replace(/^\d+\.\s+/, ''))}
           </li>
         );
       } else if (line.trim() === '') {
-        elements.push(<div key={i} className="h-1.5" />);
+        elements.push(<div key={i} className="h-2" />);
       } else {
         elements.push(
-          <p key={i} className="text-[12.5px] leading-relaxed my-1 text-[var(--t)]">
-            {line}
+          <p key={i} className="text-[13px] leading-relaxed my-1.5 text-[var(--t)]">
+            {formatInline(line)}
           </p>
         );
       }
@@ -292,17 +317,17 @@ export const ChatView: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Clean Formatted Response Card */}
-                  <div className="bg-[var(--s)] border border-[var(--line)] rounded-[20px] p-5 shadow-[0_5px_25px_rgba(0,0,0,0.02)] space-y-3">
-                    <div className="text-[13px] leading-relaxed">
+                  {/* Natural organic response without rigid card wrapper (Gemini / ChatGPT style) */}
+                  <div className="space-y-3 pt-0.5">
+                    <div className="text-[13.5px] leading-relaxed text-[var(--t)]">
                       {renderMessageContent(msg.text)}
                     </div>
 
-                    {/* Bottom Action Bar */}
-                    <div className="flex items-center gap-2 pt-3 border-t border-[var(--line)] text-[11.5px]">
+                    {/* Understated Action Bar */}
+                    <div className="flex items-center gap-1.5 pt-1 text-[11.5px] text-[var(--m)]">
                       <button
                         onClick={() => handleCopy(msg.id, msg.text)}
-                        className="p-1.5 rounded-lg hover:bg-[var(--s2)] text-[var(--m)] hover:text-[var(--t)] transition-colors flex items-center gap-1 font-medium"
+                        className="px-2 py-1 rounded-lg hover:bg-[var(--s2)] text-[var(--m)] hover:text-[var(--t)] transition-colors flex items-center gap-1 font-medium"
                         title="Copy message"
                       >
                         {copiedId === msg.id ? (
@@ -315,7 +340,7 @@ export const ChatView: React.FC = () => {
 
                       <button
                         onClick={() => handleSaveToNotes(msg.id, msg.text)}
-                        className={`p-1.5 rounded-lg transition-colors flex items-center gap-1 font-medium ${
+                        className={`px-2 py-1 rounded-lg transition-colors flex items-center gap-1 font-medium ${
                           savedNotes[msg.id]
                             ? 'text-[var(--g)] bg-[var(--s2)]'
                             : 'hover:bg-[var(--s2)] text-[var(--m)] hover:text-[var(--t)]'
@@ -328,7 +353,7 @@ export const ChatView: React.FC = () => {
 
                       <button
                         onClick={() => handleExtractTask(msg.id, msg.text)}
-                        className={`p-1.5 rounded-lg transition-colors flex items-center gap-1 font-medium ${
+                        className={`px-2 py-1 rounded-lg transition-colors flex items-center gap-1 font-medium ${
                           extractedTasks[msg.id]
                             ? 'text-[var(--g)] bg-[var(--s2)]'
                             : 'hover:bg-[var(--s2)] text-[var(--m)] hover:text-[var(--t)]'
@@ -341,7 +366,7 @@ export const ChatView: React.FC = () => {
 
                       <button
                         onClick={() => handleSpeakMessage(msg.id, msg.text)}
-                        className={`p-1.5 rounded-lg transition-colors flex items-center gap-1 font-medium ${
+                        className={`px-2 py-1 rounded-lg transition-colors flex items-center gap-1 font-medium ${
                           speakingMsgId === msg.id
                             ? 'text-amber-500 bg-[var(--s2)] font-semibold'
                             : 'hover:bg-[var(--s2)] text-[var(--m)] hover:text-[var(--t)]'
@@ -360,7 +385,7 @@ export const ChatView: React.FC = () => {
 
                       <button
                         onClick={() => sendMessage('Can you rephrase this with a comparison table?')}
-                        className="p-1.5 rounded-lg hover:bg-[var(--s2)] text-[var(--m)] hover:text-[var(--t)] transition-colors flex items-center gap-1"
+                        className="p-1 rounded-lg hover:bg-[var(--s2)] text-[var(--m)] hover:text-[var(--t)] transition-colors"
                         title="Regenerate response"
                       >
                         <RotateCcw className="w-3.5 h-3.5" />
@@ -375,17 +400,15 @@ export const ChatView: React.FC = () => {
 
         {/* AI Generating Indicator */}
         {isAiGenerating && (
-          <div className="flex gap-3.5 items-start animate-pulse">
+          <div className="flex gap-3.5 items-start">
             <BobAvatar size={28} />
-            <div className="flex-1 bg-[var(--s)] border border-[var(--line)] rounded-[20px] p-5 space-y-3">
+            <div className="flex-1 space-y-2 pt-1.5">
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-[var(--y)] animate-ping" />
-                <span className="text-[12.5px] font-semibold text-[var(--t)]">
-                  Bob is thinking...
+                <span className="text-[12.5px] font-medium text-[var(--m)]">
+                  Bob is synthesizing your research context...
                 </span>
               </div>
-              <div className="h-3 bg-[var(--s2)] rounded w-3/4" />
-              <div className="h-3 bg-[var(--s2)] rounded w-5/6" />
             </div>
           </div>
         )}

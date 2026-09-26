@@ -1,10 +1,18 @@
-// Bob Research Companion - Desktop Main Process (v1.0.17)
-// Bundles offline interface (renderer/index.html) so it NEVER opens to a blank screen.
+// Bob Research Companion - Desktop Main Process (v1.0.18)
+// Bundles modern React/Vite app with native auto-updates and real Bob mascot icon.
 const { app, BrowserWindow, shell, ipcMain } = require('electron')
 const http = require('node:http')
 const fs = require('node:fs')
 const path = require('node:path')
 const os = require('node:os')
+
+let autoUpdater = null
+try {
+  const updaterModule = require('electron-updater')
+  autoUpdater = updaterModule.autoUpdater
+} catch (e) {
+  console.log('electron-updater not loaded:', e.message)
+}
 
 const PORT = 54321
 const TOKEN = process.env.BOB_BRIDGE_TOKEN || 'development-token'
@@ -12,6 +20,11 @@ const WEB_URL = process.env.BOB_WEB_URL || 'https://build-bob-research-applicati
 
 let win = null
 let storePath = null
+let updateState = {
+  status: 'idle',
+  version: '1.0.18',
+  message: 'Up to date'
+}
 let store = {
   projects: [{ id: 'default', name: 'AI research companion', color: 'violet' }],
   notes: [
@@ -139,6 +152,75 @@ function startBridge() {
   server.listen(PORT, '127.0.0.1', () => log('Bridge listening on port:', PORT))
 }
 
+function setupAutoUpdater() {
+  if (!autoUpdater) return
+
+  autoUpdater.autoDownload = true
+  autoUpdater.autoInstallOnAppQuit = true
+
+  const sendStatus = (statusObj) => {
+    updateState = { ...updateState, ...statusObj }
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('bob:updateStatus', updateState)
+    }
+  }
+
+  autoUpdater.on('checking-for-update', () => {
+    sendStatus({ status: 'checking', message: 'Checking for updates...' })
+  })
+
+  autoUpdater.on('update-available', (info) => {
+    sendStatus({
+      status: 'available',
+      version: info.version,
+      message: `New version ${info.version} downloading automatically in background...`
+    })
+  })
+
+  autoUpdater.on('update-not-available', (info) => {
+    sendStatus({
+      status: 'latest',
+      version: app.getVersion(),
+      message: `You are on the latest version (v${app.getVersion()})`
+    })
+  })
+
+  autoUpdater.on('download-progress', (progressObj) => {
+    const percent = Math.round(progressObj.percent || 0)
+    sendStatus({
+      status: 'downloading',
+      percent,
+      message: `Downloading update: ${percent}%`
+    })
+  })
+
+  autoUpdater.on('update-downloaded', (info) => {
+    sendStatus({
+      status: 'ready',
+      version: info.version,
+      message: `Version ${info.version} is ready! Restart to apply.`
+    })
+  })
+
+  autoUpdater.on('error', (err) => {
+    sendStatus({
+      status: 'error',
+      message: err ? (err.message || String(err)) : 'Unable to check updates'
+    })
+  })
+
+  // Check silently on startup if packaged
+  if (app.isPackaged) {
+    try {
+      autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+        log('Auto-update check error:', err.message)
+      })
+    } catch (e) {
+      log('Auto-updater startup exception:', e.message)
+    }
+  }
+}
+
 function registerIpc() {
   ipcMain.handle('bob:get', () => store)
 
@@ -175,17 +257,48 @@ function registerIpc() {
       }
     }
   })
+
+  ipcMain.handle('bob:checkUpdates', async () => {
+    if (!app.isPackaged || !autoUpdater) {
+      return {
+        status: 'latest',
+        version: app.getVersion() || '1.0.18',
+        message: `Running latest build (v${app.getVersion() || '1.0.18'})`
+      }
+    }
+    try {
+      await autoUpdater.checkForUpdates()
+      return updateState
+    } catch (err) {
+      return { status: 'error', message: err.message || 'Check failed' }
+    }
+  })
+
+  ipcMain.handle('bob:installUpdate', () => {
+    if (autoUpdater) {
+      autoUpdater.quitAndInstall()
+    }
+  })
 }
 
 function createWindow() {
+  const iconPath = path.join(__dirname, 'icon.png')
+
   win = new BrowserWindow({
     width: 1280,
     height: 840,
     minWidth: 980,
     minHeight: 650,
-    title: 'Bob Research Companion',
+    title: 'Bob',
+    icon: fs.existsSync(iconPath) ? iconPath : undefined,
     show: false,
     backgroundColor: '#0f1115',
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      color: '#171717',
+      symbolColor: '#e0dedb',
+      height: 40
+    },
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -239,6 +352,7 @@ if (!app.requestSingleInstanceLock()) {
     registerIpc()
     startBridge()
     createWindow()
+    setupAutoUpdater()
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()

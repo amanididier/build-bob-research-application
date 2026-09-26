@@ -37,21 +37,18 @@ export const BottomComposer: React.FC = () => {
     if (isListening) {
       bobVoice.stopListening();
     } else {
-      const started = bobVoice.startListening(
-        (transcript, isFinal) => {
+      bobVoice.startListening(
+        (transcript, _isFinal) => {
           setPrompt(transcript);
           if (textareaRef.current) {
             textareaRef.current.style.height = 'auto';
             textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
           }
         },
-        (error) => {
-          triggerThinking('Voice Input', error || 'Microphone error', 'Voice ready');
+        (_error) => {
+          // silently handle mic stop
         }
       );
-      if (started) {
-        triggerThinking('Bob Voice Listening', 'Speak naturally, Bob is transcribing...', 'Listening');
-      }
     }
   };
 
@@ -139,13 +136,25 @@ export const BottomComposer: React.FC = () => {
 
           <span className="flex-1" />
 
+          {/* Inline Animated Yellow Audio Waves indicator when listening */}
+          {isListening && (
+            <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[var(--ys)] dark:bg-[#382c0b] border border-[var(--y)]/50 animate-in fade-in duration-150 mr-1.5 shadow-sm">
+              <span className="w-1 h-2 bg-[var(--y)] rounded-full animate-bounce [animation-delay:0ms]" />
+              <span className="w-1 h-3.5 bg-[var(--y)] rounded-full animate-bounce [animation-delay:150ms]" />
+              <span className="w-1 h-2 bg-[var(--y)] rounded-full animate-bounce [animation-delay:300ms]" />
+              <span className="w-1 h-4 bg-[var(--y)] rounded-full animate-bounce [animation-delay:75ms]" />
+              <span className="w-1 h-2.5 bg-[var(--y)] rounded-full animate-bounce [animation-delay:200ms]" />
+              <span className="text-[11px] font-bold text-[var(--y)] pl-1 select-none">Listening...</span>
+            </div>
+          )}
+
           {/* Voice button */}
           <button
             onClick={handleToggleVoice}
             title={isListening ? 'Stop listening' : 'Speak to Bob (Hands-free voice agent)'}
             className={`w-8 h-8 rounded-full grid place-items-center transition-all ${
               isListening
-                ? 'bg-rose-500 text-white animate-pulse shadow-md shadow-rose-500/30'
+                ? 'bg-[var(--y)] text-neutral-900 shadow-md ring-2 ring-[var(--y)]/40 scale-105'
                 : 'hover:bg-[var(--s2)] text-[#666] dark:text-[#a8a199]'
             }`}
           >

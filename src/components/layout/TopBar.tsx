@@ -55,32 +55,41 @@ export const TopBar: React.FC = () => {
   };
 
   return (
-    <header className="h-[68px] border-b border-[var(--line)] flex items-center px-6 bg-[var(--bg)]/90 backdrop-blur-md sticky top-0 z-30 select-none">
+    <header 
+      style={{ WebkitAppRegion: 'drag' } as any}
+      className="h-12 border-b border-[var(--line)] flex items-center px-4 md:px-6 bg-[var(--bg)]/90 backdrop-blur-md sticky top-0 z-30 select-none transition-all pr-36 md:pr-40"
+    >
       {/* Sidebar door toggle */}
       <button
+        style={{ WebkitAppRegion: 'no-drag' } as any}
         onClick={toggleSidebar}
         title="Toggle sidebar"
-        className="w-9 h-9 rounded-full border border-[var(--line)] bg-[var(--s)] grid place-items-center text-[var(--t)] hover:bg-[var(--s2)] transition-colors shadow-sm"
+        className="w-8 h-8 rounded-xl border border-[var(--line)] bg-[var(--s)] grid place-items-center text-[var(--t)] hover:bg-[var(--s2)] transition-colors shadow-sm"
       >
-        <PanelLeft className="w-4 h-4 text-[var(--m)]" />
+        <PanelLeft className="w-3.5 h-3.5 text-[var(--m)]" />
       </button>
 
-      {/* Page Title */}
-      <span className="font-bold text-[14px] text-[var(--t)] ml-3.5">
-        {getPageTitle()}
-      </span>
+      {/* Subtle Breadcrumb / Page Title (only for non-chat pages to prevent clutter) */}
+      {currentPage !== 'research' && (
+        <span className="font-semibold text-[13px] text-[var(--t)] ml-3">
+          {getPageTitle()}
+        </span>
+      )}
 
       {/* Right actions */}
-      <div className="ml-auto flex items-center gap-1.5">
+      <div 
+        style={{ WebkitAppRegion: 'no-drag' } as any}
+        className="ml-auto flex items-center gap-1"
+      >
         {/* Notifications Button */}
         <button
           onClick={() => navigateTo('notifications')}
           title="Notifications"
-          className="w-9 h-9 rounded-full hover:bg-[var(--s2)] grid place-items-center text-[var(--m)] hover:text-[var(--t)] transition-colors relative"
+          className="w-8 h-8 rounded-xl hover:bg-[var(--s2)] grid place-items-center text-[var(--m)] hover:text-[var(--t)] transition-colors relative"
         >
           <Bell className="w-4 h-4" />
           {unreadNotifications > 0 && (
-            <span className="w-2 h-2 rounded-full bg-[var(--y)] absolute top-2 right-2 ring-2 ring-[var(--bg)]" />
+            <span className="w-2 h-2 rounded-full bg-[var(--y)] absolute top-1.5 right-1.5 ring-2 ring-[var(--bg)]" />
           )}
         </button>
 
@@ -88,22 +97,22 @@ export const TopBar: React.FC = () => {
         <button
           onClick={handleShare}
           title="Share workspace"
-          className="w-9 h-9 rounded-full hover:bg-[var(--s2)] grid place-items-center text-[var(--m)] hover:text-[var(--t)] transition-colors"
+          className="w-8 h-8 rounded-xl hover:bg-[var(--s2)] grid place-items-center text-[var(--m)] hover:text-[var(--t)] transition-colors"
         >
-          <Share2 className="w-4 h-4" />
+          <Share2 className="w-3.5 h-3.5" />
         </button>
 
         {/* User Profile Avatar with Dropdown */}
         <div className="relative ml-1" ref={profileRef}>
           <button
             onClick={() => setIsProfileOpen(!isProfileOpen)}
-            className="w-8 h-8 rounded-full bg-gradient-to-br from-[#d9e7ff] to-[#f2d4bb] text-neutral-800 font-extrabold text-[12px] grid place-items-center shadow-sm cursor-pointer hover:ring-2 ring-[var(--y)] transition-all"
+            className="w-7 h-7 rounded-full bg-gradient-to-br from-[#d9e7ff] to-[#f2d4bb] text-neutral-800 font-extrabold text-[11px] grid place-items-center shadow-sm cursor-pointer hover:ring-2 ring-[var(--y)] transition-all"
           >
             A
           </button>
 
           {isProfileOpen && (
-            <div className="absolute right-0 top-11 w-56 bg-[var(--s)] border border-[var(--line)] shadow-xl rounded-2xl p-2 z-50 text-[12px] animate-in fade-in zoom-in-95 duration-100">
+            <div className="absolute right-0 top-9 w-56 bg-[var(--s)] border border-[var(--line)] shadow-xl rounded-2xl p-2 z-50 text-[12px] animate-in fade-in zoom-in-95 duration-100">
               <div className="px-3 py-2 border-b border-[var(--line)] mb-1">
                 <b className="text-[13px] text-[var(--t)] block">Amani</b>
                 <small className="text-[10px] text-[var(--m)] block">Research workspace</small>

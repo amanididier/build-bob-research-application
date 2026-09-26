@@ -51,8 +51,8 @@ export const ResearchPage: React.FC = () => {
       {/* Research Top Context & Action Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-4 border-b border-[var(--line)]">
         <div>
-          <div className="text-[10px] tracking-[0.08em] text-[#999] uppercase font-semibold">
-            RESEARCH WORKSPACE · ACTIVE PROJECT
+          <div className="text-[10px] tracking-[0.09em] text-[#999] uppercase font-semibold">
+            ACTIVE PROJECT
           </div>
           <div className="flex items-center gap-2.5 mt-1">
             <span
