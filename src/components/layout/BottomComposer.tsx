@@ -33,11 +33,11 @@ export const BottomComposer: React.FC = () => {
     return null;
   }
 
-  const handleToggleVoice = () => {
+  const handleToggleVoice = async () => {
     if (isListening) {
       bobVoice.stopListening();
     } else {
-      bobVoice.startListening(
+      await bobVoice.startListening(
         (transcript, _isFinal) => {
           setPrompt(transcript);
           if (textareaRef.current) {
@@ -45,8 +45,8 @@ export const BottomComposer: React.FC = () => {
             textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
           }
         },
-        (_error) => {
-          // silently handle mic stop
+        (error) => {
+          console.warn('Voice recognition message:', error);
         }
       );
     }
@@ -82,9 +82,9 @@ export const BottomComposer: React.FC = () => {
 
   return (
     <>
-      {/* Chrome launcher button on the right */}
+      {/* Chrome launcher button on the right: Navigates directly to Chrome side panel page */}
       <button
-        onClick={openChromeBridge}
+        onClick={() => navigateTo('chrome')}
         title="Open Bob in Chrome"
         className={`fixed z-30 bottom-5 w-11 h-11 rounded-full bg-[var(--s)] border border-[var(--line)] shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all grid place-items-center ${
           isSidebarClosed

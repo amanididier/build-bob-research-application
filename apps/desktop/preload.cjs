@@ -13,5 +13,9 @@ contextBridge.exposeInMainWorld('bob', {
     const handler = (_event, status) => fn(status)
     ipcRenderer.on('bob:updateStatus', handler)
     return () => ipcRenderer.removeListener('bob:updateStatus', handler)
-  }
+  },
+  minimize: () => ipcRenderer.invoke('bob:minimize'),
+  maximize: () => ipcRenderer.invoke('bob:maximize'),
+  close: () => ipcRenderer.invoke('bob:close'),
+  isMaximized: () => ipcRenderer.invoke('bob:isMaximized'),
 })

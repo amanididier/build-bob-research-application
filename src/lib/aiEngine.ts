@@ -146,7 +146,7 @@ class BobAiManager {
       return { ok: false, message: 'Please paste a valid Google AI Studio API key.' };
     }
 
-    const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-flash-latest'];
+    const candidateModels = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite', 'gemini-2.5-flash'];
 
     // 1. Try SDK
     for (const model of candidateModels) {
@@ -234,7 +234,7 @@ class BobAiManager {
     // 1. Try Google Gemini API if user has connected their key
     const geminiKey = this.getGeminiKey();
     if (geminiKey) {
-      const candidateModels = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-flash-latest'];
+      const candidateModels = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite', 'gemini-2.5-flash'];
       const systemPrompt = `You are Bob, an intelligent, helpful research companion.
 Speak naturally, warmly, and clearly like ChatGPT or Gemini.
 When presenting comparisons or structured findings, use clean markdown tables.

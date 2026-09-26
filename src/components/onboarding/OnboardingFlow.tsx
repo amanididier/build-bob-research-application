@@ -14,10 +14,12 @@ import {
   Key,
   ExternalLink,
   Check,
-  ClipboardCheck
+  ClipboardCheck,
+  Download
 } from 'lucide-react';
 import { detectSystemHardware, MODEL_CATALOG } from '../../lib/hardware';
 import { bobAi } from '../../lib/aiEngine';
+import { downloadExtensionZip } from '../../lib/downloadHelper';
 
 export const OnboardingFlow: React.FC = () => {
   const { 
@@ -412,16 +414,26 @@ export const OnboardingFlow: React.FC = () => {
                 Your workspace is ready. You can start a new research question, capture notes, or dock Bob in Chrome.
               </p>
             </div>
-            <div className="pt-2 flex flex-col gap-2 max-w-[320px] mx-auto">
+            <div className="pt-2 flex flex-col gap-2.5 max-w-[320px] mx-auto">
+              <button
+                onClick={() => {
+                  downloadExtensionZip();
+                }}
+                className="w-full h-11 rounded-2xl bg-[var(--y)] hover:bg-[#e0ac15] text-[#171717] text-[12.5px] font-bold flex items-center justify-center gap-2 shadow-sm transition-all"
+              >
+                <Download className="w-4 h-4" />
+                <span>Download Chrome Extension (.zip)</span>
+              </button>
+
               <button
                 onClick={() => {
                   finishOnboarding();
                   openChromeBridge();
                 }}
-                className="w-full h-10 rounded-xl bg-[var(--s2)] border border-[var(--line)] hover:bg-[var(--line)]/50 text-[12px] font-bold text-[var(--t)] flex items-center justify-center gap-2 transition-colors"
+                className="w-full h-10 rounded-2xl bg-[var(--s2)] border border-[var(--line)] hover:bg-[var(--line)]/50 text-[12px] font-semibold text-[var(--t)] flex items-center justify-center gap-2 transition-colors"
               >
                 <Globe className="w-4 h-4 text-[var(--b)]" />
-                <span>Open Chrome Extension setup</span>
+                <span>Open Chrome Extension setup guide</span>
               </button>
             </div>
           </div>

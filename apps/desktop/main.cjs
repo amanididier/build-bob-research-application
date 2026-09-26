@@ -1,6 +1,6 @@
-// Bob Research Companion - Desktop Main Process (v1.0.18)
+// Bob Research Companion - Desktop Main Process (v1.0.19)
 // Bundles modern React/Vite app with native auto-updates and real Bob mascot icon.
-const { app, BrowserWindow, shell, ipcMain } = require('electron')
+const { app, BrowserWindow, shell, ipcMain, session } = require('electron')
 const http = require('node:http')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -22,7 +22,7 @@ let win = null
 let storePath = null
 let updateState = {
   status: 'idle',
-  version: '1.0.18',
+  version: '1.0.19',
   message: 'Up to date'
 }
 let store = {
@@ -262,8 +262,8 @@ function registerIpc() {
     if (!app.isPackaged || !autoUpdater) {
       return {
         status: 'latest',
-        version: app.getVersion() || '1.0.18',
-        message: `Running latest build (v${app.getVersion() || '1.0.18'})`
+        version: app.getVersion() || '1.0.19',
+        message: `Running latest build (v${app.getVersion() || '1.0.19'})`
       }
     }
     try {
@@ -279,10 +279,46 @@ function registerIpc() {
       autoUpdater.quitAndInstall()
     }
   })
+
+  // Window Controls
+  ipcMain.handle('bob:minimize', () => {
+    if (win) win.minimize()
+  })
+
+  ipcMain.handle('bob:maximize', () => {
+    if (!win) return false
+    if (win.isMaximized()) {
+      win.unmaximize()
+      return false
+    } else {
+      win.maximize()
+      return true
+    }
+  })
+
+  ipcMain.handle('bob:close', () => {
+    if (win) win.close()
+  })
+
+  ipcMain.handle('bob:isMaximized', () => {
+    return win ? win.isMaximized() : false
+  })
 }
 
 function createWindow() {
-  const iconPath = path.join(__dirname, 'icon.png')
+  const iconPath = process.platform === 'win32' && fs.existsSync(path.join(__dirname, 'icon.ico'))
+    ? path.join(__dirname, 'icon.ico')
+    : path.join(__dirname, 'icon.png')
+
+  // Explicitly grant microphone media permission for speech recognition
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
+    if (permission === 'media') return true
+    return true
+  })
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    if (permission === 'media') return callback(true)
+    callback(true)
+  })
 
   win = new BrowserWindow({
     width: 1280,
@@ -293,12 +329,8 @@ function createWindow() {
     icon: fs.existsSync(iconPath) ? iconPath : undefined,
     show: false,
     backgroundColor: '#0f1115',
+    frame: false,
     titleBarStyle: 'hidden',
-    titleBarOverlay: {
-      color: '#171717',
-      symbolColor: '#e0dedb',
-      height: 40
-    },
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,

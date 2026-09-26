@@ -4,11 +4,10 @@
  * 100% Free, Zero-Credit, On-Device Humanistic Speech Agent
  * 
  * Features:
- * - Kind, warm voice synthesis with natural human cadence, pitch, and intonation
- * - Automatic detection of premium system voices (Google US English, Samantha, Microsoft Natural)
- * - Hands-free speech recognition (dictate directly into Bob's composer)
- * - Sentence-level streaming speech synthesis
- * - Audio visualizer state hooks for wave animation
+ * - Natural human cadence, pitch, and intonation
+ * - Auto-detects premium system voices (Google US English, Samantha, Microsoft Natural)
+ * - Continuous live speech recognition (real-time voice to text in prompt composer)
+ * - Audio visualizer wave animation hooks
  */
 
 export interface VoiceProfile {
@@ -32,6 +31,8 @@ class BobVoiceAgent {
   private voiceVolume = 1.0;
   private voicePitch = 1.02; // Warm, approachable pitch
   private voiceRate = 1.0;   // Natural conversational speed
+  private mediaStream: MediaStream | null = null;
+  private accumulatedTranscript = '';
 
   constructor() {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
@@ -42,13 +43,22 @@ class BobVoiceAgent {
       }
     }
 
+    this.setupRecognition();
+  }
+
+  private setupRecognition() {
     if (typeof window !== 'undefined') {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (SpeechRecognition) {
-        this.recognition = new SpeechRecognition();
-        this.recognition.continuous = false;
-        this.recognition.interimResults = true;
-        this.recognition.lang = 'en-US';
+        try {
+          this.recognition = new SpeechRecognition();
+          this.recognition.continuous = true;
+          this.recognition.interimResults = true;
+          this.recognition.maxAlternatives = 1;
+          this.recognition.lang = navigator.language || 'en-US';
+        } catch (e) {
+          console.warn('SpeechRecognition initialization error:', e);
+        }
       }
     }
   }
@@ -80,7 +90,6 @@ class BobVoiceAgent {
     }
 
     if (!this.preferredVoice) {
-      // Fallback to any English voice with localService
       this.preferredVoice = voices.find(v => v.lang.startsWith('en') && v.localService) || voices[0];
     }
   }
@@ -102,12 +111,11 @@ class BobVoiceAgent {
     if (!this.synth) return;
     this.stopSpeaking();
 
-    // Clean markdown, symbols, and formatting for clean conversational speech
     const cleanText = text
       .replace(/\[\^?\d+\]/g, '') // remove citations [1]
-      .replace(/```[\s\S]*?```/g, 'Here is the code block.') // code blocks
+      .replace(/```[\s\S]*?```/g, 'Here is the code block.')
       .replace(/\|.*\|/g, '') // markdown tables
-      .replace(/[#*_~`]/g, '') // markdown formatting
+      .replace(/[#*_~`]/g, '')
       .replace(/https?:\/\/\S+/g, 'link')
       .replace(/\s+/g, ' ')
       .trim();
@@ -170,17 +178,12 @@ class BobVoiceAgent {
   }
 
   /**
-   * Hands-free voice recognition
+   * Continuous hands-free voice recognition
    */
-  public startListening(
+  public async startListening(
     onResult: (transcript: string, isFinal: boolean) => void,
     onError?: (err: string) => void
-  ): boolean {
-    if (!this.recognition) {
-      if (onError) onError('Speech recognition is not supported in this browser.');
-      return false;
-    }
-
+  ): Promise<boolean> {
     if (this.isListening) {
       this.stopListening();
       return false;
@@ -188,60 +191,105 @@ class BobVoiceAgent {
 
     // Stop speaking if currently talking
     this.stopSpeaking();
+    this.accumulatedTranscript = '';
+
+    // Request microphone permission via getUserMedia first if available
+    try {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      }
+    } catch (err: any) {
+      console.warn('Microphone permission request:', err);
+    }
+
+    if (!this.recognition) {
+      this.setupRecognition();
+    }
+
+    if (!this.recognition) {
+      if (onError) onError('Speech recognition is not available on this system.');
+      return false;
+    }
 
     this.isListening = true;
     this.notify();
 
     this.recognition.onresult = (event: any) => {
-      let interimTranscript = '';
-      let finalTranscript = '';
-
+      let interim = '';
       for (let i = event.resultIndex; i < event.results.length; ++i) {
+        const transcriptPart = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript;
+          this.accumulatedTranscript += (this.accumulatedTranscript ? ' ' : '') + transcriptPart.trim();
         } else {
-          interimTranscript += event.results[i][0].transcript;
+          interim += transcriptPart;
         }
       }
 
-      const text = finalTranscript || interimTranscript;
-      this.notify(text);
-      onResult(text, Boolean(finalTranscript));
+      const combined = (this.accumulatedTranscript + (interim ? ' ' + interim : '')).trim();
+      this.notify(combined);
+      onResult(combined, Boolean(this.accumulatedTranscript));
     };
 
     this.recognition.onerror = (event: any) => {
-      this.isListening = false;
-      this.notify();
-      if (onError) onError(event.error || 'Mic input interrupted');
+      // Don't kill session on harmless 'no-speech' timeout
+      if (event.error === 'no-speech') {
+        return;
+      }
+      console.warn('Speech recognition error event:', event.error);
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        this.isListening = false;
+        this.notify();
+        if (onError) onError('Microphone access was denied or unavailable.');
+      }
     };
 
     this.recognition.onend = () => {
-      this.isListening = false;
-      this.notify();
+      // If user still has listening mode turned on, auto-restart to keep listening
+      if (this.isListening) {
+        try {
+          this.recognition.start();
+        } catch {
+          this.isListening = false;
+          this.notify();
+        }
+      } else {
+        this.notify();
+      }
     };
 
     try {
       this.recognition.start();
       return true;
-    } catch (e) {
+    } catch (e: any) {
+      // If already started, that's fine
+      if (e?.name === 'InvalidStateError') {
+        return true;
+      }
       this.isListening = false;
       this.notify();
+      if (onError) onError(e?.message || 'Could not start microphone');
       return false;
     }
   }
 
   public stopListening(): void {
-    if (this.recognition && this.isListening) {
+    this.isListening = false;
+    if (this.recognition) {
       try {
         this.recognition.stop();
       } catch (e) {}
-      this.isListening = false;
-      this.notify();
     }
+    if (this.mediaStream) {
+      try {
+        this.mediaStream.getTracks().forEach(t => t.stop());
+        this.mediaStream = null;
+      } catch {}
+    }
+    this.notify();
   }
 
   public getVoiceName(): string {
-    return this.preferredVoice?.name || 'Bob Humanistic Voice (Default)';
+    return this.preferredVoice?.name || 'Bob Humanistic Voice';
   }
 }
 

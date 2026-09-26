@@ -15,6 +15,7 @@ import {
   Globe
 } from 'lucide-react';
 import { BobAvatar } from '../BobAvatar';
+import { downloadExtensionZip } from '../../lib/downloadHelper';
 
 export const ChromeExtensionModal: React.FC = () => {
   const { isChromeModalOpen, setIsChromeModalOpen, activeResearchId, projects, triggerThinking } = useApp();
@@ -128,14 +129,13 @@ export const ChromeExtensionModal: React.FC = () => {
             <span className="text-[12px] font-bold text-[var(--t)]">
               How to load the unpacked extension in Chrome:
             </span>
-            <a
-              href="/bob-chrome-extension.zip"
-              download="bob-chrome-extension.zip"
-              className="text-[11px] font-bold text-[#4385f5] hover:underline flex items-center gap-1"
+            <button
+              onClick={downloadExtensionZip}
+              className="text-[11px] font-bold text-[#4385f5] hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-none p-0"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Download .zip (1.1 MB)</span>
-            </a>
+            </button>
           </div>
 
           <div className="space-y-2 text-[12px] text-[var(--m)]">

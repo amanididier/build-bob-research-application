@@ -131,6 +131,8 @@ interface AppContextType {
 
   // Projects, Tasks & Notes
   projects: ResearchProjectItem[];
+  createNewResearchSession: () => string;
+  deleteResearchSession: (id: string) => void;
   tasks: ResearchTaskItem[];
   notes: ResearchNoteItem[];
   toggleTask: (id: string) => void;
@@ -226,46 +228,129 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [unreadNotifications, setUnreadNotifications] = useState(3);
 
-  // Seed projects
-  const [projects] = useState<ResearchProjectItem[]>([
-    {
-      id: 'urugendo',
-      title: 'Urugendo transport study',
-      sourceCount: 9,
-      openTasks: 3,
-      status: 'active today',
-      dotColor: '#4385f5',
-      summary: 'Passenger booking friction analysis, station dispatching and market validation.',
-    },
-    {
-      id: 'ai-companion',
-      title: 'AI research companion',
-      sourceCount: 12,
-      openTasks: 2,
-      status: 'summary ready',
-      dotColor: '#f4bc18',
-      summary: 'Cross-browser context synthesis and automated friction discovery.',
-    },
-    {
-      id: 'bob-startup',
-      title: 'Bob AI startup study',
-      sourceCount: 7,
-      openTasks: 1,
-      status: 'offline ready',
-      dotColor: '#8b5cf6',
-      summary: 'Local small language models running offline with browser bridge.',
-    },
-  ]);
+  // Dynamic Research Sessions with LocalStorage persistence
+  const [projects, setProjects] = useState<ResearchProjectItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('bob_research_sessions_v3');
+        if (saved) return JSON.parse(saved);
+      } catch {}
+    }
+    return [
+      {
+        id: 'urugendo',
+        title: 'Urugendo transport study',
+        sourceCount: 9,
+        openTasks: 3,
+        status: 'active today',
+        dotColor: '#4385f5',
+        summary: 'Passenger booking friction analysis, station dispatching and market validation.',
+      }
+    ];
+  });
 
-  // Clean Zero-State initial chat messages (no pre-loaded synthesis cards)
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Dynamic Chat Messages per session
+  const [sessionMessages, setSessionMessages] = useState<Record<string, ChatMessage[]>>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('bob_session_messages_v3');
+        if (saved) return JSON.parse(saved);
+      } catch {}
+    }
+    return {};
+  });
+
+  const messages = sessionMessages[activeResearchId] || [];
   const [isAiGenerating, setIsAiGenerating] = useState(false);
 
-  // Dynamic interactive chat send
+  const createNewResearchSession = (): string => {
+    const newId = `session-${Date.now()}`;
+    const newSession: ResearchProjectItem = {
+      id: newId,
+      title: 'New research',
+      sourceCount: 0,
+      openTasks: 0,
+      status: 'active',
+      dotColor: '#4385f5',
+      summary: 'New research inquiry',
+    };
+
+    setProjects((prev) => {
+      const updated = [newSession, ...prev];
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('bob_research_sessions_v3', JSON.stringify(updated));
+        } catch {}
+      }
+      return updated;
+    });
+
+    setActiveResearchId(newId);
+    setCurrentPage('research');
+    setResearchSubView('chat');
+    return newId;
+  };
+
+  const deleteResearchSession = (id: string) => {
+    setProjects((prev) => {
+      const updated = prev.filter((p) => p.id !== id);
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('bob_research_sessions_v3', JSON.stringify(updated));
+        } catch {}
+      }
+      if (activeResearchId === id && updated.length > 0) {
+        setActiveResearchId(updated[0].id);
+      }
+      return updated;
+    });
+  };
+
+  // Dynamic interactive chat send with automatic title and priority color assignment
   const sendMessage = async (promptText: string) => {
     if (!promptText.trim()) return;
 
-    const isFirstConversation = messages.filter((m) => m.role === 'assistant').length === 0;
+    const currentProject = projects.find((p) => p.id === activeResearchId);
+    const isNewSession = !currentProject || currentProject.title === 'New research' || currentProject.title.startsWith('New ');
+
+    // Automatic session title and priority color generation (like ChatGPT / Gemini)
+    if (isNewSession) {
+      const cleanWords = promptText
+        .replace(/[^a-zA-Z0-9\s]/g, '')
+        .trim()
+        .split(/\s+/)
+        .slice(0, 5)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(' ');
+      const newTitle = cleanWords || 'Research exploration';
+
+      const lower = promptText.toLowerCase();
+      let dotColor = '#4385f5'; // blue (analysis/study)
+      if (lower.includes('bug') || lower.includes('error') || lower.includes('fail') || lower.includes('fix') || lower.includes('urgent')) {
+        dotColor = '#ef4444'; // red (critical/bug)
+      } else if (lower.includes('feature') || lower.includes('design') || lower.includes('build') || lower.includes('idea')) {
+        dotColor = '#f59e0b'; // amber (product/feature)
+      } else if (lower.includes('complete') || lower.includes('summary') || lower.includes('verified')) {
+        dotColor = '#10b981'; // green (verified/complete)
+      }
+
+      setProjects((prev) => {
+        const updated = prev.map((p) => {
+          if (p.id === activeResearchId) {
+            return { ...p, title: newTitle, dotColor };
+          }
+          return p;
+        });
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('bob_research_sessions_v3', JSON.stringify(updated));
+          } catch {}
+        }
+        return updated;
+      });
+    }
+
+    const isFirstConversation = (sessionMessages[activeResearchId] || []).filter((m) => m.role === 'assistant').length === 0;
 
     const userMsg: ChatMessage = {
       id: `u-${Date.now()}`,
@@ -274,7 +359,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       timestamp: 'Just now',
     };
 
-    setMessages((prev) => [...prev, userMsg]);
+    setSessionMessages((prev) => {
+      const existing = prev[activeResearchId] || [];
+      const updated = { ...prev, [activeResearchId]: [...existing, userMsg] };
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('bob_session_messages_v3', JSON.stringify(updated));
+        } catch {}
+      }
+      return updated;
+    });
+
     setIsAiGenerating(true);
 
     try {
@@ -294,7 +389,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         memoryNodesUsed: response.memoryNodesUsed,
       };
 
-      setMessages((prev) => [...prev, assistantMsg]);
+      setSessionMessages((prev) => {
+        const existing = prev[activeResearchId] || [];
+        const updated = { ...prev, [activeResearchId]: [...existing, assistantMsg] };
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('bob_session_messages_v3', JSON.stringify(updated));
+          } catch {}
+        }
+        return updated;
+      });
 
       // Pop up real Google/Auth sign-in card on first response if user not logged in
       if (isFirstConversation && typeof window !== 'undefined' && !localStorage.getItem('bob_auth_user')) {
@@ -308,7 +412,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const clearChat = () => {
-    setMessages([]);
+    setSessionMessages((prev) => {
+      const updated = { ...prev, [activeResearchId]: [] };
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('bob_session_messages_v3', JSON.stringify(updated));
+        } catch {}
+      }
+      return updated;
+    });
   };
 
   // Seed Tasks
