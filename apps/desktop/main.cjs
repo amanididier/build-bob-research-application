@@ -1,4 +1,4 @@
-// Bob Research Companion - Desktop Main Process (v1.0.19)
+// Bob Research Companion - Desktop Main Process (v1.0.26)
 // Bundles modern React/Vite app with native auto-updates and real Bob mascot icon.
 const { app, BrowserWindow, shell, ipcMain, session } = require('electron')
 const http = require('node:http')
@@ -22,7 +22,7 @@ let win = null
 let storePath = null
 let updateState = {
   status: 'idle',
-  version: '1.0.19',
+  version: app.getVersion(),
   message: 'Up to date'
 }
 let store = {
@@ -43,7 +43,7 @@ let store = {
 function log(...args) {
   try {
     const logPath = path.join(app.getPath('userData'), 'bob.log')
-    fs.appendFileSync(logPath, `[${new Date().toISOString()}] ${args.join(' ')}\n`)
+    fs.appendFileSync(logPath, `[\({new Date().toISOString()}]\){args.join(' ')}\n`)
   } catch {}
   console.log(...args)
 }
@@ -155,7 +155,7 @@ function startBridge() {
 function setupAutoUpdater() {
   if (!autoUpdater) return
 
-  autoUpdater.autoDownload = false
+  autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
 
   const sendStatus = (statusObj) => {
@@ -210,15 +210,17 @@ function setupAutoUpdater() {
     })
   })
 
-  // Check silently on startup if packaged
+  // Check dynamically on startup if packaged
   if (app.isPackaged) {
-    try {
-      autoUpdater.checkForUpdates().catch((err) => {
-        log('Auto-update check error:', err.message)
-      })
-    } catch (e) {
-      log('Auto-updater startup exception:', e.message)
-    }
+    setTimeout(() => {
+      try {
+        autoUpdater.checkForUpdates().catch((err) => {
+          log('Auto-update check error:', err.message)
+        })
+      } catch (e) {
+        log('Auto-updater startup exception:', e.message)
+      }
+    }, 4000)
   }
 
   // Periodic check every 15 minutes
@@ -295,8 +297,8 @@ function registerIpc() {
     if (!app.isPackaged || !autoUpdater) {
       return {
         status: 'latest',
-        version: app.getVersion() || '1.0.19',
-        message: `Running latest build (v${app.getVersion() || '1.0.19'})`
+        version: app.getVersion(),
+        message: `Running latest build (v${app.getVersion()})`
       }
     }
     try {
@@ -355,7 +357,6 @@ function createWindow() {
   const iconCandidates = [
     path.join(__dirname, 'bob-logo.ico'),
     path.join(__dirname, 'bob-logo.png'),
-    path.join(__dirname, 'bob-logo.png'),
     path.join(__dirname, 'renderer', 'bob-logo.png'),
     path.join(__dirname, 'dist', 'bob-logo.png'),
     path.join(__dirname, '../../dist', 'bob-logo.png'),
@@ -367,7 +368,7 @@ function createWindow() {
     if (fs.existsSync(icoCandidate)) iconPath = icoCandidate
   }
 
-  // Explicitly grant microphone media permission for speech recognition
+  // Explicitly grant microphone permissions so speech-to-text / dictation streams cleanly
   session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
     if (permission === 'media') return true
     return true
