@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld('bob', {
   remove: (kind, id) => ipcRenderer.invoke('bob:remove', kind, id),
   openWeb: (sub) => ipcRenderer.invoke('bob:openWeb', sub),
   info: () => ipcRenderer.invoke('bob:info'),
+  getMemory: () => ipcRenderer.invoke('bob:getMemory'),
+  saveMemory: (data) => ipcRenderer.invoke('bob:saveMemory', data),
   onChange: (fn) => ipcRenderer.on('bob:changed', () => fn()),
   checkForUpdates: () => ipcRenderer.invoke('bob:checkUpdates'),
   downloadUpdate: () => ipcRenderer.invoke('bob:downloadUpdate'),

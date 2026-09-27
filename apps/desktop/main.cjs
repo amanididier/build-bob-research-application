@@ -253,6 +253,29 @@ function registerIpc() {
     shell.openExternal(WEB_URL + String(sub))
   })
 
+  ipcMain.handle('bob:getMemory', () => {
+    try {
+      const memoryPath = path.join(app.getPath('userData'), 'keza_memory.json')
+      if (fs.existsSync(memoryPath)) {
+        return JSON.parse(fs.readFileSync(memoryPath, 'utf8'))
+      }
+    } catch (e) {
+      log('Read keza_memory.json error:', e.message)
+    }
+    return null
+  })
+
+  ipcMain.handle('bob:saveMemory', (_e, memoryData) => {
+    try {
+      const memoryPath = path.join(app.getPath('userData'), 'keza_memory.json')
+      fs.writeFileSync(memoryPath, JSON.stringify(memoryData, null, 2), 'utf8')
+      return true
+    } catch (e) {
+      log('Write keza_memory.json error:', e.message)
+      return false
+    }
+  })
+
   ipcMain.handle('bob:info', () => {
     const totalRamGb = Math.round(os.totalmem() / (1024 * 1024 * 1024))
     const cpuCores = os.cpus().length
