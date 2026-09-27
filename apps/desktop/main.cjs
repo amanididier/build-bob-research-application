@@ -353,8 +353,8 @@ function registerIpc() {
 
 function createWindow() {
   const iconCandidates = [
-    path.join(__dirname, 'icon.ico'),
-    path.join(__dirname, 'icon.png'),
+    path.join(__dirname, 'bob-logo.ico'),
+    path.join(__dirname, 'bob-logo.png'),
     path.join(__dirname, 'bob-logo.png'),
     path.join(__dirname, 'renderer', 'bob-logo.png'),
     path.join(__dirname, 'dist', 'bob-logo.png'),
@@ -363,7 +363,7 @@ function createWindow() {
   ]
   let iconPath = iconCandidates.find((p) => fs.existsSync(p))
   if (process.platform === 'win32') {
-    const icoCandidate = path.join(__dirname, 'icon.ico')
+    const icoCandidate = path.join(__dirname, 'bob-logo.ico')
     if (fs.existsSync(icoCandidate)) iconPath = icoCandidate
   }
 
