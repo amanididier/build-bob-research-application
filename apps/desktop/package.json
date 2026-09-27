@@ -1,6 +1,6 @@
 {
   "name": "@bob/desktop",
-  "version": "1.0.19",
+  "version": "1.0.20",
   "description": "Bob desktop research companion",
   "author": "Bob",
   "private": true,
@@ -36,6 +36,7 @@
       "preload.cjs",
       "icon.ico",
       "icon.png",
+      "bob-logo.png",
       "renderer/**",
       {
         "from": "../../dist",

@@ -62,6 +62,13 @@ export const DesktopWindowHeader: React.FC = () => {
     }
   };
 
+  const handleStartDownload = async () => {
+    if (typeof window !== 'undefined' && (window as any).bob?.downloadUpdate) {
+      setUpdateInfo((prev) => ({ ...prev, status: 'downloading', percent: 0 }));
+      await (window as any).bob.downloadUpdate();
+    }
+  };
+
   // Only show when there is a REAL update available, downloading, or ready to apply.
   // Never show mock or hardcoded indicators.
   const hasRealUpdate =
@@ -141,12 +148,15 @@ export const DesktopWindowHeader: React.FC = () => {
               </button>
             )}
 
-            {/* 3. Update Available state: Yellow download notification */}
+            {/* 3. Update Available state: Bob yellow pill labeled "Update to vX.X.X". Clicking starts download */}
             {updateInfo.status === 'available' && (
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-300 text-amber-700 dark:text-amber-300 text-[11px] font-medium">
-                <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
-                <span>Update v{updateInfo.version || ''} available</span>
-              </div>
+              <button
+                onClick={handleStartDownload}
+                className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--y)] hover:bg-[#e6ac15] text-[#1a1715] text-[11px] font-bold shadow-xs transition-all active:scale-95 cursor-pointer"
+                title={`Click to download and install Update v${updateInfo.version || ''}`}
+              >
+                <span>Update to v{updateInfo.version || ''}</span>
+              </button>
             )}
           </div>
         )}

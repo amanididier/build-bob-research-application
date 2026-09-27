@@ -155,7 +155,7 @@ function startBridge() {
 function setupAutoUpdater() {
   if (!autoUpdater) return
 
-  autoUpdater.autoDownload = true
+  autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = true
 
   const sendStatus = (statusObj) => {
@@ -173,7 +173,7 @@ function setupAutoUpdater() {
     sendStatus({
       status: 'available',
       version: info.version,
-      message: `New version ${info.version} downloading automatically in background...`
+      message: `Update v${info.version} available`
     })
   })
 
@@ -203,8 +203,9 @@ function setupAutoUpdater() {
   })
 
   autoUpdater.on('error', (err) => {
+    log('Auto-updater error:', err ? (err.message || String(err)) : '')
     sendStatus({
-      status: 'error',
+      status: 'idle',
       message: err ? (err.message || String(err)) : 'Unable to check updates'
     })
   })
@@ -212,13 +213,22 @@ function setupAutoUpdater() {
   // Check silently on startup if packaged
   if (app.isPackaged) {
     try {
-      autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+      autoUpdater.checkForUpdates().catch((err) => {
         log('Auto-update check error:', err.message)
       })
     } catch (e) {
       log('Auto-updater startup exception:', e.message)
     }
   }
+
+  // Periodic check every 15 minutes
+  setInterval(() => {
+    if (app.isPackaged && autoUpdater) {
+      autoUpdater.checkForUpdates().catch((err) => {
+        log('Periodic update check error:', err.message)
+      })
+    }
+  }, 15 * 60 * 1000)
 }
 
 function registerIpc() {
@@ -274,6 +284,19 @@ function registerIpc() {
     }
   })
 
+  ipcMain.handle('bob:downloadUpdate', async () => {
+    if (autoUpdater && app.isPackaged) {
+      try {
+        await autoUpdater.downloadUpdate()
+        return { status: 'downloading' }
+      } catch (err) {
+        log('Download update failed:', err.message)
+        return { status: 'error', message: err.message }
+      }
+    }
+    return { status: 'idle' }
+  })
+
   ipcMain.handle('bob:installUpdate', () => {
     if (autoUpdater) {
       autoUpdater.quitAndInstall()
@@ -306,9 +329,20 @@ function registerIpc() {
 }
 
 function createWindow() {
-  const iconPath = process.platform === 'win32' && fs.existsSync(path.join(__dirname, 'icon.ico'))
-    ? path.join(__dirname, 'icon.ico')
-    : path.join(__dirname, 'icon.png')
+  const iconCandidates = [
+    path.join(__dirname, 'icon.ico'),
+    path.join(__dirname, 'icon.png'),
+    path.join(__dirname, 'bob-logo.png'),
+    path.join(__dirname, 'renderer', 'bob-logo.png'),
+    path.join(__dirname, 'dist', 'bob-logo.png'),
+    path.join(__dirname, '../../dist', 'bob-logo.png'),
+    path.join(__dirname, '../../public', 'bob-logo.png')
+  ]
+  let iconPath = iconCandidates.find((p) => fs.existsSync(p))
+  if (process.platform === 'win32') {
+    const icoCandidate = path.join(__dirname, 'icon.ico')
+    if (fs.existsSync(icoCandidate)) iconPath = icoCandidate
+  }
 
   // Explicitly grant microphone media permission for speech recognition
   session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {

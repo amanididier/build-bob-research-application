@@ -654,6 +654,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         memoryStats,
         refreshMemoryStats,
         projects,
+        createNewResearchSession,
+        deleteResearchSession,
         tasks,
         notes,
         toggleTask,
