@@ -1,9 +1,11 @@
 import { getSession, getMessages, getHighlights } from '../db/queries';
-import { loadMemory, selectRelevantFacts } from '../memory/memoryManager';
+import { loadMemory } from '../memory/memoryManager';
 import { countTokens, ChatMessage } from './tokenCounter';
 import { buildSystemPrompt } from './systemPrompt';
 import { DEEP_THINKING_ADDITION } from './thinkingRouter';
 import { Session } from '../memory/types';
+import { researchGraph } from '../research/researchGraph';
+import { ContextCandidate } from '../research/researchTypes';
 
 export interface ContextResult {
   messages: ChatMessage[];
@@ -16,8 +18,8 @@ export async function buildContext(
   newUserMessage: string,
   options: { deepThink?: boolean; isSubtopic?: boolean } = {}
 ): Promise<ContextResult> {
-  const memory = loadMemory(); // Already in RAM - 0ms
-  let session = await getSession(sessionId); // SQLite - <5ms
+  const memory = loadMemory(); // In RAM
+  let session = await getSession(sessionId);
 
   if (!session) {
     session = {
@@ -29,13 +31,13 @@ export async function buildContext(
     } as Session;
   }
 
-  // 1. SYSTEM PROMPT — Always first, always required
+  // 1. System Prompt (Soul of KEZA)
   let systemPrompt = buildSystemPrompt(memory, session);
   if (options.deepThink) {
     systemPrompt += `\n\n${DEEP_THINKING_ADDITION}`;
   }
 
-  // 2. LOAD RECENT MESSAGES — Hot path, must be fast
+  // 2. Hot messages (last 10-12 verbatim)
   const recentMessages = await getMessages(sessionId, {
     limit: 12,
     onlyNotSummarized: false,
@@ -43,59 +45,119 @@ export async function buildContext(
   });
   recentMessages.reverse();
 
-  // 3. SESSION SUMMARY — If session has many messages
-  let sessionSummary = '';
-  if (session.message_count > 15 && session.summary) {
-    sessionSummary = session.summary;
+  // 3. Dynamic Relevance-Driven Candidate Retrieval Engine
+  const candidates: ContextCandidate[] = [];
+  const queryTerms = newUserMessage.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
+
+  // A. Score Memory Facts
+  for (const fact of memory.important_facts) {
+    const fLower = fact.toLowerCase();
+    let matchScore = 0;
+    for (const t of queryTerms) {
+      if (fLower.includes(t)) matchScore += 2;
+    }
+    candidates.push({
+      content: `- ${fact}`,
+      sourceType: 'memory',
+      sourceId: 'mem_fact',
+      relevanceScore: matchScore + 1, // small baseline
+      importance: 0.8,
+      recency: 1,
+      scope: 'global',
+      estimatedTokens: countTokens(fact),
+    });
   }
 
-  // 4. PARENT CONTEXT — If this is a sub-topic
-  let parentContext = '';
-  if (options.isSubtopic && session.parent_id) {
-    const parent = await getSession(session.parent_id);
-    if (parent?.summary) {
-      parentContext =
-        `Parent research context: ${parent.title}\n` +
-        `Goal: ${parent.goal || 'General study'}\n` +
-        `Summary: ${parent.summary}`;
+  // B. Retrieve Parent Structured Findings (if subtopic)
+  if (session.parent_id) {
+    const parentFindings = researchGraph.getFindingsForResearch(session.parent_id);
+    for (const f of parentFindings) {
+      let matchScore = 0;
+      const combined = `${f.claim} ${f.summary}`.toLowerCase();
+      for (const t of queryTerms) {
+        if (combined.includes(t)) matchScore += 2;
+      }
+      candidates.push({
+        content: `Parent Finding: ${f.claim} — ${f.summary}`,
+        sourceType: 'parent_finding',
+        sourceId: f.id,
+        relevanceScore: matchScore + 2,
+        importance: f.importance,
+        recency: 1,
+        scope: 'research',
+        estimatedTokens: countTokens(f.summary),
+      });
     }
   }
 
-  // 5. RELEVANT HIGHLIGHTS — Top 3 most relevant to current message
-  let highlightContext = '';
-  if (session.session_type === 'research') {
-    const highlights = await getHighlights(sessionId, { limit: 3 });
-    if (highlights.length > 0) {
-      highlightContext =
-        'Saved research notes:\n' +
-        highlights.map((h) => `[${(h.color || 'yellow').toUpperCase()}] ${h.content}`).join('\n');
+  // C. Cross-Research Findings (Knowledge Graph search)
+  const crossFindings = researchGraph.searchCrossResearch(newUserMessage, sessionId, 3);
+  for (const cf of crossFindings) {
+    candidates.push({
+      content: `Cross-Research Reference: ${cf.claim} (${cf.summary.slice(0, 150)})`,
+      sourceType: 'parent_finding',
+      sourceId: cf.id,
+      relevanceScore: 2,
+      importance: cf.importance,
+      recency: 0.5,
+      scope: 'project',
+      estimatedTokens: countTokens(cf.summary),
+    });
+  }
+
+  // D. Saved Highlights
+  const highlights = await getHighlights(sessionId, { limit: 5 });
+  for (const h of highlights) {
+    let matchScore = 0;
+    const hLower = h.content.toLowerCase();
+    for (const t of queryTerms) {
+      if (hLower.includes(t)) matchScore += 2;
+    }
+    candidates.push({
+      content: `[Note]: ${h.content}`,
+      sourceType: 'highlight',
+      sourceId: h.id,
+      relevanceScore: matchScore + 1.5,
+      importance: h.importance_score ?? 0.6,
+      recency: 1,
+      scope: 'subtopic',
+      estimatedTokens: countTokens(h.content),
+    });
+  }
+
+  // 4. Rank Candidates by Composite Relevance & Dynamic Budget Allocation
+  // Composite Score = relevanceScore * 2 + importance * 1.5
+  candidates.sort((a, b) => {
+    const scoreA = a.relevanceScore * 2 + a.importance * 1.5;
+    const scoreB = b.relevanceScore * 2 + b.importance * 1.5;
+    return scoreB - scoreA;
+  });
+
+  const MAX_DYNAMIC_BUDGET_TOKENS = 1600;
+  let allocatedTokens = 0;
+  const selectedContextChunks: string[] = [];
+
+  for (const c of candidates) {
+    if (allocatedTokens + c.estimatedTokens <= MAX_DYNAMIC_BUDGET_TOKENS) {
+      selectedContextChunks.push(c.content);
+      allocatedTokens += c.estimatedTokens;
     }
   }
 
-  // 6. RELEVANT MEMORY FACTS — Top 5 most relevant to current message
-  const relevantFacts = selectRelevantFacts(
-    memory.important_facts,
-    newUserMessage,
-    { limit: 5 }
-  );
+  // 5. Build Assembled Context
+  const systemSections = [
+    systemPrompt,
+    session.goal ? `\nActive research goal: ${session.goal}` : '',
+    session.summary ? `\nPrior conversation summary: ${session.summary}` : '',
+    selectedContextChunks.length > 0
+      ? `\nRelevant research knowledge & context:\n${selectedContextChunks.join('\n')}`
+      : '',
+  ].filter(Boolean);
 
-  // 7. ASSEMBLE FINAL CONTEXT
   const contextMessages: ChatMessage[] = [
     {
       role: 'system',
-      content: [
-        systemPrompt,
-        relevantFacts.length > 0
-          ? `\nKnown facts about ${memory.identity.name}:\n` +
-            relevantFacts.map((f) => `- ${f}`).join('\n')
-          : '',
-        parentContext ? `\n${parentContext}` : '',
-        sessionSummary ? `\nEarlier in this conversation: ${sessionSummary}` : '',
-        highlightContext ? `\n${highlightContext}` : '',
-        session.goal ? `\nCurrent research goal: ${session.goal}` : '',
-      ]
-        .filter(Boolean)
-        .join('\n'),
+      content: systemSections.join('\n'),
     },
     ...recentMessages.map((m) => ({
       role: m.role as 'user' | 'assistant',

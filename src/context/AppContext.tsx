@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { bobAi, ModelDownloadStatus, AiSynthesisResponse } from '../lib/aiEngine';
 import { localMemoryBank, MemoryBankStats } from '../lib/researchMemory';
 import { voiceController } from '../lib/voice/voiceController';
+import { researchOrchestrator } from '../lib/research/researchOrchestrator';
 
 export type AppPage =
   | 'home'
@@ -410,6 +411,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         return updated;
       });
+
+      // Background Research Intelligence: Index structured findings & user memory
+      setTimeout(() => {
+        try {
+          researchOrchestrator.processResponseFindings(activeResearchId, response.answer);
+          researchOrchestrator.extractAndPersistUserMemory(promptText);
+        } catch (e) {
+          console.warn('Research indexing error:', e);
+        }
+      }, 0);
 
       // Pop up real Google/Auth sign-in card on first response if user not logged in
       if (isFirstConversation && typeof window !== 'undefined' && !localStorage.getItem('bob_auth_user')) {
