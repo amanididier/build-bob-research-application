@@ -1,39 +1,51 @@
 import { create } from 'zustand';
+import { VoiceState } from '../lib/voice/types';
+import { voiceController } from '../lib/voice/voiceController';
 
 interface VoiceStoreState {
-  isVoiceActive: boolean;
-  isSpeaking: boolean;
-  voiceSpeed: number;
-  lastSpokenText: string | null;
-  setVoiceActive: (active: boolean) => void;
-  setSpeaking: (speaking: boolean) => void;
-  setVoiceSpeed: (speed: number) => void;
-  speakText: (text: string) => void;
+  voiceState: VoiceState;
+  currentTranscript: string;
+  errorMessage: string | null;
+  startVoiceMode: () => Promise<boolean>;
+  stopVoiceMode: () => void;
+  interrupt: () => void;
+  feedAIChunk: (chunk: string) => void;
+  finalizeAIResponse: (fullText?: string) => void;
 }
 
-export const useVoiceStore = create<VoiceStoreState>((set, get) => ({
-  isVoiceActive: false,
-  isSpeaking: false,
-  voiceSpeed: 1.0,
-  lastSpokenText: null,
+export const useVoiceStore = create<VoiceStoreState>((set) => {
+  // Subscribe to controller state changes
+  voiceController.subscribe((state, data) => {
+    set({
+      voiceState: state,
+      currentTranscript: data?.transcript || '',
+      errorMessage: data?.error || null,
+    });
+  });
 
-  setVoiceActive: (active) => set({ isVoiceActive: active }),
-  setSpeaking: (speaking) => set({ isSpeaking: speaking }),
-  setVoiceSpeed: (speed) => set({ voiceSpeed: speed }),
+  return {
+    voiceState: 'IDLE',
+    currentTranscript: '',
+    errorMessage: null,
 
-  speakText: (text) => {
-    if (!text || typeof window === 'undefined') return;
-    const synth = window.speechSynthesis;
-    if (!synth) return;
+    startVoiceMode: async () => {
+      return voiceController.startVoiceMode();
+    },
 
-    synth.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = get().voiceSpeed;
+    stopVoiceMode: () => {
+      voiceController.stopVoiceMode();
+    },
 
-    utterance.onstart = () => set({ isSpeaking: true, lastSpokenText: text });
-    utterance.onend = () => set({ isSpeaking: false });
-    utterance.onerror = () => set({ isSpeaking: false });
+    interrupt: () => {
+      voiceController.interrupt();
+    },
 
-    synth.speak(utterance);
-  },
-}));
+    feedAIChunk: (chunk: string) => {
+      voiceController.feedAIStreamChunk(chunk);
+    },
+
+    finalizeAIResponse: (fullText?: string) => {
+      voiceController.finalizeAIResponse(fullText);
+    },
+  };
+});

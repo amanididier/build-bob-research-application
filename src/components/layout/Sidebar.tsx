@@ -46,7 +46,7 @@ export const Sidebar: React.FC = () => {
         className="h-10 w-full bg-[var(--s2)]/80 hover:bg-[var(--s2)] border border-[var(--line)]/50 rounded-xl flex items-center px-3 gap-2.5 cursor-pointer text-[var(--m)] hover:text-[var(--t)] transition-colors duration-150 mb-5 text-left"
         title="Search research and notes (⌘ K)"
       >
-        <Search className="w-[18px] h-[18px] text-[var(--m)] shrink-0" strokeWidth={1.8} />
+        <Search className="w-[18px] h-[18px] text-[var(--m)] shrink-0" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
         <span className="text-[13px] flex-1">Search</span>
         <kbd className="text-[10px] bg-[var(--s)] border border-[var(--line)] px-1.5 py-0.5 rounded font-mono text-[var(--m)]">
           ⌘ K
@@ -66,7 +66,7 @@ export const Sidebar: React.FC = () => {
               : 'text-[var(--t)] hover:bg-[var(--s2)]/70 font-medium'
           }`}
         >
-          <Sparkles className="w-[18px] h-[18px] text-[var(--y)] shrink-0" strokeWidth={1.8} />
+          <Sparkles className="w-[18px] h-[18px] text-[var(--y)] shrink-0" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
           <span>New research</span>
         </button>
 
@@ -79,7 +79,7 @@ export const Sidebar: React.FC = () => {
               : 'text-[var(--t)] hover:bg-[var(--s2)]/70 font-medium'
           }`}
         >
-          <LayoutDashboard className="w-[18px] h-[18px] text-[var(--m)] shrink-0" strokeWidth={1.8} />
+          <LayoutDashboard className="w-[18px] h-[18px] text-[var(--m)] shrink-0" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
           <span>Dashboard</span>
         </button>
 
@@ -92,7 +92,7 @@ export const Sidebar: React.FC = () => {
               : 'text-[var(--t)] hover:bg-[var(--s2)]/70 font-medium'
           }`}
         >
-          <NotebookPen className="w-[18px] h-[18px] text-[var(--m)] shrink-0" strokeWidth={1.8} />
+          <NotebookPen className="w-[18px] h-[18px] text-[var(--m)] shrink-0" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
           <span>Notes</span>
         </button>
 
@@ -105,7 +105,7 @@ export const Sidebar: React.FC = () => {
               : 'text-[var(--t)] hover:bg-[var(--s2)]/70 font-medium'
           }`}
         >
-          <CircleCheck className="w-[18px] h-[18px] text-[var(--m)] shrink-0" strokeWidth={1.8} />
+          <CircleCheck className="w-[18px] h-[18px] text-[var(--m)] shrink-0" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
           <span>Due soon</span>
         </button>
       </nav>
@@ -145,12 +145,12 @@ export const Sidebar: React.FC = () => {
         >
           {isDark ? (
             <>
-              <Sun className="w-[18px] h-[18px] text-[var(--y)] shrink-0" strokeWidth={1.8} />
+              <Sun className="w-[18px] h-[18px] text-[var(--y)] shrink-0" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
               <span>Light mode</span>
             </>
           ) : (
             <>
-              <Moon className="w-[18px] h-[18px] text-[var(--m)] shrink-0" strokeWidth={1.8} />
+              <Moon className="w-[18px] h-[18px] text-[var(--m)] shrink-0" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
               <span>Dark appearance</span>
             </>
           )}
@@ -182,7 +182,7 @@ export const Sidebar: React.FC = () => {
             title="Settings"
             aria-label="Settings"
           >
-            <Settings className="w-[18px] h-[18px]" strokeWidth={1.8} />
+            <Settings className="w-[18px] h-[18px]" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
           </button>
         </div>
       </div>

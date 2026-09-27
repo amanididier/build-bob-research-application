@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { bobAi, ModelDownloadStatus, AiSynthesisResponse } from '../lib/aiEngine';
 import { localMemoryBank, MemoryBankStats } from '../lib/researchMemory';
+import { voiceController } from '../lib/voice/voiceController';
 
 export type AppPage =
   | 'home'
@@ -285,6 +286,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return updated;
     });
 
+    setSessionMessages((prev) => ({
+      ...prev,
+      [newId]: [],
+    }));
+
     setActiveResearchId(newId);
     setCurrentPage('research');
     setResearchSubView('chat');
@@ -316,10 +322,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Automatic session title and priority color generation (like ChatGPT / Gemini)
     if (isNewSession) {
       const cleanWords = promptText
-        .replace(/[^a-zA-Z0-9\s]/g, '')
+        .replace(/^(hey bob|bob|can you|please|i want to|tell me about|how to|what is|find me|summarize|explain)\s+/i, '')
+        .replace(/[^\w\s-]/g, '')
         .trim()
         .split(/\s+/)
-        .slice(0, 5)
+        .slice(0, 4)
         .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
         .join(' ');
       const newTitle = cleanWords || 'Research exploration';
@@ -377,6 +384,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         promptText,
         activeResearchId
       );
+
+      // Feed into voice system for progressive speech playback
+      voiceController.feedAIStreamChunk(response.answer);
+      voiceController.finalizeAIResponse(response.answer);
 
       const assistantMsg: ChatMessage = {
         id: `a-${Date.now()}`,
