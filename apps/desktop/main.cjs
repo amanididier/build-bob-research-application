@@ -1,4 +1,4 @@
-// Bob Research Companion - Desktop Main Process (v1.0.26)
+// Bob Research Companion - Desktop Main Process (v1.0.28)
 // Bundles modern React/Vite app with native auto-updates and real Bob mascot icon.
 const { app, BrowserWindow, shell, ipcMain, session } = require('electron')
 const http = require('node:http')
