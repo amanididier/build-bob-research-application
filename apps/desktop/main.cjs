@@ -155,7 +155,7 @@ function startBridge() {
 function setupAutoUpdater() {
   if (!autoUpdater) return
 
-  autoUpdater.autoDownload = true
+  autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = true
 
   const sendStatus = (statusObj) => {
@@ -173,6 +173,7 @@ function setupAutoUpdater() {
     sendStatus({
       status: 'available',
       version: info.version,
+      percent: 0,
       message: `Update v${info.version} available`
     })
   })
@@ -205,7 +206,7 @@ function setupAutoUpdater() {
   autoUpdater.on('error', (err) => {
     log('Auto-updater error:', err ? (err.message || String(err)) : '')
     sendStatus({
-      status: 'idle',
+      status: 'error',
       message: err ? (err.message || String(err)) : 'Unable to check updates'
     })
   })
@@ -230,7 +231,7 @@ function setupAutoUpdater() {
         log('Periodic update check error:', err.message)
       })
     }
-  }, 15 * 60 * 1000)
+  }, 5 * 60 * 1000)
 }
 
 function registerIpc() {
@@ -324,7 +325,7 @@ function registerIpc() {
 
   ipcMain.handle('bob:installUpdate', () => {
     if (autoUpdater) {
-      autoUpdater.quitAndInstall()
+      autoUpdater.quitAndInstall(false, true)
     }
   })
 
@@ -401,6 +402,12 @@ function createWindow() {
 
   win.webContents.on('did-fail-load', (_e, code, desc, url) => {
     log('Load failed:', code, desc, url)
+  })
+
+  win.webContents.on('did-finish-load', () => {
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('bob:updateStatus', updateState)
+    }
   })
 
   win.webContents.setWindowOpenHandler(({ url }) => {
