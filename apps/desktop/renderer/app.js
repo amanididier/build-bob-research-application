@@ -354,6 +354,80 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+
+// Desktop auto-update pill: native updater events arrive through preload.cjs.
+function setupUpdatePill() {
+  const pill = document.getElementById('updatePill');
+  const text = document.getElementById('updatePillText');
+  const progress = document.getElementById('updatePillProgress');
+  const progressBar = document.getElementById('updatePillProgressBar');
+  const action = document.getElementById('updatePillAction');
+  const dismiss = document.getElementById('updatePillDismiss');
+  const desktopBob = typeof bob !== 'undefined' ? bob : null;
+  if (!pill || !text || !progress || !progressBar || !action || !dismiss || !desktopBob) return;
+
+  let current = { status: 'idle' };
+  let dismissed = false;
+
+  const renderUpdate = (next) => {
+    current = { ...current, ...(next || {}) };
+    const status = current.status || 'idle';
+    const visible = ['checking', 'available', 'downloading', 'ready', 'error'].includes(status) && !dismissed;
+    pill.hidden = !visible;
+    if (!visible) return;
+
+    pill.dataset.status = status;
+    const version = current.version ? `v${current.version}` : 'new version';
+    const percent = Math.max(0, Math.min(100, Number(current.percent) || 0));
+    progress.hidden = status !== 'downloading';
+    progressBar.style.width = `${percent}%`;
+    action.hidden = !['available', 'ready', 'error'].includes(status);
+    action.disabled = false;
+
+    if (status === 'checking') {
+      text.textContent = 'Checking for updates…';
+    } else if (status === 'available') {
+      text.textContent = `Update ${version} available`;
+      action.textContent = 'Download';
+    } else if (status === 'downloading') {
+      text.textContent = `Downloading ${version} · ${percent}%`;
+    } else if (status === 'ready') {
+      text.textContent = `${version} ready to install`;
+      action.textContent = 'Restart to update';
+    } else if (status === 'error') {
+      text.textContent = current.message || 'Update check failed';
+      action.textContent = 'Retry';
+    }
+  };
+
+  if (typeof desktopBob.onUpdateStatus === 'function') desktopBob.onUpdateStatus(renderUpdate);
+
+  action.addEventListener('click', async () => {
+    action.disabled = true;
+    try {
+      if (current.status === 'available' && typeof desktopBob.downloadUpdate === 'function') {
+        await desktopBob.downloadUpdate();
+      } else if (current.status === 'ready' && typeof desktopBob.installUpdate === 'function') {
+        await desktopBob.installUpdate();
+      } else if (current.status === 'error' && typeof desktopBob.checkForUpdates === 'function') {
+        dismissed = false;
+        await desktopBob.checkForUpdates();
+      }
+    } catch (error) {
+      renderUpdate({ status: 'error', message: error?.message || 'Unable to update' });
+    } finally {
+      if (current.status !== 'ready') action.disabled = false;
+    }
+  });
+
+  dismiss.addEventListener('click', () => {
+    dismissed = true;
+    pill.hidden = true;
+  });
+}
+
+setupUpdatePill();
+
 // App init
 detectHardware();
 if (typeof bob !== 'undefined' && bob.info) {
