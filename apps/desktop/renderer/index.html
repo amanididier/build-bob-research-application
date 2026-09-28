@@ -47,6 +47,13 @@
         </svg>
       </button>
       <span class="topTitle" id="title">Research workspace</span>
+      <div class="updatePill" id="updatePill" hidden role="status" aria-live="polite">
+        <span class="updatePillDot" aria-hidden="true"></span>
+        <span class="updatePillText" id="updatePillText">Checking for updates…</span>
+        <span class="updatePillProgress" id="updatePillProgress" hidden aria-hidden="true"><i id="updatePillProgressBar"></i></span>
+        <button class="updatePillAction" id="updatePillAction" type="button" hidden>Download</button>
+        <button class="updatePillDismiss" id="updatePillDismiss" type="button" aria-label="Dismiss update notification">×</button>
+      </div>
       <div class="actions">
         <button class="round notify" id="notify" title="Notifications">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
