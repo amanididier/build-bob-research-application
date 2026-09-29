@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('bob', {
   saveMemory: (data) => ipcRenderer.invoke('bob:saveMemory', data),
   onChange: (fn) => ipcRenderer.on('bob:changed', () => fn()),
   checkForUpdates: () => ipcRenderer.invoke('bob:checkUpdates'),
+  getUpdateState: () => ipcRenderer.invoke('bob:getUpdateState'),
   downloadUpdate: () => ipcRenderer.invoke('bob:downloadUpdate'),
   installUpdate: () => ipcRenderer.invoke('bob:installUpdate'),
   onUpdateStatus: (fn) => {

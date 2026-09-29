@@ -26,15 +26,19 @@ export const DesktopWindowHeader: React.FC = () => {
       });
     }
 
-    // Real autoUpdater event listener via IPC
-    if (typeof window !== 'undefined' && (window as any).bob?.onUpdateStatus) {
-      const unsub = (window as any).bob.onUpdateStatus((status: UpdateState) => {
-        if (status && status.status) {
-          setUpdateInfo(status);
-        }
-      });
-      return unsub;
-    }
+    if (typeof window === 'undefined' || !(window as any).bob?.onUpdateStatus) return;
+
+    // Pull the current state first: an update event can fire before React mounts.
+    (window as any).bob.getUpdateState?.().then((status: UpdateState) => {
+      if (status && status.status) setUpdateInfo(status);
+    });
+
+    const unsub = (window as any).bob.onUpdateStatus((status: UpdateState) => {
+      if (status && status.status) {
+        setUpdateInfo(status);
+      }
+    });
+    return unsub;
   }, []);
 
   const handleMinimize = () => {
@@ -132,7 +136,7 @@ export const DesktopWindowHeader: React.FC = () => {
                     />
                   </svg>
                 </div>
-                <span>Update v{updateInfo.version || ''} ({updateInfo.percent || 0}%)</span>
+                <span>Updating… {updateInfo.percent || 0}%</span>
               </div>
             )}
 
@@ -143,8 +147,8 @@ export const DesktopWindowHeader: React.FC = () => {
                 className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#1a73e8] hover:bg-[#1557b0] text-white text-[11px] font-bold shadow-sm transition-all active:scale-95 cursor-pointer"
                 title="Update downloaded! Click to restart Bob and apply update."
               >
-                <RotateCw className="w-3 h-3 animate-spin" />
-                <span>Restart to update (v{updateInfo.version || ''})</span>
+                <RotateCw className="w-3 h-3" />
+                <span>Restart to finish update</span>
               </button>
             )}
 

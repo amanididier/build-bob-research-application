@@ -1,6 +1,6 @@
 {
   "name": "@bob/desktop",
-  "version": "1.0.28",
+  "version": "1.0.30",
   "description": "Bob desktop research companion",
   "author": "Bob",
   "private": true,
@@ -53,7 +53,13 @@
     "win": {
       "target": "nsis",
       "icon": "bob-logo.ico",
-      "artifactName": "Bob-Research-Companion-Setup.exe"
+      "artifactName": "Bob-Research-Companion-Setup-${version}.exe"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "deleteAppDataOnUninstall": true
     },
     "mac": {
       "category": "public.app-category.productivity",

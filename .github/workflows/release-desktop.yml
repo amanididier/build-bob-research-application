@@ -19,6 +19,22 @@ jobs:
         with:
           node-version: 20
 
+      # electron-updater matches app.getVersion() against the version in latest.yml.
+      # If the git tag and apps/desktop/package.json disagree, installed apps either
+      # never see the update or loop on a version they cannot reach.
+      - name: Verify tag matches desktop package version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          PKG_VERSION=$(node -p "require('./apps/desktop/package.json').version")
+          echo "tag='$TAG' package.json version='$PKG_VERSION'"
+          if [ "$TAG" != "v$PKG_VERSION" ]; then
+            echo "::error::Tag '$TAG' does not match apps/desktop/package.json version 'v$PKG_VERSION'."
+            echo "Bump the version in apps/desktop/package.json to ${TAG#v} and re-tag."
+            exit 1
+          fi
+
       - name: Install root dependencies
         run: npm install --legacy-peer-deps
 
@@ -41,10 +57,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --win nsis --publish always
 
+      # Safety net so the release always carries the full asset set.
+      # The .blockmap is required for differential downloads; without it
+      # electron-updater falls back to a full 118 MB download.
       - name: Attach installer and update metadata to release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
             apps/desktop/dist/*.exe
+            apps/desktop/dist/*.blockmap
             apps/desktop/dist/latest.yml

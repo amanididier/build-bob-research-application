@@ -1,4 +1,4 @@
-// Bob Research Companion - Desktop Main Process (v1.0.28)
+// Bob Research Companion - Desktop Main Process
 // Bundles modern React/Vite app with native auto-updates and real Bob mascot icon.
 const { app, BrowserWindow, shell, ipcMain, session } = require('electron')
 const http = require('node:http')
@@ -15,6 +15,8 @@ try {
 }
 
 const PORT = 54321
+const UPDATE_CHECK_DELAY_MS = 4000
+const UPDATE_CHECK_INTERVAL_MS = 15 * 60 * 1000
 const TOKEN = process.env.BOB_BRIDGE_TOKEN || 'development-token'
 const WEB_URL = process.env.BOB_WEB_URL || 'https://build-bob-research-application.vercel.app'
 
@@ -43,7 +45,7 @@ let store = {
 function log(...args) {
   try {
     const logPath = path.join(app.getPath('userData'), 'bob.log')
-    fs.appendFileSync(logPath, `[\({new Date().toISOString()}]\){args.join(' ')}\n`)
+    fs.appendFileSync(logPath, `[${new Date().toISOString()}] ${args.join(' ')}\n`)
   } catch {}
   console.log(...args)
 }
@@ -221,17 +223,17 @@ function setupAutoUpdater() {
       } catch (e) {
         log('Auto-updater startup exception:', e.message)
       }
-    }, 4000)
+    }, UPDATE_CHECK_DELAY_MS)
   }
 
-  // Periodic check every 15 minutes
+  // Periodic re-check so a release published while the app is open is picked up
   setInterval(() => {
     if (app.isPackaged && autoUpdater) {
       autoUpdater.checkForUpdates().catch((err) => {
         log('Periodic update check error:', err.message)
       })
     }
-  }, 5 * 60 * 1000)
+  }, UPDATE_CHECK_INTERVAL_MS)
 }
 
 function registerIpc() {
@@ -293,6 +295,8 @@ function registerIpc() {
       }
     }
   })
+
+  ipcMain.handle('bob:getUpdateState', () => updateState)
 
   ipcMain.handle('bob:checkUpdates', async () => {
     if (!app.isPackaged || !autoUpdater) {

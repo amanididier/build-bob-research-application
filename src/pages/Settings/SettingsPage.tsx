@@ -50,7 +50,6 @@ export const SettingsPage: React.FC = () => {
     message?: string;
   }>({
     status: 'idle',
-    version: '1.0.18',
     message: 'Up to date'
   });
 
@@ -59,12 +58,22 @@ export const SettingsPage: React.FC = () => {
 
   // Listen to desktop auto-updater status if running in Electron
   useEffect(() => {
-    if (typeof window !== 'undefined' && (window as any).bob?.onUpdateStatus) {
-      const unsub = (window as any).bob.onUpdateStatus((status: any) => {
-        setUpdaterState(status);
-      });
-      return unsub;
-    }
+    if (typeof window === 'undefined' || !(window as any).bob?.onUpdateStatus) return;
+
+    // Seed with the real installed version instead of a hardcoded one.
+    (window as any).bob.info?.().then((info: any) => {
+      if (info?.version) {
+        setUpdaterState((prev) => ({ ...prev, version: info.version }));
+      }
+    });
+    (window as any).bob.getUpdateState?.().then((status: any) => {
+      if (status?.status) setUpdaterState(status);
+    });
+
+    const unsub = (window as any).bob.onUpdateStatus((status: any) => {
+      setUpdaterState(status);
+    });
+    return unsub;
   }, []);
 
   const handleSaveGeminiKey = (key: string) => {
@@ -120,17 +129,16 @@ export const SettingsPage: React.FC = () => {
     if (typeof window !== 'undefined' && (window as any).bob?.checkForUpdates) {
       try {
         const res = await (window as any).bob.checkForUpdates();
-        setUpdaterState(res || { status: 'latest', message: 'You are on the latest version (v1.0.18)' });
+        setUpdaterState((prev) => res || { ...prev, status: 'latest', message: 'You are on the latest version.' });
       } catch (err: any) {
         setUpdaterState({ status: 'error', message: err?.message || 'Update check failed.' });
       }
     } else {
-      // Web fallback
+      // Web fallback: no desktop updater available outside Electron
       setTimeout(() => {
         setUpdaterState({
           status: 'latest',
-          version: '1.0.18',
-          message: 'Running latest production build (v1.0.18)'
+          message: 'Updates are handled by the desktop app.'
         });
       }, 700);
     }
@@ -386,7 +394,7 @@ export const SettingsPage: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <div>
                     <span className="text-[11px] font-bold uppercase text-[var(--m)] block">Current Version</span>
-                    <b className="text-[20px] font-extrabold text-[var(--t)]">v1.0.18</b>
+                    <b className="text-[20px] font-extrabold text-[var(--t)]">v{updaterState.version || '—'}</b>
                     <span className="text-[12px] text-[var(--m)] block mt-0.5">Desktop Production Channel</span>
                   </div>
 
