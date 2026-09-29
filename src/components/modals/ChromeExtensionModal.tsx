@@ -1,39 +1,77 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
   X, 
   ExternalLink, 
   Download, 
   CheckCircle2, 
-  Sparkles, 
   Zap, 
-  Layers, 
   RefreshCw, 
   Check, 
-  Copy, 
-  FolderCheck,
-  Globe
+  Copy 
 } from 'lucide-react';
 import { BobAvatar } from '../BobAvatar';
 import { downloadExtensionZip } from '../../lib/downloadHelper';
 
 export const ChromeExtensionModal: React.FC = () => {
-  const { isChromeModalOpen, setIsChromeModalOpen, activeResearchId, projects, triggerThinking } = useApp();
+  const { isChromeModalOpen, setIsChromeModalOpen, activeResearchId, projects } = useApp();
   const [testingPing, setTestingPing] = useState(false);
   const [pingSuccess, setPingSuccess] = useState(false);
   const [copiedPath, setCopiedPath] = useState(false);
+  const [bridgeMessage, setBridgeMessage] = useState<string>('');
+  const [panelMessage, setPanelMessage] = useState<{ tone: 'idle' | 'ok' | 'err'; text: string }>({ tone: 'idle', text: '' });
+  const [downloadState, setDownloadState] = useState<{ state: 'idle' | 'saving' | 'saved' | 'error'; message: string }>({
+    state: 'idle',
+    message: ''
+  });
+
+  const bob = typeof window !== 'undefined' ? ((window as any).bob || null) : null;
+
+  const testBridge = useCallback(async (): Promise<boolean> => {
+    setTestingPing(true);
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 2000);
+      const res = await fetch('http://127.0.0.1:54321/health', {
+        headers: { 'x-bob-token': 'development-token' },
+        signal: controller.signal
+      });
+      clearTimeout(timer);
+      if (res.status === 401) {
+        setPingSuccess(false);
+        setBridgeMessage('Bob Desktop answered but rejected the bridge token (401). Set BOB_BRIDGE_TOKEN to the same value on both sides.');
+        return false;
+      }
+      if (!res.ok) {
+        setPingSuccess(false);
+        setBridgeMessage(`Unexpected bridge response (HTTP ${res.status}).`);
+        return false;
+      }
+      const data = await res.json().catch(() => ({}));
+      setPingSuccess(true);
+      setBridgeMessage(`Bridge live on 127.0.0.1:54321 · Bob Desktop v${data?.version || 'unknown'}.`);
+      return true;
+    } catch {
+      setPingSuccess(false);
+      setBridgeMessage('No answer on 127.0.0.1:54321. The bridge only runs while the Bob Desktop app is open.');
+      return false;
+    } finally {
+      setTestingPing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isChromeModalOpen) return;
+    setPanelMessage({ tone: 'idle', text: '' });
+    testBridge();
+  }, [isChromeModalOpen, testBridge]);
 
   if (!isChromeModalOpen) return null;
 
   const currentProject = projects.find(p => p.id === activeResearchId) || projects[0];
 
   const handleTestBridge = () => {
-    setTestingPing(true);
-    setTimeout(() => {
-      setTestingPing(false);
-      setPingSuccess(true);
-      setTimeout(() => setPingSuccess(false), 3000);
-    }, 600);
+    testBridge();
   };
 
   const handleCopyFolderInstruction = () => {
@@ -42,15 +80,50 @@ export const ChromeExtensionModal: React.FC = () => {
     setTimeout(() => setCopiedPath(false), 2000);
   };
 
-  const handleOpenInChrome = () => {
-    triggerThinking(
-      'Opening Bob in Chrome',
-      'Activating Chrome Side Panel with active session context...',
-      'Syncing project tabs & highlights',
-      () => {
-        setIsChromeModalOpen(false);
-      }
-    );
+  // Chrome refuses to let anything but a real user click open the side panel,
+  // so the desktop queues the request on the bridge and the extension raises a
+  // notification whose click is that gesture.
+  const handleOpenInChrome = async () => {
+    if (!bob?.requestExtensionPanel) {
+      setPanelMessage({
+        tone: 'err',
+        text: 'This build cannot talk to the extension bridge. Install the extension with the steps below, then click the Bob icon in the Chrome toolbar.'
+      });
+      return;
+    }
+    const result = await bob.requestExtensionPanel();
+    if (result?.bridgeListening) {
+      setPanelMessage({
+        tone: 'ok',
+        text: 'Request queued. In Chrome, click the “Bob Desktop is waiting” notification — or the Bob toolbar icon — to open the side panel. Chrome only allows the panel to open from your own click.'
+      });
+    } else {
+      setPanelMessage({
+        tone: 'err',
+        text: 'The local bridge is not listening, so the request cannot reach Chrome. Restart Bob Desktop, make sure the extension is loaded, then try again.'
+      });
+    }
+  };
+
+  const handleDownloadZip = async () => {
+    if (downloadState.state === 'saving') return;
+    setDownloadState({ state: 'saving', message: 'Preparing bob-chrome-extension.zip…' });
+    const result = await downloadExtensionZip();
+    if (result.ok) {
+      setDownloadState({
+        state: 'saved',
+        message: result.path ? `Saved to ${result.path}` : 'Extension archive downloaded.'
+      });
+    } else if (result.reason === 'canceled') {
+      setDownloadState({ state: 'idle', message: 'Download canceled — nothing was saved.' });
+    } else if (result.reason === 'missing-archive') {
+      setDownloadState({
+        state: 'error',
+        message: 'The archive is missing from this build. Reinstall Bob or copy the chrome-extension folder from the repository.'
+      });
+    } else {
+      setDownloadState({ state: 'error', message: `Download failed (${result.reason}). Nothing was written to disk.` });
+    }
   };
 
   return (
@@ -109,8 +182,12 @@ export const ChromeExtensionModal: React.FC = () => {
           </button>
         </div>
 
+        {bridgeMessage && (
+          <p className={`text-[11px] leading-relaxed ${pingSuccess ? 'text-[var(--g)]' : 'text-[var(--m)]'}`}>{bridgeMessage}</p>
+        )}
+
         {/* Primary Action Button */}
-        <div>
+        <div className="space-y-2">
           <button
             onClick={handleOpenInChrome}
             className="w-full h-11 rounded-xl bg-[#171717] dark:bg-[#f5f4f0] text-white dark:text-[#171717] font-bold text-[13px] flex items-center justify-center gap-2 hover:opacity-95 shadow-md active:scale-[0.99] transition-all"
@@ -121,6 +198,11 @@ export const ChromeExtensionModal: React.FC = () => {
             <span>Open Bob in Chrome</span>
             <ExternalLink className="w-3.5 h-3.5 ml-1 opacity-70" />
           </button>
+          {panelMessage.text && (
+            <p className={`text-[11.5px] leading-relaxed ${panelMessage.tone === 'err' ? 'text-[#c0392b]' : 'text-[var(--m)]'}`}>
+              {panelMessage.text}
+            </p>
+          )}
         </div>
 
         {/* Chrome Extension Installation Guidance */}
@@ -130,13 +212,24 @@ export const ChromeExtensionModal: React.FC = () => {
               How to load the unpacked extension in Chrome:
             </span>
             <button
-              onClick={downloadExtensionZip}
-              className="text-[11px] font-bold text-[#4385f5] hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-none p-0"
+              onClick={handleDownloadZip}
+              disabled={downloadState.state === 'saving'}
+              className="text-[11px] font-bold text-[#4385f5] hover:underline disabled:opacity-60 flex items-center gap-1 cursor-pointer bg-transparent border-none p-0"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Download .zip (1.1 MB)</span>
+              <span>{downloadState.state === 'saving' ? 'Preparing…' : 'Download .zip'}</span>
             </button>
           </div>
+
+          {downloadState.message && (
+            <p
+              className={`text-[11px] leading-relaxed ${
+                downloadState.state === 'error' ? 'text-[#c0392b]' : downloadState.state === 'saved' ? 'text-[var(--g)]' : 'text-[var(--m)]'
+              }`}
+            >
+              {downloadState.message}
+            </p>
+          )}
 
           <div className="space-y-2 text-[12px] text-[var(--m)]">
             <div className="flex items-start gap-2.5 p-2 rounded-lg bg-[var(--s2)]/70">

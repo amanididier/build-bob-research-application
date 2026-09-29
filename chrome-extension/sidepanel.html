@@ -3,75 +3,190 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bob Side Panel</title>
+  <title>Bob Research</title>
   <link rel="stylesheet" href="sidepanel.css">
 </head>
 <body>
-  <div class="sidepanel-root">
-    <!-- Header -->
+  <div class="sp">
+    <!-- Header: logo | context | desktop + close -->
     <header class="sp-header">
-      <div class="sp-brand">
-        <div class="sp-mascot">
-          <img src="icons/bob-logo.png" alt="Bob" class="sp-avatar" id="bob-avatar-img">
-        </div>
-        <div class="sp-meta">
-          <div class="sp-name">Bob Research</div>
-          <div class="sp-status"><span class="dot active"></span> Connected to Desktop</div>
-        </div>
+      <button class="sp-logo" id="btn-open-desktop" title="Open Bob Desktop" aria-label="Open Bob Desktop">
+        <img src="icons/bob-logo.png" alt="" width="24" height="24">
+      </button>
+
+      <div class="sp-context">
+        <div class="sp-context-title" id="context-title">Bob Research</div>
+        <div class="sp-context-sub" id="context-sub">No page selected</div>
       </div>
-      <div class="sp-actions">
-        <button id="btn-sync-desktop" title="Sync with Desktop App" class="btn-icon">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+
+      <div class="sp-header-actions">
+        <span class="sp-bridge" id="bridge-chip" title="Bob Desktop bridge status">
+          <span class="sp-dot" id="bridge-dot"></span>
+          <span id="bridge-label">Checking…</span>
+        </span>
+        <button class="sp-icon-btn" id="btn-close-panel" title="Close panel" aria-label="Close panel">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
           </svg>
         </button>
       </div>
     </header>
 
-    <!-- Active Research Workspace Banner -->
-    <div class="sp-context-banner">
-      <div class="context-label">ACTIVE RESEARCH</div>
-      <div class="context-title" id="active-project-title">AI research companion</div>
-      <div class="context-sub" id="active-tab-title">Reading current webpage...</div>
-    </div>
+    <!-- Compact research navigation -->
+    <nav class="sp-nav" role="tablist" aria-label="Bob sections">
+      <button class="sp-nav-btn active" data-view="chat" role="tab" aria-selected="true">Chat</button>
+      <button class="sp-nav-btn" data-view="summary" role="tab" aria-selected="false">Summary</button>
+      <button class="sp-nav-btn" data-view="tabs" role="tab" aria-selected="false">Tabs</button>
+      <button class="sp-nav-btn" data-view="tasks" role="tab" aria-selected="false">Tasks</button>
+    </nav>
 
-    <!-- Quick Action Pills -->
-    <div class="sp-quick-actions">
-      <button class="pill" id="btn-summarize">✦ Summarize page</button>
-      <button class="pill" id="btn-extract-claims">Extract key claims</button>
-      <button class="pill" id="btn-save-tab">+ Save to Tabs</button>
-    </div>
-
-    <!-- Main Content Area -->
     <main class="sp-main">
-      <!-- Conversation / Notes stream -->
-      <div class="sp-stream" id="chat-stream">
-        <div class="sp-msg bob-msg">
-          <div class="msg-bubble">
-            <p>I'm looking at this page with you. What would you like to explore or cross-reference with your research project?</p>
+      <!-- CHAT -->
+      <section class="sp-view active" id="view-chat">
+        <div class="sp-stream" id="chat-stream"></div>
+      </section>
+
+      <!-- SUMMARY -->
+      <section class="sp-view" id="view-summary">
+        <div class="sp-scroll">
+          <div class="sp-section-head">
+            <div>
+              <h2>Summary</h2>
+              <p class="sp-hint">Built from your selected tabs and this page — never from every open tab.</p>
+            </div>
+            <button class="sp-btn" id="btn-build-summary">Build</button>
           </div>
+          <div id="summary-source" class="sp-source-list"></div>
+          <article id="summary-output" class="sp-empty">No summary yet. Select the tabs that matter, then press Build.</article>
         </div>
-      </div>
+      </section>
+
+      <!-- TABS -->
+      <section class="sp-view" id="view-tabs">
+        <div class="sp-scroll">
+          <div class="sp-section-head">
+            <div>
+              <h2>Research tabs</h2>
+              <p class="sp-hint">Selected tabs become Bob's primary context.</p>
+            </div>
+            <div class="sp-btn-row">
+              <button class="sp-btn ghost" id="btn-add-current-tab">+ This tab</button>
+              <button class="sp-btn" id="btn-score-tabs">Re-score</button>
+            </div>
+          </div>
+          <div class="sp-focus">
+            <label for="research-focus">Research focus</label>
+            <input id="research-focus" type="text" placeholder="e.g. electric bus charging requirements in Rwanda" autocomplete="off">
+            <p class="sp-hint">Bob scores every open tab against this — by content, never by domain reputation.</p>
+          </div>
+          <div id="tabs-selected" class="sp-tab-list"></div>
+          <button class="sp-collapse" id="btn-toggle-other" aria-expanded="true">
+            <span>Other tabs</span>
+            <span class="sp-chevron">▾</span>
+          </button>
+          <div id="tabs-other" class="sp-tab-list"></div>
+        </div>
+      </section>
+
+      <!-- TASKS -->
+      <section class="sp-view" id="view-tasks">
+        <div class="sp-scroll">
+          <div class="sp-section-head">
+            <div>
+              <h2>Tasks</h2>
+              <p class="sp-hint">Stored locally in Bob and shared with the desktop workspace bridge.</p>
+            </div>
+          </div>
+          <form id="task-form" class="sp-task-form">
+            <input id="task-input" type="text" placeholder="Add a research task…" aria-label="New task">
+            <button class="sp-btn" type="submit">Add</button>
+          </form>
+          <div id="task-list" class="sp-task-list"></div>
+        </div>
+      </section>
     </main>
 
-    <!-- Captured Highlights Drawer / Toggle -->
-    <div class="sp-notes-preview" id="notes-preview">
-      <div class="notes-header">
-        <span class="notes-count" id="notes-count">2 saved notes</span>
-        <button id="toggle-notes-view" class="text-btn">View notes</button>
-      </div>
+    <!-- Notes strip -->
+    <div class="sp-notes-bar" id="notes-bar">
+      <button class="sp-notes-toggle" id="btn-toggle-notes" aria-expanded="false">
+        <span class="sp-notes-count" id="notes-count">0 notes</span>
+        <span class="sp-chevron">▴</span>
+      </button>
+      <div class="sp-notes-list" id="notes-list" hidden></div>
     </div>
 
-    <!-- Bottom Input -->
+    <!-- Composer -->
     <footer class="sp-footer">
-      <div class="sp-composer">
-        <textarea id="prompt-input" placeholder="Ask Bob about this page..." rows="1"></textarea>
-        <button id="btn-send" class="btn-send" title="Send query">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <line x1="22" y1="2" x2="11" y2="13"></line>
-            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-          </svg>
-        </button>
+      <div class="sp-composer" id="composer">
+        <div class="sp-composer-row">
+          <button class="sp-round-btn" id="btn-attach" title="Attachments" aria-label="Attachments" aria-haspopup="true">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+            </svg>
+          </button>
+          <textarea id="prompt-input" rows="1" placeholder="Ask Bob about this page…" aria-label="Message Bob"></textarea>
+          <button class="sp-round-btn" id="btn-tools" title="Tools" aria-label="Tools" aria-haspopup="true">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.1 2.1-2.4-.6-.6-2.4z"/>
+            </svg>
+          </button>
+          <button class="sp-send" id="btn-send" title="Send" aria-label="Send message">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Tools popup: only tools, never the top-nav sections -->
+      <div class="sp-popover" id="tools-popover" hidden>
+        <div class="sp-popover-title">Tools</div>
+        <button class="sp-pop-item" data-tool="highlight-green"><span class="swatch green"></span>Highlight — research critical</button>
+        <button class="sp-pop-item" data-tool="highlight-blue"><span class="swatch blue"></span>Highlight — supporting</button>
+        <button class="sp-pop-item" data-tool="highlight-yellow"><span class="swatch yellow"></span>Highlight — reference</button>
+        <button class="sp-pop-item" data-tool="auto-highlight">✦ Auto-highlight this page</button>
+        <button class="sp-pop-item" data-tool="clear-highlights">Clear highlights on this page</button>
+        <div class="sp-popover-sep"></div>
+        <button class="sp-pop-item" data-tool="bridge">Bridge &amp; AI key</button>
+        <button class="sp-pop-item" data-tool="notes">Notes</button>
+      </div>
+
+      <div class="sp-popover" id="attach-popover" hidden>
+        <div class="sp-popover-title">Attach</div>
+        <div class="sp-pop-empty">File, image and PDF attachments are not implemented yet — Bob will not pretend otherwise.</div>
+      </div>
+
+      <!-- Bridge / settings sheet -->
+      <div class="sp-sheet" id="bridge-sheet" hidden>
+        <div class="sp-sheet-head">
+          <h3>Bridge &amp; AI</h3>
+          <button class="sp-icon-btn" data-close-sheet aria-label="Close">✕</button>
+        </div>
+        <div class="sp-sheet-body">
+          <div class="sp-field">
+            <label for="bridge-status-line">Bob Desktop bridge</label>
+            <div class="sp-status-line" id="bridge-status-line">Checking…</div>
+            <button class="sp-btn ghost" id="btn-recheck-bridge">Re-check</button>
+          </div>
+          <div class="sp-field">
+            <label for="gemini-key">Google AI Studio key (stored only in this browser)</label>
+            <input id="gemini-key" type="password" placeholder="Paste your Gemini API key" autocomplete="off">
+            <div class="sp-field-row">
+              <button class="sp-btn" id="btn-save-key">Save key</button>
+              <button class="sp-btn ghost" id="btn-test-key">Test</button>
+            </div>
+            <div class="sp-status-line" id="key-status"></div>
+          </div>
+          <div class="sp-field">
+            <label for="bridge-token">Desktop bridge token</label>
+            <input id="bridge-token" type="text" placeholder="development-token" autocomplete="off">
+            <p class="sp-hint">Must match <code>BOB_BRIDGE_TOKEN</code> on the desktop app. Bob never sends your pages anywhere else.</p>
+          </div>
+          <label class="sp-check">
+            <input type="checkbox" id="sync-tabs">
+            <span>Send the active tab (title + URL) to Bob Desktop on this computer</span>
+          </label>
+        </div>
       </div>
     </footer>
   </div>

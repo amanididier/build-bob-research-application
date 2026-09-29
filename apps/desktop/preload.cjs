@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld('bob', {
   add: (kind, item) => ipcRenderer.invoke('bob:add', kind, item),
   remove: (kind, id) => ipcRenderer.invoke('bob:remove', kind, id),
   openWeb: (sub) => ipcRenderer.invoke('bob:openWeb', sub),
+  downloadExtension: () => ipcRenderer.invoke('bob:downloadExtension'),
+  requestExtensionPanel: () => ipcRenderer.invoke('bob:requestExtensionPanel'),
   info: () => ipcRenderer.invoke('bob:info'),
   getMemory: () => ipcRenderer.invoke('bob:getMemory'),
   saveMemory: (data) => ipcRenderer.invoke('bob:saveMemory', data),

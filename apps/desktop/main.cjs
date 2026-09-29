@@ -1,6 +1,6 @@
 // Bob Research Companion - Desktop Main Process
 // Bundles modern React/Vite app with native auto-updates and real Bob mascot icon.
-const { app, BrowserWindow, shell, ipcMain, session } = require('electron')
+const { app, BrowserWindow, shell, ipcMain, session, dialog } = require('electron')
 const http = require('node:http')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -23,6 +23,9 @@ const WEB_URL = process.env.BOB_WEB_URL || 'https://build-bob-research-applicati
 
 let win = null
 let storePath = null
+let bridgeListening = false
+let pendingPanelRequest = null
+const PANEL_REQUEST_TTL_MS = 5 * 60 * 1000
 let updateState = {
   status: 'idle',
   version: app.getVersion(),
@@ -121,9 +124,27 @@ function startBridge() {
       return send(200, { ok: true, version: app.getVersion() })
     }
 
+    if (req.method === 'GET' && req.url === '/events/pending') {
+      // The extension polls this to learn that the user asked for the panel.
+      const fresh = pendingPanelRequest && Date.now() - pendingPanelRequest.at < PANEL_REQUEST_TTL_MS
+      const pending = fresh ? pendingPanelRequest : null
+      pendingPanelRequest = null
+      return send(200, { ok: true, pending })
+    }
+
     if (req.method !== 'POST') return send(404, { error: 'Not found' })
 
     const body = await readBody(req)
+
+    if (req.url === '/events/focus') {
+      // Sent by the Chrome extension when the user clicks the Bob logo there.
+      if (win && !win.isDestroyed()) {
+        if (win.isMinimized()) win.restore()
+        win.show()
+        win.focus()
+      }
+      return send(200, { ok: true })
+    }
 
     if (req.url === '/events/tab') {
       const key = String(body.tabId ?? body.url ?? id())
@@ -151,8 +172,17 @@ function startBridge() {
     send(200, { ok: true })
   })
 
-  server.on('error', (e) => log('Bridge error:', e.message))
-  server.listen(PORT, '127.0.0.1', () => log('Bridge listening on port:', PORT))
+  server.on('error', (e) => {
+    bridgeListening = false
+    log('Bridge error:', e.message)
+  })
+  server.on('close', () => {
+    bridgeListening = false
+  })
+  server.listen(PORT, '127.0.0.1', () => {
+    bridgeListening = true
+    log('Bridge listening on port:', PORT)
+  })
 }
 
 function setupAutoUpdater() {
@@ -270,6 +300,52 @@ function registerIpc() {
 
   ipcMain.handle('bob:openWeb', (_e, sub = '') => {
     shell.openExternal(WEB_URL + String(sub))
+  })
+
+  // Chrome only lets an extension open its side panel from a real user gesture,
+  // so the desktop can only leave a request for the extension to pick up.
+  ipcMain.handle('bob:requestExtensionPanel', () => {
+    pendingPanelRequest = { at: Date.now(), version: app.getVersion() }
+    return { ok: true, bridgeListening, queued: true }
+  })
+
+  // The renderer is loaded from file://, where fetch() cannot read packaged
+  // assets — so the extension archive is written out through a real save dialog.
+  ipcMain.handle('bob:downloadExtension', async () => {
+    const candidates = [
+      path.join(__dirname, '../../dist/bob-chrome-extension.zip'),
+      path.join(__dirname, 'dist', 'bob-chrome-extension.zip'),
+      path.join(app.getAppPath(), 'dist', 'bob-chrome-extension.zip')
+    ]
+
+    const source = candidates.find((file) => {
+      try {
+        return fs.statSync(file).size > 1024
+      } catch (e) {
+        return false
+      }
+    })
+
+    if (!source) {
+      log('Extension archive missing from build output')
+      return { ok: false, reason: 'missing-archive' }
+    }
+
+    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+      title: 'Save Bob Chrome Extension',
+      defaultPath: path.join(app.getPath('downloads'), 'bob-chrome-extension.zip'),
+      filters: [{ name: 'Zip archive', extensions: ['zip'] }]
+    })
+
+    if (canceled || !filePath) return { ok: false, reason: 'canceled' }
+
+    try {
+      fs.writeFileSync(filePath, fs.readFileSync(source))
+      return { ok: true, path: filePath, bytes: fs.statSync(filePath).size }
+    } catch (e) {
+      log('Extension download error:', e.message)
+      return { ok: false, reason: 'write-failed', detail: e.message }
+    }
   })
 
   ipcMain.handle('bob:getMemory', () => {

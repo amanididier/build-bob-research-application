@@ -14,6 +14,7 @@ export const BottomComposer: React.FC = () => {
     isToolsMenuOpen,
     navigateTo,
     isSidebarClosed,
+    setIsChromeModalOpen,
   } = useApp();
 
   const [prompt, setPrompt] = useState('');
@@ -96,7 +97,7 @@ export const BottomComposer: React.FC = () => {
     <>
       {/* Chrome launcher button on the right */}
       <button
-        onClick={() => navigateTo('chrome')}
+        onClick={() => setIsChromeModalOpen(true)}
         title="Open Bob in Chrome"
         className={`fixed z-30 bottom-5 w-11 h-11 rounded-full bg-[var(--s)] border border-[var(--line)] shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all grid place-items-center ${
           isSidebarClosed

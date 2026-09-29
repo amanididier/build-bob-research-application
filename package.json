@@ -4,10 +4,13 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/pack-extension.mjs",
     "dev": "vite --port=3000 --host=0.0.0.0",
+    "prebuild": "node scripts/pack-extension.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
+    "pack:extension": "node scripts/pack-extension.mjs",
     "lint": "tsc --noEmit"
   },
   "dependencies": {

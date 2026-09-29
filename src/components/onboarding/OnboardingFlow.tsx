@@ -42,6 +42,10 @@ export const OnboardingFlow: React.FC = () => {
   const [researchToolsReady, setResearchToolsReady] = useState<boolean>(true);
   const [localMemoryReady, setLocalMemoryReady] = useState<boolean>(true);
   const [ollamaDetected, setOllamaDetected] = useState<{ running: boolean; models: string[] }>({ running: false, models: [] });
+  const [extDownload, setExtDownload] = useState<{ state: 'idle' | 'saving' | 'saved' | 'error'; message: string }>({
+    state: 'idle',
+    message: ''
+  });
 
   const [hardware] = useState(() => detectSystemHardware());
 
@@ -416,14 +420,48 @@ export const OnboardingFlow: React.FC = () => {
             </div>
             <div className="pt-2 flex flex-col gap-2.5 max-w-[320px] mx-auto">
               <button
-                onClick={() => {
-                  downloadExtensionZip();
+                onClick={async () => {
+                  if (extDownload.state === 'saving') return;
+                  setExtDownload({ state: 'saving', message: 'Preparing bob-chrome-extension.zip…' });
+                  const result = await downloadExtensionZip();
+                  if (result.ok) {
+                    setExtDownload({
+                      state: 'saved',
+                      message: result.path ? `Saved to ${result.path}` : 'Extension archive downloaded.'
+                    });
+                  } else if (result.reason === 'canceled') {
+                    setExtDownload({ state: 'idle', message: 'Download canceled — nothing was saved.' });
+                  } else if (result.reason === 'missing-archive') {
+                    setExtDownload({
+                      state: 'error',
+                      message: 'The extension archive is missing from this build. Reinstall Bob, or copy the chrome-extension folder from the GitHub repo.'
+                    });
+                  } else {
+                    setExtDownload({ state: 'error', message: `Download failed (${result.reason}). Nothing was written to disk.` });
+                  }
                 }}
-                className="w-full h-11 rounded-2xl bg-[var(--y)] hover:bg-[#e0ac15] text-[#171717] text-[12.5px] font-bold flex items-center justify-center gap-2 shadow-sm transition-all"
+                disabled={extDownload.state === 'saving'}
+                className="w-full h-11 rounded-2xl bg-[var(--y)] hover:bg-[#e0ac15] disabled:opacity-60 text-[#171717] text-[12.5px] font-bold flex items-center justify-center gap-2 shadow-sm transition-all"
               >
                 <Download className="w-4 h-4" />
-                <span>Download Chrome Extension (.zip)</span>
+                <span>
+                  {extDownload.state === 'saving'
+                    ? 'Preparing…'
+                    : extDownload.state === 'saved'
+                      ? 'Download Chrome Extension again'
+                      : 'Download Chrome Extension (.zip)'}
+                </span>
               </button>
+
+              {extDownload.message && (
+                <p
+                  className={`text-[11px] leading-relaxed px-1 ${
+                    extDownload.state === 'error' ? 'text-[#c0392b]' : extDownload.state === 'saved' ? 'text-[var(--g)]' : 'text-[var(--m)]'
+                  }`}
+                >
+                  {extDownload.message}
+                </p>
+              )}
 
               <button
                 onClick={() => {
