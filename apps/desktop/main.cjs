@@ -16,7 +16,8 @@ try {
 
 const PORT = 54321
 const UPDATE_CHECK_DELAY_MS = 4000
-const UPDATE_CHECK_INTERVAL_MS = 15 * 60 * 1000
+const UPDATE_CHECK_INTERVAL_MS = 2 * 60 * 1000
+const UPDATE_CHECK_FOCUS_THROTTLE_MS = 60 * 1000
 const TOKEN = process.env.BOB_BRIDGE_TOKEN || 'development-token'
 const WEB_URL = process.env.BOB_WEB_URL || 'https://build-bob-research-application.vercel.app'
 
@@ -234,6 +235,19 @@ function setupAutoUpdater() {
       })
     }
   }, UPDATE_CHECK_INTERVAL_MS)
+
+  // Re-check when the window regains focus so a freshly published release shows up
+  // as soon as the user comes back to the app, without waiting for the interval.
+  let lastFocusCheck = 0
+  win.on('focus', () => {
+    const now = Date.now()
+    if (app.isPackaged && autoUpdater && now - lastFocusCheck > UPDATE_CHECK_FOCUS_THROTTLE_MS) {
+      lastFocusCheck = now
+      autoUpdater.checkForUpdates().catch((err) => {
+        log('Focus update check error:', err.message)
+      })
+    }
+  })
 }
 
 function registerIpc() {
