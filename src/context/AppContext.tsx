@@ -501,6 +501,61 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     },
   ]);
 
+  // Real-time synchronization with Bob Desktop bridge / Extension
+  useEffect(() => {
+    const syncFromDesktop = async () => {
+      if (typeof window !== 'undefined' && (window as any).bob?.get) {
+        try {
+          const deskStore = await (window as any).bob.get();
+          if (deskStore) {
+            if (Array.isArray(deskStore.notes) && deskStore.notes.length > 0) {
+              setNotes((prevNotes) => {
+                const existingMap = new Set(prevNotes.map((n) => n.selectedText || n.title));
+                const newItems: ResearchNoteItem[] = [];
+                for (const item of deskStore.notes) {
+                  const itemText = item.selectedText || item.body || '';
+                  if (itemText && !existingMap.has(itemText)) {
+                    existingMap.add(itemText);
+                    newItems.push({
+                      id: item.id || `ext-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                      title: item.title || 'Web Note',
+                      selectedText: itemText,
+                      sourceTitle: item.sourceTitle || item.title || 'Chrome Extension',
+                      sourceUrl: item.sourceUrl || item.url || 'web://extension',
+                      projectId: item.projectId || activeResearchId,
+                      relevance: item.relevance || 95,
+                      color: (item.color as any) || 'emerald',
+                      createdAt: item.createdAt ? new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now',
+                    });
+                  }
+                }
+                return newItems.length > 0 ? [...newItems, ...prevNotes] : prevNotes;
+              });
+            }
+
+            if (deskStore.tabs && Object.keys(deskStore.tabs).length > 0) {
+              try {
+                localStorage.setItem('bob_desktop_tabs', JSON.stringify(deskStore.tabs));
+                window.dispatchEvent(new CustomEvent('bob:tabs-updated', { detail: deskStore.tabs }));
+              } catch {}
+            }
+          }
+        } catch (e) {
+          console.warn('[bob] desktop sync error:', e);
+        }
+      }
+    };
+
+    syncFromDesktop();
+
+    if (typeof window !== 'undefined' && (window as any).bob?.onChange) {
+      const unsub = (window as any).bob.onChange(() => {
+        syncFromDesktop();
+      });
+      return unsub;
+    }
+  }, [activeResearchId]);
+
   const toggleSidebar = () => {
     setIsSidebarClosed((prev) => !prev);
   };

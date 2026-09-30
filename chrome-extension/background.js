@@ -93,10 +93,10 @@ async function bridgeFetch(path, { method = 'GET', body, token } = {}) {
 
 async function getBridgeStatus({ force = false } = {}) {
   const age = Date.now() - bridgeCache.checkedAt;
-  if (!force && bridgeCache.checkedAt && age < 20000) return bridgeCache;
+  if (!force && bridgeCache.checkedAt && age < 8000) return bridgeCache;
 
   const settings = await getSettings();
-  const res = await bridgeFetch('/health', { token: settings.bridgeToken });
+  const res = await bridgeFetch('/events/handshake', { token: settings.bridgeToken });
 
   if (res.ok && res.data && res.data.ok) {
     bridgeCache = { connected: true, version: res.data.version || null, checkedAt: Date.now(), detail: 'ok' };
@@ -113,16 +113,31 @@ async function getBridgeStatus({ force = false } = {}) {
 }
 
 async function sendToBridge(path, body) {
-  const status = await getBridgeStatus();
+  let status = await getBridgeStatus();
+  if (!status.connected) {
+    // Retry once immediately in case Bob Desktop was just opened
+    status = await getBridgeStatus({ force: true });
+  }
   if (!status.connected) return { delivered: false, reason: status.detail || 'unreachable' };
   const settings = await getSettings();
   const res = await bridgeFetch(path, { method: 'POST', body, token: settings.bridgeToken });
-  return res.ok ? { delivered: true } : { delivered: false, reason: res.status === 401 ? 'bad-token' : 'rejected' };
+  if (res.ok) {
+    bridgeCache.connected = true;
+    bridgeCache.checkedAt = Date.now();
+    return { delivered: true };
+  }
+  return { delivered: false, reason: res.status === 401 ? 'bad-token' : 'rejected' };
 }
 
 function broadcast(message) {
   chrome.runtime.sendMessage(message).catch(() => {});
 }
+
+// Active handshake on service worker startup
+async function pingBridgeHandshake() {
+  await getBridgeStatus({ force: true });
+}
+pingBridgeHandshake().catch(() => {});
 
 // ------------------------------------------------------------- side panel ---
 

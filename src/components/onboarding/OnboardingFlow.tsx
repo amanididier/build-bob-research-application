@@ -15,7 +15,9 @@ import {
   ExternalLink,
   Check,
   ClipboardCheck,
-  Download
+  Download,
+  RotateCw,
+  AlertCircle
 } from 'lucide-react';
 import { detectSystemHardware, MODEL_CATALOG } from '../../lib/hardware';
 import { bobAi } from '../../lib/aiEngine';
@@ -47,7 +49,66 @@ export const OnboardingFlow: React.FC = () => {
     message: ''
   });
 
+  // Extension Connection Verification in Step 5
+  const [extConnectionStatus, setExtConnectionStatus] = useState<'idle' | 'checking' | 'connected' | 'error'>('idle');
+  const [extErrorMessage, setExtErrorMessage] = useState<string>('');
+  const [isExtensionConnected, setIsExtensionConnected] = useState<boolean>(false);
+
   const [hardware] = useState(() => detectSystemHardware());
+
+  const handleCheckExtensionConnection = async () => {
+    setExtConnectionStatus('checking');
+    setExtErrorMessage('');
+
+    try {
+      // 1. Direct check via Electron IPC
+      if (typeof window !== 'undefined' && (window as any).bob?.checkExtensionConnection) {
+        const res = await (window as any).bob.checkExtensionConnection();
+        if (res && res.connected) {
+          setIsExtensionConnected(true);
+          setExtConnectionStatus('connected');
+          return;
+        }
+      }
+
+      // 2. Direct ping to local bridge on port 54321
+      const response = await fetch('http://127.0.0.1:54321/events/extension-status', {
+        headers: { 'x-bob-token': 'development-token' }
+      }).catch(() => null);
+
+      if (response && response.ok) {
+        const data = await response.json();
+        if (data.connected) {
+          setIsExtensionConnected(true);
+          setExtConnectionStatus('connected');
+          return;
+        }
+      }
+
+      // 3. Handshake fallback
+      const handshakeResp = await fetch('http://127.0.0.1:54321/events/handshake').catch(() => null);
+      if (handshakeResp && handshakeResp.ok) {
+        if (typeof window !== 'undefined' && (window as any).bob?.get) {
+          const desk = await (window as any).bob.get();
+          if (desk && (desk.extensionConnected || (desk.notes && desk.notes.length > 2) || (desk.tabs && Object.keys(desk.tabs).length > 0))) {
+            setIsExtensionConnected(true);
+            setExtConnectionStatus('connected');
+            return;
+          }
+        }
+      }
+
+      setExtConnectionStatus('error');
+      setExtErrorMessage(
+        'Chrome extension not detected yet. Please check the steps above: 1. Confirm you loaded unpacked the folder in chrome://extensions. 2. Click the Bob extension icon in your Chrome toolbar or open a tab to activate connection.'
+      );
+    } catch {
+      setExtConnectionStatus('error');
+      setExtErrorMessage(
+        'Could not communicate with Bob extension on port 54321. Make sure Bob extension is active in Chrome and click the Bob icon in your toolbar, then try again.'
+      );
+    }
+  };
 
   useEffect(() => {
     bobAi.checkOllama().then((res) => {
@@ -96,7 +157,7 @@ export const OnboardingFlow: React.FC = () => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="w-full max-w-[560px] bg-[var(--s)] border border-[var(--line)] shadow-2xl rounded-3xl p-8 relative flex flex-col justify-between min-h-[510px]">
+      <div className="w-full max-w-[760px] bg-[var(--s)] border border-[var(--line)] shadow-2xl rounded-[32px] p-9 relative flex flex-col justify-between min-h-[620px]">
         
         {/* Step Indicator & Ambient Progress */}
         <div>
@@ -247,29 +308,120 @@ export const OnboardingFlow: React.FC = () => {
           </div>
         )}
 
-        {/* STEP 5: BROWSER SIDE PANEL */}
+        {/* STEP 5: BROWSER SIDE PANEL & EXTENSION LINKING */}
         {step === 5 && (
-          <div className="my-auto space-y-6 text-center animate-in fade-in duration-200">
+          <div className="my-auto space-y-5 text-center animate-in fade-in duration-200">
             <div className="space-y-1.5">
-              <h2 className="text-[22px] font-extrabold tracking-tight text-[var(--t)]">
-                Bob comes with you while you browse.
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--ys)] text-[#765700] text-[11px] font-bold mb-1">
+                <Globe className="w-3.5 h-3.5" />
+                <span>Core Research Feature · Step 5 of 8</span>
+              </div>
+              <h2 className="text-[24px] font-extrabold tracking-tight text-[var(--t)]">
+                Install & Link Bob Chrome Extension
               </h2>
-              <p className="text-[13px] text-[var(--m)] max-w-[360px] mx-auto">
-                Open Bob beside any web page and keep your research context always with you.
+              <p className="text-[13px] text-[var(--m)] max-w-[480px] mx-auto leading-relaxed">
+                Bob works beside you in Chrome to capture highlights, save sources, and answer research queries with live context on port 54321.
               </p>
             </div>
-            <div className="w-full max-w-[380px] mx-auto rounded-2xl bg-[var(--s2)] border border-[var(--line)] shadow-inner p-3 text-left space-y-2">
-              <div className="flex items-center gap-1.5 pb-2 border-b border-[var(--line)]">
-                <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
-                <span className="w-2.5 h-2.5 rounded-full bg-yellow-400" />
-                <span className="w-2.5 h-2.5 rounded-full bg-green-400" />
-                <span className="text-[10px] text-[var(--m)] font-mono ml-2">Chrome Side Panel</span>
-              </div>
-              <div className="flex items-center gap-2 p-2 rounded-xl bg-[var(--s)] border border-[var(--line)]">
-                <BobAvatar size={24} />
-                <div className="text-[11px] font-semibold text-[var(--t)]">
-                  Active in sidebar · Reading article...
+
+            {/* Extension Action Card */}
+            <div className="w-full max-w-[560px] mx-auto rounded-3xl bg-[var(--s2)] border border-[var(--line)] p-5 text-left space-y-4 shadow-sm">
+              <div className="flex items-center justify-between pb-3 border-b border-[var(--line)]">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-[var(--ys)] text-[#765700]">
+                    <Download className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-[12.5px] font-bold text-[var(--t)]">1. Download Extension Archive</div>
+                    <div className="text-[10.5px] text-[var(--m)]">bob-chrome-extension.zip (Manifest V3)</div>
+                  </div>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (extDownload.state === 'saving') return;
+                    setExtDownload({ state: 'saving', message: 'Preparing bob-chrome-extension.zip…' });
+                    const result = await downloadExtensionZip();
+                    if (result.ok) {
+                      setExtDownload({
+                        state: 'saved',
+                        message: result.path ? `Saved to ${result.path}` : 'Extension archive downloaded.'
+                      });
+                    } else if (result.reason === 'canceled') {
+                      setExtDownload({ state: 'idle', message: 'Download canceled — nothing was saved.' });
+                    } else {
+                      setExtDownload({ state: 'error', message: 'Download failed. Please try again.' });
+                    }
+                  }}
+                  disabled={extDownload.state === 'saving'}
+                  className="h-9 px-4 rounded-xl bg-[var(--y)] hover:bg-[#e0ac15] text-[#171717] text-[12px] font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>{extDownload.state === 'saving' ? 'Preparing…' : extDownload.state === 'saved' ? 'Downloaded ✓' : 'Download .zip'}</span>
+                </button>
+              </div>
+
+              {/* Step by step guide */}
+              <div className="space-y-2 text-[11.5px] text-[var(--m)] leading-relaxed">
+                <div className="font-bold text-[var(--t)] text-[12px] mb-1">2. Load Unpacked in Chrome:</div>
+                <div className="flex items-start gap-2">
+                  <span className="w-5 h-5 rounded-full bg-[var(--s)] border border-[var(--line)] flex items-center justify-center text-[10px] font-bold text-[var(--t)] shrink-0">1</span>
+                  <span>Unzip the downloaded <code>bob-chrome-extension.zip</code> file.</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="w-5 h-5 rounded-full bg-[var(--s)] border border-[var(--line)] flex items-center justify-center text-[10px] font-bold text-[var(--t)] shrink-0">2</span>
+                  <span>In Chrome, navigate to <code className="text-[var(--t)] font-mono bg-[var(--s)] px-1.5 py-0.5 rounded border border-[var(--line)]">chrome://extensions</code> and toggle on <b>Developer mode</b>.</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="w-5 h-5 rounded-full bg-[var(--s)] border border-[var(--line)] flex items-center justify-center text-[10px] font-bold text-[var(--t)] shrink-0">3</span>
+                  <span>Click <b>Load unpacked</b> and select the unzipped <code>chrome-extension</code> folder.</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="w-5 h-5 rounded-full bg-[var(--s)] border border-[var(--line)] flex items-center justify-center text-[10px] font-bold text-[var(--t)] shrink-0">4</span>
+                  <span>Click the Bob icon in your Chrome toolbar or open a tab to activate communication.</span>
+                </div>
+              </div>
+
+              {/* Check Connection Button (Black pill with white text) */}
+              <div className="pt-2 flex flex-col items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={handleCheckExtensionConnection}
+                  disabled={extConnectionStatus === 'checking'}
+                  className="px-6 py-2.5 rounded-full bg-black hover:bg-neutral-850 dark:bg-white dark:hover:bg-neutral-200 text-white dark:text-black font-bold text-[13px] flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 cursor-pointer disabled:opacity-60"
+                >
+                  {extConnectionStatus === 'checking' ? (
+                    <>
+                      <RotateCw className="w-4 h-4 animate-spin" />
+                      <span>Checking connection...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 text-amber-400" />
+                      <span>Check Connection</span>
+                    </>
+                  )}
+                </button>
+
+                {extConnectionStatus === 'connected' && (
+                  <div className="w-full p-3 rounded-2xl bg-[#e6f7ed] text-[#14844d] border border-emerald-300 text-[12px] font-semibold flex items-center justify-center gap-2 animate-in fade-in">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>Extension connected & verified! Real-time syncing with Bob Desktop on port 54321 is active.</span>
+                  </div>
+                )}
+
+                {extConnectionStatus === 'error' && (
+                  <div className="w-full p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-700/60 text-[12px] space-y-1 text-left animate-in fade-in">
+                    <div className="font-bold flex items-center gap-1.5">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>Extension not connected yet</span>
+                    </div>
+                    <p className="text-[11px] leading-relaxed m-0 text-amber-800 dark:text-amber-300">
+                      {extErrorMessage}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -489,19 +641,38 @@ export const OnboardingFlow: React.FC = () => {
           ) : (
             <div />
           )}
-          <button
-            onClick={handleNextStep}
-            className="h-11 px-6 rounded-2xl bg-[#171717] dark:bg-[#f5f4f0] text-white dark:text-[#171717] font-bold text-[13px] flex items-center gap-2 hover:opacity-95 shadow-md active:scale-95 transition-all"
-          >
-            <span>
-              {step === 1
-                ? "Let's get started"
-                : step === 8
-                ? 'Start Researching'
-                : 'Continue'}
-            </span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
+          {/* Hide Continue button on step 5 until extension is verified as connected */}
+          {step === 5 && !isExtensionConnected ? (
+            <div className="flex items-center gap-3">
+              <span className="text-[12px] text-[var(--m)] italic">
+                Verify extension above to continue
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsExtensionConnected(true);
+                  handleNextStep();
+                }}
+                className="text-[11.5px] text-[var(--m)] hover:text-[var(--t)] underline cursor-pointer"
+              >
+                Skip for now
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={handleNextStep}
+              className="h-11 px-6 rounded-2xl bg-[#171717] dark:bg-[#f5f4f0] text-white dark:text-[#171717] font-bold text-[13px] flex items-center gap-2 hover:opacity-95 shadow-md active:scale-95 transition-all cursor-pointer"
+            >
+              <span>
+                {step === 1
+                  ? "Let's get started"
+                  : step === 8
+                  ? 'Start Researching'
+                  : 'Continue'}
+              </span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
       </div>

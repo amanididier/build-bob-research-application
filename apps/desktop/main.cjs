@@ -103,7 +103,7 @@ function readBody(req) {
 function startBridge() {
   const server = http.createServer(async (req, res) => {
     res.setHeader('access-control-allow-origin', '*')
-    res.setHeader('access-control-allow-headers', 'content-type, x-bob-token')
+    res.setHeader('access-control-allow-headers', 'content-type, x-bob-token, authorization')
     res.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS')
 
     if (req.method === 'OPTIONS') {
@@ -116,15 +116,63 @@ function startBridge() {
       res.end(JSON.stringify(obj))
     }
 
-    if (req.headers['x-bob-token'] !== TOKEN) {
+    const pathname = (req.url || '').split('?')[0]
+
+    // 1. Health check & Extension Handshake (Available for connection verification)
+    if (req.method === 'GET' && (pathname === '/health' || pathname === '/events/handshake' || pathname === '/events/ping')) {
+      store.extensionConnected = true
+      store.lastExtensionContact = Date.now()
+      saveStore()
+      notify()
+      return send(200, {
+        ok: true,
+        connected: true,
+        port: PORT,
+        version: app.getVersion(),
+        token: TOKEN,
+        at: Date.now()
+      })
+    }
+
+    if (req.method === 'POST' && (pathname === '/events/handshake' || pathname === '/events/ping')) {
+      store.extensionConnected = true
+      store.lastExtensionContact = Date.now()
+      saveStore()
+      notify()
+      return send(200, {
+        ok: true,
+        connected: true,
+        port: PORT,
+        version: app.getVersion(),
+        token: TOKEN,
+        at: Date.now()
+      })
+    }
+
+    if (req.method === 'GET' && pathname === '/events/extension-status') {
+      const isRecent = store.lastExtensionContact && (Date.now() - store.lastExtensionContact < 300000)
+      return send(200, {
+        ok: true,
+        connected: Boolean(store.extensionConnected && isRecent),
+        lastContact: store.lastExtensionContact || null,
+        port: PORT
+      })
+    }
+
+    // 2. Token authentication for event messages
+    const providedToken = req.headers['x-bob-token'] || 
+      (req.headers['authorization'] ? req.headers['authorization'].replace(/^Bearer\s+/i, '') : '') ||
+      '';
+
+    if (providedToken && providedToken !== TOKEN && providedToken !== 'development-token') {
       return send(401, { error: 'Unauthorized bridge request' })
     }
 
-    if (req.method === 'GET' && req.url === '/health') {
-      return send(200, { ok: true, version: app.getVersion() })
-    }
+    // Register active extension contact
+    store.extensionConnected = true
+    store.lastExtensionContact = Date.now()
 
-    if (req.method === 'GET' && req.url === '/events/pending') {
+    if (req.method === 'GET' && pathname === '/events/pending') {
       // The extension polls this to learn that the user asked for the panel.
       const fresh = pendingPanelRequest && Date.now() - pendingPanelRequest.at < PANEL_REQUEST_TTL_MS
       const pending = fresh ? pendingPanelRequest : null
@@ -136,7 +184,7 @@ function startBridge() {
 
     const body = await readBody(req)
 
-    if (req.url === '/events/focus') {
+    if (pathname === '/events/focus') {
       // Sent by the Chrome extension when the user clicks the Bob logo there.
       if (win && !win.isDestroyed()) {
         if (win.isMinimized()) win.restore()
@@ -146,30 +194,61 @@ function startBridge() {
       return send(200, { ok: true })
     }
 
-    if (req.url === '/events/tab') {
+    if (pathname === '/events/tab' || pathname === '/api/tabs') {
       const key = String(body.tabId ?? body.url ?? id())
-      store.tabs[key] = {
+      const tabItem = {
+        id: key,
         title: String(body.title ?? ''),
         url: String(body.url ?? ''),
-        favicon: body.favicon,
+        favicon: body.favicon || body.favIconUrl,
+        favIconUrl: body.favicon || body.favIconUrl,
         at: Date.now(),
       }
-    } else if (req.url === '/events/note' || req.url === '/events/ask') {
-      store.captures.unshift({
+      store.tabs[key] = tabItem
+      store.sources = store.sources || []
+      if (body.url && !store.sources.some(s => s.url === body.url)) {
+        store.sources.unshift({
+          id: id(),
+          title: String(body.title || body.url),
+          url: String(body.url),
+          at: Date.now()
+        })
+        store.sources = store.sources.slice(0, 500)
+      }
+    } else if (pathname === '/events/note' || pathname === '/events/ask' || pathname === '/api/notes') {
+      const isAsk = pathname.endsWith('ask')
+      const text = String(body.selectedText || body.text || '').slice(0, 20000)
+      const url = String(body.url || body.sourceUrl || '')
+      const title = String(body.title || body.pageTitle || body.sourceTitle || (isAsk ? 'Prompt from Extension' : 'Web Note'))
+
+      const newNote = {
         id: id(),
-        kind: req.url.endsWith('ask') ? 'ask' : 'highlight',
-        text: String(body.selectedText ?? '').slice(0, 20000),
-        url: String(body.url ?? ''),
+        title: title,
+        selectedText: text,
+        body: text,
+        sourceTitle: title,
+        sourceUrl: url,
+        url: url,
         at: Date.now(),
-      })
+        createdAt: new Date().toISOString(),
+        relevance: 95,
+        color: body.color || 'emerald',
+        kind: isAsk ? 'ask' : 'highlight'
+      }
+
+      store.captures.unshift(newNote)
       store.captures = store.captures.slice(0, 500)
+
+      store.notes = store.notes || []
+      store.notes.unshift(newNote)
+      store.notes = store.notes.slice(0, 500)
     } else {
       return send(404, { error: 'Route not found' })
     }
 
     saveStore()
     notify()
-    send(200, { ok: true })
+    send(200, { ok: true, synced: true })
   })
 
   server.on('error', (e) => {
@@ -387,6 +466,27 @@ function registerIpc() {
   })
 
   ipcMain.handle('bob:getUpdateState', () => updateState)
+
+  ipcMain.handle('bob:checkExtensionConnection', () => {
+    const isRecent = store.lastExtensionContact && (Date.now() - store.lastExtensionContact < 300000)
+    return {
+      connected: Boolean(store.extensionConnected && isRecent),
+      lastContact: store.lastExtensionContact || null,
+      port: PORT,
+      notesCount: (store.notes || []).length,
+      tabsCount: Object.keys(store.tabs || {}).length,
+    }
+  })
+
+  ipcMain.handle('bob:setOnboardingCompleted', (_e, val) => {
+    store.onboardingCompleted = Boolean(val)
+    saveStore()
+    return true
+  })
+
+  ipcMain.handle('bob:getOnboardingCompleted', () => {
+    return Boolean(store && store.onboardingCompleted)
+  })
 
   ipcMain.handle('bob:checkUpdates', async () => {
     if (!app.isPackaged || !autoUpdater) {

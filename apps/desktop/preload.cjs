@@ -13,6 +13,9 @@ contextBridge.exposeInMainWorld('bob', {
   onChange: (fn) => ipcRenderer.on('bob:changed', () => fn()),
   checkForUpdates: () => ipcRenderer.invoke('bob:checkUpdates'),
   getUpdateState: () => ipcRenderer.invoke('bob:getUpdateState'),
+  checkExtensionConnection: () => ipcRenderer.invoke('bob:checkExtensionConnection'),
+  setOnboardingCompleted: (val) => ipcRenderer.invoke('bob:setOnboardingCompleted', val),
+  getOnboardingCompleted: () => ipcRenderer.invoke('bob:getOnboardingCompleted'),
   downloadUpdate: () => ipcRenderer.invoke('bob:downloadUpdate'),
   installUpdate: () => ipcRenderer.invoke('bob:installUpdate'),
   onUpdateStatus: (fn) => {
