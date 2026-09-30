@@ -172,7 +172,7 @@
     state.busy = true;
 
     const sources = [];
-    for (const tab of selected.slice(0, 6)) {
+    for (const tab of selected) {
       const read = await send({ type: 'EXTRACT_TAB_TEXT', url: tab.url, tabId: tab.tabId });
       const row = make('div', 'sp-source');
       row.appendChild(make('span', 'sp-source-title', tab.title));
@@ -571,6 +571,8 @@
       'btn-toggle-other',
       'btn-score-tabs',
       'btn-add-current-tab',
+      'btn-select-all-tabs',
+      'btn-clear-tabs',
       'research-focus',
       'task-form',
       'task-input',
@@ -806,6 +808,22 @@
 
   function wireTabsView() {
     dom.btnScoreTabs.addEventListener('click', () => renderTabs());
+
+    dom.btnSelectAllTabs.addEventListener('click', async () => {
+      const result = await send({ type: 'SET_ALL_TABS_SELECTED', selected: true, tabs: state.tabs });
+      if (result && result.ok) {
+        await loadTabs();
+        renderTabs();
+      }
+    });
+
+    dom.btnClearTabs.addEventListener('click', async () => {
+      const result = await send({ type: 'SET_ALL_TABS_SELECTED', selected: false });
+      if (result && result.ok) {
+        await loadTabs();
+        renderTabs();
+      }
+    });
 
     dom.btnAddCurrentTab.addEventListener('click', async () => {
       if (!state.tab) {

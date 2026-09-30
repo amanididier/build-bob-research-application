@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Plus, Sparkles, Mic, MicOff, Send, Volume2, Square } from 'lucide-react';
+import { Plus, Sparkles, Mic, MicOff, Send, Volume2, Square, Chrome, Phone, AlertCircle } from 'lucide-react';
 import { useVoiceStore } from '../../store/useVoiceStore';
 import { voiceController } from '../../lib/voice/voiceController';
+import { VoiceCallOverlay, VoiceWaveform } from '../voice/VoiceCallOverlay';
 
 export const BottomComposer: React.FC = () => {
   const { 
@@ -18,6 +19,8 @@ export const BottomComposer: React.FC = () => {
   } = useApp();
 
   const [prompt, setPrompt] = useState('');
+  const [micMenuOpen, setMicMenuOpen] = useState(false);
+  const [launcherToast, setLauncherToast] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const {
@@ -25,6 +28,9 @@ export const BottomComposer: React.FC = () => {
     startVoiceMode,
     stopVoiceMode,
     interrupt,
+    mode,
+    setMode,
+    errorMessage,
   } = useVoiceStore();
 
   const handleSend = useCallback(async (textToSend?: string) => {
@@ -47,6 +53,7 @@ export const BottomComposer: React.FC = () => {
   useEffect(() => {
     voiceController.registerHandlers({
       onTranscriptUpdate: (transcript: string) => {
+        if (voiceController.getMode() !== 'prompt') return;
         setPrompt(transcript);
         if (textareaRef.current) {
           textareaRef.current.style.height = 'auto';
@@ -59,23 +66,50 @@ export const BottomComposer: React.FC = () => {
     });
   }, [handleSend]);
 
+  useEffect(() => {
+    if (!launcherToast) return;
+    const t = setTimeout(() => setLauncherToast(null), 6000);
+    return () => clearTimeout(t);
+  }, [launcherToast]);
+
   // Do not show on Chrome side panel page because that page has its own dedicated dock composer
   if (currentPage === 'chrome') {
     return null;
   }
 
+  const handleChromeLaunch = async () => {
+    const bob = (window as any).bob;
+    const alive = await bob?.extensionAlive?.();
+    if (alive?.alive) {
+      const res = await bob?.requestExtensionPanel?.();
+      setLauncherToast(
+        res?.queued
+          ? 'Opening Bob in Chrome — click his notification if Chrome asks for a click.'
+          : 'Bob’s local bridge is not listening right now.'
+      );
+    } else {
+      setIsChromeModalOpen(true);
+    }
+  };
+
   const handleToggleVoice = async () => {
     if (voiceState === 'SPEAKING') {
-      // Barge-in / Interrupt
       interrupt();
       return;
     }
 
     if (voiceState !== 'IDLE' && voiceState !== 'ERROR') {
       stopVoiceMode();
+      setMicMenuOpen(false);
     } else {
-      await startVoiceMode();
+      setMicMenuOpen((v) => !v);
     }
+  };
+
+  const startMode = async (m: 'prompt' | 'call') => {
+    setMode(m);
+    setMicMenuOpen(false);
+    await startVoiceMode();
   };
 
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -93,11 +127,15 @@ export const BottomComposer: React.FC = () => {
 
   const isVoiceActive = voiceState !== 'IDLE' && voiceState !== 'ERROR' && voiceState !== 'STOPPING';
 
+  if (isVoiceActive && mode === 'call') {
+    return <VoiceCallOverlay />;
+  }
+
   return (
     <>
       {/* Chrome launcher button on the right */}
       <button
-        onClick={() => setIsChromeModalOpen(true)}
+        onClick={handleChromeLaunch}
         title="Open Bob in Chrome"
         className={`fixed z-30 bottom-5 w-11 h-11 rounded-full bg-[var(--s)] border border-[var(--line)] shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all grid place-items-center ${
           isSidebarClosed
@@ -105,10 +143,14 @@ export const BottomComposer: React.FC = () => {
             : 'left-[calc(275px+(100vw-275px)/2+430px)]'
         } hidden xl:grid`}
       >
-        <span className="w-6 h-6 rounded-full relative p-1 bg-[conic-gradient(from_-35deg,#db4437_0_31%,#f4b400_31%_64%,#0f9d58_64%_100%)] flex items-center justify-center">
-          <span className="w-3.5 h-3.5 rounded-full bg-[#4285f4] ring-2 ring-white" />
-        </span>
+        <Chrome className="w-5 h-5 text-[#4285f4]" strokeWidth={1.8} />
       </button>
+
+      {launcherToast && (
+        <div className="fixed z-40 bottom-20 right-6 max-w-[300px] p-3 rounded-2xl bg-[var(--s)] border border-[var(--line)] shadow-xl text-[11.5px] leading-relaxed text-[var(--t)] animate-in fade-in slide-in-from-bottom-2 duration-200">
+          {launcherToast}
+        </div>
+      )}
 
       {/* Main Bottom Floating Composer */}
       <div
@@ -118,6 +160,10 @@ export const BottomComposer: React.FC = () => {
             : 'left-[calc(275px+(100vw-275px)/2)] w-[min(800px,calc(100vw-275px-70px))]'
         }`}
       >
+        {isVoiceActive && mode === 'prompt' && (
+          <VoiceWaveform height={22} className="px-2 pb-1 opacity-80" />
+        )}
+
         <textarea
           ref={textareaRef}
           value={prompt}
@@ -125,7 +171,7 @@ export const BottomComposer: React.FC = () => {
           onKeyDown={handleKeyDown}
           placeholder={
             voiceState === 'LISTENING'
-              ? 'Listening... speak naturally...'
+              ? 'Listening... speak naturally, your words appear here...'
               : voiceState === 'USER_SPEAKING'
               ? 'Transcribing your voice...'
               : voiceState === 'SPEAKING'
@@ -157,11 +203,20 @@ export const BottomComposer: React.FC = () => {
 
           <span className="flex-1" />
 
+          {errorMessage && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#fdecea] dark:bg-[#3a1512] border border-[#e5484d]/40 mr-1 max-w-[260px]">
+              <AlertCircle className="w-3.5 h-3.5 text-[#e5484d] shrink-0" />
+              <span className="text-[10.5px] font-semibold text-[#c0392b] dark:text-[#ff9d9a] truncate">{errorMessage}</span>
+            </div>
+          )}
+
           {/* Dynamic Voice State Indicators */}
           {voiceState === 'LISTENING' && (
             <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--ys)] dark:bg-[#382c0b] border border-[var(--y)]/50 animate-in fade-in duration-150 mr-1 shadow-xs">
               <span className="w-1.5 h-1.5 bg-[var(--y)] rounded-full animate-ping" />
-              <span className="text-[11.5px] font-semibold text-[var(--y)] select-none">Listening...</span>
+              <span className="text-[11.5px] font-semibold text-[var(--y)] select-none">
+                {mode === 'call' ? 'Call connected' : 'Listening...'}
+              </span>
             </div>
           )}
 
@@ -187,30 +242,52 @@ export const BottomComposer: React.FC = () => {
             </button>
           )}
 
-          {/* Voice button */}
-          <button
-            onClick={handleToggleVoice}
-            title={
-              voiceState === 'SPEAKING'
-                ? 'Interrupt speech'
-                : isVoiceActive
-                ? 'Stop voice mode'
-                : 'Start hands-free voice companion'
-            }
-            className={`w-8 h-8 rounded-full grid place-items-center transition-all cursor-pointer ${
-              voiceState === 'SPEAKING'
-                ? 'bg-blue-500 text-white shadow-md ring-2 ring-blue-400/40'
-                : isVoiceActive
-                ? 'bg-[var(--y)] text-neutral-900 shadow-md ring-2 ring-[var(--y)]/40 scale-105'
-                : 'hover:bg-[var(--s2)] text-[var(--m)] hover:text-[var(--t)]'
-            }`}
-          >
-            {isVoiceActive ? (
-              <MicOff className="w-4 h-4" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
-            ) : (
-              <Mic className="w-4 h-4" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+          {/* Voice button + mode pill */}
+          <div className="relative">
+            {micMenuOpen && !isVoiceActive && (
+              <div className="absolute bottom-10 right-0 z-40 flex items-center gap-1 p-1 rounded-full bg-[var(--s)] border border-[var(--line)] shadow-xl animate-in fade-in zoom-in-95 duration-150">
+                <button
+                  onClick={() => startMode('prompt')}
+                  title="Dictate into the composer, review, then send yourself"
+                  className="flex items-center gap-1.5 h-8 px-3 rounded-full bg-[var(--s2)] hover:bg-[var(--line)]/60 text-[11px] font-bold text-[var(--t)] transition-colors"
+                >
+                  <Mic className="w-3.5 h-3.5" />
+                  <span>Prompt</span>
+                </button>
+                <button
+                  onClick={() => startMode('call')}
+                  title="Hands-free call: Bob answers when you stop talking"
+                  className="flex items-center gap-1.5 h-8 px-3 rounded-full bg-[var(--y)] hover:bg-[#e0ac15] text-[#171717] text-[11px] font-bold transition-colors"
+                >
+                  <Phone className="w-3.5 h-3.5" />
+                  <span>Call</span>
+                </button>
+              </div>
             )}
-          </button>
+            <button
+              onClick={handleToggleVoice}
+              title={
+                voiceState === 'SPEAKING'
+                  ? 'Interrupt speech'
+                  : isVoiceActive
+                  ? 'Stop voice mode'
+                  : 'Dictate or call Bob'
+              }
+              className={`w-8 h-8 rounded-full grid place-items-center transition-all cursor-pointer ${
+                voiceState === 'SPEAKING'
+                  ? 'bg-blue-500 text-white shadow-md ring-2 ring-blue-400/40'
+                  : isVoiceActive
+                  ? 'bg-[var(--y)] text-neutral-900 shadow-md ring-2 ring-[var(--y)]/40 scale-105'
+                  : 'hover:bg-[var(--s2)] text-[var(--m)] hover:text-[var(--t)]'
+              }`}
+            >
+              {isVoiceActive ? (
+                <MicOff className="w-4 h-4" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+              ) : (
+                <Mic className="w-4 h-4" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+              )}
+            </button>
+          </div>
 
           {/* Send Button */}
           <button

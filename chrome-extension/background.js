@@ -137,7 +137,31 @@ function broadcast(message) {
 async function pingBridgeHandshake() {
   await getBridgeStatus({ force: true });
 }
-pingBridgeHandshake().catch(() => {});
+
+// ------------------------------------------------------------- pairing ---
+// Bind this extension to the running desktop install. The extension trades the
+// shared bootstrap token for a per-install secret once, then uses that secret.
+// The desktop still accepts the bootstrap token, so an extension that has not
+// paired (or an older build) keeps working — pairing is strictly additive.
+async function pairWithDesktop() {
+  const res = await bridgeFetch('/events/pair', { method: 'POST', body: {}, token: DEFAULT_BRIDGE_TOKEN });
+  if (res.ok && res.data && typeof res.data.token === 'string' && res.data.token.length >= 16) {
+    await setSettings({ bridgeToken: res.data.token });
+    return true;
+  }
+  return false;
+}
+
+// Pair (once) then handshake, so the desktop sees this extension as live and
+// the composer's Chrome button can open the panel instead of the install steps.
+async function syncWithDesktop() {
+  const settings = await getSettings();
+  const isPaired = settings.bridgeToken && settings.bridgeToken !== DEFAULT_BRIDGE_TOKEN;
+  if (!isPaired) await pairWithDesktop();
+  await pingBridgeHandshake();
+}
+
+syncWithDesktop().catch(() => {});
 
 // ------------------------------------------------------------- side panel ---
 
@@ -241,7 +265,10 @@ async function pollPanelRequest() {
 
 if (chrome.alarms) {
   chrome.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === PANEL_POLL_ALARM) pollPanelRequest();
+    if (alarm.name === PANEL_POLL_ALARM) {
+      syncWithDesktop();
+      pollPanelRequest();
+    }
   });
 }
 
@@ -666,6 +693,25 @@ async function handleMessage(message, sender) {
     case 'DELETE_TAB': {
       const tabs = (await readList(KEYS.tabs)).filter((t) => t.url !== message.url);
       await writeList(KEYS.tabs, tabs);
+      return { ok: true, tabs };
+    }
+
+    case 'SET_ALL_TABS_SELECTED': {
+      const selected = Boolean(message.selected);
+      // When selecting everything, persist any live (not-yet-saved) tabs first
+      // so the whole visible list can become primary context.
+      if (selected && Array.isArray(message.tabs)) {
+        const known = await readList(KEYS.tabs);
+        const knownUrls = new Set(known.map((t) => t.url));
+        for (const t of message.tabs) {
+          if (t && t.url && !knownUrls.has(t.url)) {
+            await saveTab({ id: t.tabId, title: t.title, url: t.url, favIconUrl: t.favIconUrl });
+          }
+        }
+      }
+      const tabs = (await readList(KEYS.tabs)).map((t) => ({ ...t, selected }));
+      await writeList(KEYS.tabs, tabs);
+      broadcast({ type: 'BOB_TABS_CHANGED', tabs });
       return { ok: true, tabs };
     }
 

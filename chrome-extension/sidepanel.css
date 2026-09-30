@@ -274,6 +274,8 @@ code {
   display: flex;
   gap: 6px;
   flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .sp-btn {

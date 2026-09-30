@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('bob', {
   openWeb: (sub) => ipcRenderer.invoke('bob:openWeb', sub),
   downloadExtension: () => ipcRenderer.invoke('bob:downloadExtension'),
   requestExtensionPanel: () => ipcRenderer.invoke('bob:requestExtensionPanel'),
+  extensionAlive: () => ipcRenderer.invoke('bob:extensionAlive'),
   info: () => ipcRenderer.invoke('bob:info'),
   getMemory: () => ipcRenderer.invoke('bob:getMemory'),
   saveMemory: (data) => ipcRenderer.invoke('bob:saveMemory', data),

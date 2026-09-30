@@ -5,11 +5,22 @@ import { stt } from './sttProvider';
 import { audioQueue } from './audioQueue';
 import { ResponseTextChunker } from './textChunker';
 
+export type VoiceMode = 'prompt' | 'call';
+
+const SILENCE_MS: Record<VoiceMode, number> = {
+  // Prompt mode: the draft settles into the composer after a long pause; the user sends it.
+  prompt: 10_000,
+  // Call mode: Bob answers as soon as you stop talking.
+  call: 3_000
+};
+
 export class VoiceController {
   private state: VoiceState = 'IDLE';
   private listeners: Set<VoiceStateListener> = new Set();
+  private energyListeners: Set<(energy: number) => void> = new Set();
   private currentTranscript = '';
   private isVoiceModeActive = false;
+  private mode: VoiceMode = 'prompt';
   private chunker: ResponseTextChunker;
   private onTranscriptUpdate?: (transcript: string, isFinal: boolean) => void;
   private onSubmitMessage?: (text: string) => Promise<void>;
@@ -22,11 +33,10 @@ export class VoiceController {
     });
 
     audioQueue.setPlaybackStateListener((isPlaying) => {
-      if (this.isVoiceModeActive) {
+      if (this.isVoiceModeActive && this.mode === 'call') {
         if (isPlaying && this.state !== 'USER_SPEAKING' && this.state !== 'INTERRUPTING') {
           this.setState('SPEAKING');
         } else if (!isPlaying && this.state === 'SPEAKING') {
-          // Finished speaking -> Return to LISTENING for continuous conversation!
           this.setState('LISTENING');
         }
       }
@@ -39,6 +49,11 @@ export class VoiceController {
     return () => this.listeners.delete(listener);
   }
 
+  public addEnergyListener(listener: (energy: number) => void): () => void {
+    this.energyListeners.add(listener);
+    return () => this.energyListeners.delete(listener);
+  }
+
   private setState(newState: VoiceState, error?: string): void {
     this.state = newState;
     this.listeners.forEach((l) => l(newState, { transcript: this.currentTranscript, error }));
@@ -46,6 +61,21 @@ export class VoiceController {
 
   public getState(): VoiceState {
     return this.state;
+  }
+
+  public getMode(): VoiceMode {
+    return this.mode;
+  }
+
+  public setMode(mode: VoiceMode): void {
+    if (this.mode === mode) return;
+    this.mode = mode;
+    if (this.isVoiceModeActive) {
+      // Restart VAD with the new silence window; recording itself continues in STT.
+      vad.stop();
+      const stream = micManager.getStream();
+      if (stream) this.startVad(stream);
+    }
   }
 
   public registerHandlers(handlers: {
@@ -56,37 +86,51 @@ export class VoiceController {
     this.onSubmitMessage = handlers.onSubmitMessage;
   }
 
+  private startVad(stream: MediaStream): void {
+    vad.start(
+      stream,
+      {
+        onSpeechStart: () => this.handleSpeechStart(),
+        onSpeechEnd: () => this.handleSpeechEnd(),
+        onEnergyChange: (energy) => this.energyListeners.forEach((fn) => fn(energy))
+      },
+      { silenceMs: SILENCE_MS[this.mode] }
+    );
+  }
+
   public async startVoiceMode(): Promise<boolean> {
     if (this.isVoiceModeActive) return true;
 
     try {
       const stream = await micManager.startCapture();
       this.isVoiceModeActive = true;
+      this.currentTranscript = '';
       this.setState('LISTENING');
 
-      // 1. Start VAD
-      vad.start(stream, {
-        onSpeechStart: () => this.handleSpeechStart(),
-        onSpeechEnd: () => this.handleSpeechEnd(),
-      });
+      this.startVad(stream);
 
-      // 2. Start STT
       await stt.start(
         (event) => {
           this.currentTranscript = event.transcript;
           this.onTranscriptUpdate?.(event.transcript, event.isFinal);
 
+          if (event.isFinal) {
+            if (this.mode === 'call') {
+              void this.handleFinalTranscript(event.transcript);
+            } else {
+              this.setState('LISTENING');
+            }
+            return;
+          }
+
           if (this.state !== 'USER_SPEAKING' && this.state !== 'SUBMITTING' && this.state !== 'THINKING') {
             this.setState('USER_SPEAKING');
           }
-
-          if (event.isFinal) {
-            this.handleFinalTranscript(event.transcript);
-          }
         },
         (errMsg) => {
-          console.warn('STT warning:', errMsg);
-        }
+          this.setState('ERROR', errMsg);
+        },
+        stream
       );
 
       return true;
@@ -115,7 +159,6 @@ export class VoiceController {
   private handleSpeechStart(): void {
     if (!this.isVoiceModeActive) return;
 
-    // BARGE-IN INTERRUPTION: If Bob is speaking and user starts talking, interrupt immediately!
     if (this.state === 'SPEAKING' || audioQueue.isPlaying()) {
       this.interrupt();
     }
@@ -127,10 +170,9 @@ export class VoiceController {
 
   private handleSpeechEnd(): void {
     if (!this.isVoiceModeActive) return;
-
-    if (this.state === 'USER_SPEAKING' && this.currentTranscript.trim()) {
-      this.handleFinalTranscript(this.currentTranscript);
-    }
+    // Transcribe everything said in this turn now, instead of waiting for the
+    // next 60-second chunk boundary.
+    void stt.flush();
   }
 
   private async handleFinalTranscript(transcript: string): Promise<void> {
@@ -152,7 +194,6 @@ export class VoiceController {
         console.warn('Voice submit message error:', err);
       } finally {
         this.isSubmitting = false;
-        // If no speech is queued or playing, go back to listening
         if (!audioQueue.isPlaying() && this.isVoiceModeActive) {
           this.setState('LISTENING');
         }
@@ -161,12 +202,12 @@ export class VoiceController {
   }
 
   public feedAIStreamChunk(chunkText: string): void {
-    if (!this.isVoiceModeActive) return;
+    if (!this.isVoiceModeActive || this.mode !== 'call') return;
     this.chunker.feed(chunkText);
   }
 
   public finalizeAIResponse(fullText?: string): void {
-    if (!this.isVoiceModeActive) return;
+    if (!this.isVoiceModeActive || this.mode !== 'call') return;
     this.chunker.flush();
   }
 

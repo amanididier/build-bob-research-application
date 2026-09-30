@@ -5,6 +5,7 @@ const http = require('node:http')
 const fs = require('node:fs')
 const path = require('node:path')
 const os = require('node:os')
+const crypto = require('node:crypto')
 
 let autoUpdater = null
 try {
@@ -26,6 +27,12 @@ let storePath = null
 let bridgeListening = false
 let pendingPanelRequest = null
 const PANEL_REQUEST_TTL_MS = 5 * 60 * 1000
+
+// Per-desktop-install pairing secret. The extension exchanges the shared
+// bootstrap token for this once, so a downloaded extension binds to *this*
+// install. The bootstrap token is always still accepted, so pairing can never
+// lock out an extension that has not paired yet.
+let pairingToken = null
 let updateState = {
   status: 'idle',
   version: app.getVersion(),
@@ -81,6 +88,28 @@ function notify() {
 }
 
 const id = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7)
+
+// Read (or first-run generate) the per-install pairing secret.
+function loadPairingToken() {
+  const file = path.join(app.getPath('userData'), 'bob-pairing.json')
+  try {
+    if (fs.existsSync(file)) {
+      const parsed = JSON.parse(fs.readFileSync(file, 'utf8'))
+      if (parsed && typeof parsed.token === 'string' && parsed.token.length >= 16) {
+        pairingToken = parsed.token
+        return
+      }
+    }
+  } catch (err) {
+    log('Read pairing token failed:', err.message)
+  }
+  pairingToken = crypto.randomBytes(24).toString('hex')
+  try {
+    fs.writeFileSync(file, JSON.stringify({ token: pairingToken, createdAt: Date.now() }, null, 2))
+  } catch (err) {
+    log('Write pairing token failed:', err.message)
+  }
+}
 
 function readBody(req) {
   return new Promise((resolve) => {
@@ -164,7 +193,7 @@ function startBridge() {
       (req.headers['authorization'] ? req.headers['authorization'].replace(/^Bearer\s+/i, '') : '') ||
       '';
 
-    if (providedToken && providedToken !== TOKEN && providedToken !== 'development-token') {
+    if (providedToken && providedToken !== TOKEN && providedToken !== 'development-token' && providedToken !== pairingToken) {
       return send(401, { error: 'Unauthorized bridge request' })
     }
 
@@ -183,6 +212,13 @@ function startBridge() {
     if (req.method !== 'POST') return send(404, { error: 'Not found' })
 
     const body = await readBody(req)
+
+    if (pathname === '/events/pair') {
+      // Extension exchanges the shared bootstrap token for this install's
+      // unique pairing secret, so a downloaded extension binds to *this*
+      // desktop. Idempotent, and the bootstrap token always stays valid.
+      return send(200, { ok: true, token: pairingToken, version: app.getVersion() })
+    }
 
     if (pathname === '/events/focus') {
       // Sent by the Chrome extension when the user clicks the Bob logo there.
@@ -386,6 +422,13 @@ function registerIpc() {
   ipcMain.handle('bob:requestExtensionPanel', () => {
     pendingPanelRequest = { at: Date.now(), version: app.getVersion() }
     return { ok: true, bridgeListening, queued: true }
+  })
+
+  // True when the Chrome extension has talked to the bridge recently, so the
+  // composer's Chrome button can open the live panel instead of install steps.
+  ipcMain.handle('bob:extensionAlive', () => {
+    const alive = Boolean(store.lastExtensionContact && Date.now() - store.lastExtensionContact < 300000)
+    return { alive, bridgeListening, lastSeen: store.lastExtensionContact || null }
   })
 
   // The renderer is loaded from file://, where fetch() cannot read packaged
@@ -640,6 +683,7 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(() => {
     loadStore()
+    loadPairingToken()
     registerIpc()
     startBridge()
     createWindow()

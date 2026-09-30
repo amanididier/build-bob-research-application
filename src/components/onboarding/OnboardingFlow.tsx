@@ -156,7 +156,7 @@ export const OnboardingFlow: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-[#f4f3ef] dark:bg-[#0f0f0f] animate-in fade-in duration-200">
       <div className="w-full max-w-[760px] bg-[var(--s)] border border-[var(--line)] shadow-2xl rounded-[32px] p-9 relative flex flex-col justify-between min-h-[620px]">
         
         {/* Step Indicator & Ambient Progress */}
