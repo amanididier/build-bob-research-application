@@ -24,7 +24,7 @@ export function RepoFixExporter() {
   const filesContent: Record<string, { desc: string; code: string }> = {
     'apps/desktop/main.cjs': {
       desc: 'Fixed Electron main process. Bundles offline renderer, starts bridge on 127.0.0.1:54321, reads bob-workspace.json, and exposes hardware RAM profiling IPC.',
-      code: `// Bob Research Companion - Desktop Main Process (v1.0.12)
+      code: `// Bob Research Companion - Desktop Main Process (v1.0.35)
 // Bundles offline interface (renderer/index.html) so it NEVER opens to a blank screen.
 const { app, BrowserWindow, shell, ipcMain } = require('electron')
 const http = require('node:http')
@@ -272,10 +272,10 @@ contextBridge.exposeInMainWorld('bob', {
 `,
     },
     'apps/desktop/package.json': {
-      desc: 'Package manifest with version 1.0.12 and explicit files bundle array.',
+      desc: 'Package manifest with version 1.0.35 and explicit files bundle array.',
       code: `{
   "name": "@bob/desktop",
-  "version": "1.0.12",
+  "version": "1.0.35",
   "description": "Bob desktop research companion",
   "author": "Bob",
   "private": true,
@@ -578,7 +578,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
               <span className="text-xs text-neutral-400">Zero Local PC Setup Required</span>
             </div>
             <h2 className="text-xl font-bold text-neutral-100 mt-1">
-              How to Publish Release v1.0.12 Directly on GitHub in 3 Minutes
+              How to Publish Release v1.0.35 Directly on GitHub in 3 Minutes
             </h2>
             <p className="text-sm text-neutral-300 mt-1 max-w-2xl">
               Since you don't have the project cloned locally, you can do this directly on GitHub's website in your browser!
@@ -622,9 +622,9 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
             <span className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold flex items-center justify-center">
               3
             </span>
-            <h4 className="text-sm font-semibold text-neutral-200">Draft Release 'v1.0.12'</h4>
+            <h4 className="text-sm font-semibold text-neutral-200">Draft Release 'v1.0.35'</h4>
             <p className="text-xs text-neutral-400">
-              Go to Releases → "Draft a new release". In the Tag field type <code className="text-violet-300 font-mono font-bold">v1.0.12</code> and click "Publish release". 
+              Go to Releases → "Draft a new release". In the Tag field type <code className="text-violet-300 font-mono font-bold">v1.0.35</code> and click "Publish release". 
               GitHub Actions automatically builds your Windows installer!
             </p>
           </div>

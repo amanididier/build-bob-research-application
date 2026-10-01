@@ -210,7 +210,7 @@ export function CompanionWorkspace({
               </div>
             </div>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-neutral-800 text-neutral-400">
-              v1.0.12
+              v1.0.35
             </span>
           </div>
 

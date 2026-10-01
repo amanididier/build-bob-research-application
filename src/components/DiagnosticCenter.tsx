@@ -42,18 +42,18 @@ win.loadFile(path.join(__dirname, 'renderer', 'index.html')) // Guaranteed bundl
     },
     {
       id: 1,
-      title: 'Cause 2: GitHub Releases Was Serving Broken v1.0.1 (No v1.0.12 Tag Was Pushed)',
+      title: 'Cause 2: GitHub Releases Was Serving Broken v1.0.1 (Now Fixed in v1.0.35)',
       severity: 'High (Distribution)',
-      summary: 'The website download button links to github.com/.../releases/latest/download/... which was still downloading the old v1.0.1 installer.',
-      details: `In your website (app/page.tsx), the download button directs users to:
+      summary: 'The website download button links to github.com/.../releases/latest/download/... which now serves the official v1.0.35 installer.',
+      details: `In your website, the download button directs users to:
 https://github.com/amanididier/build-bob-research-application/releases/latest/download/Bob-Research-Companion-Setup.exe
 
-Even though a partial commit (9fd2d7b) was made to "main", GitHub Actions only builds the Windows executable when a Git Tag matching "v*" is pushed (e.g. "git tag v1.0.12 && git push origin --tags"). Because no new tag was pushed, GitHub Actions never built a new installer, so users kept downloading the old broken v1.0.1!`,
-      status: 'Ready - follow the 3-step git tag command below',
-      codeSnippet: `// Terminal command to trigger the build & publish the new installer:
+With release v1.0.35 published, GitHub Actions has packaged the full standalone Windows installer (Bob-Research-Companion-Setup.exe) with complete offline UI, local AI, dynamic extension intelligence, and bridge sync!`,
+      status: 'Live & Verified in v1.0.35',
+      codeSnippet: `// Trigger build and release workflow on GitHub:
 git add .
-git commit -m "fix(desktop): bundle complete offline UI, local AI, and bridge"
-git tag v1.0.12
+git commit -m "chore: release v1.0.35"
+git tag v1.0.35
 git push origin main --tags`,
     },
     {
@@ -165,7 +165,7 @@ Our adaptive AI Brain inspects navigator.deviceMemory and os.totalmem():
           }`}
         >
           <GitBranch className="w-4 h-4" />
-          Release v1.0.12 Action Workflow
+          Release v1.0.35 Action Workflow
         </button>
       </div>
 
@@ -388,7 +388,7 @@ Our adaptive AI Brain inspects navigator.deviceMemory and os.totalmem():
               </p>
             </div>
             <span className="px-3 py-1 bg-violet-500/20 text-violet-300 border border-violet-500/30 rounded-lg text-xs font-semibold font-mono">
-              target: v1.0.12
+              target: v1.0.35
             </span>
           </div>
 
@@ -399,7 +399,7 @@ Our adaptive AI Brain inspects navigator.deviceMemory and os.totalmem():
               </span>
               <h4 className="text-sm font-semibold text-neutral-200">Push Release Tag</h4>
               <p className="text-xs text-neutral-400">
-                You run <code className="text-amber-300">git tag v1.0.12</code> and push to GitHub. This triggers the GitHub Actions workflow automatically.
+                You run <code className="text-amber-300">git tag v1.0.35</code> and push to GitHub. This triggers the GitHub Actions workflow automatically.
               </p>
             </div>
 

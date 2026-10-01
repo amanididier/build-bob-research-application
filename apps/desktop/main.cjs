@@ -209,25 +209,74 @@ function startBridge() {
       return send(200, { ok: true, pending })
     }
 
+    if (req.method === 'GET' && pathname === '/events/projects') {
+      return send(200, { ok: true, projects: store.projects || [] })
+    }
+
     if (req.method !== 'POST') return send(404, { error: 'Not found' })
 
     const body = await readBody(req)
 
-    if (pathname === '/events/pair') {
+    if (pathname === '/events/pending') {
+      pendingPanelRequest = { at: Date.now(), version: app.getVersion() }
+      return send(200, { ok: true, queued: true })
+    }
+
+    if (pathname === '/events/projects') {
+      const newProj = {
+        id: body.id || id(),
+        name: String(body.name || 'New Research').slice(0, 100),
+        color: body.color || 'blue',
+        createdAt: Date.now()
+      }
+      store.projects = [...(store.projects || []), newProj]
+      saveStore()
+      notify()
+      return send(200, { ok: true, project: newProj, projects: store.projects })
+    }
+
+    if (pathname === '/events/pair' || pathname === '/events/handshake') {
       // Extension exchanges the shared bootstrap token for this install's
       // unique pairing secret, so a downloaded extension binds to *this*
       // desktop. Idempotent, and the bootstrap token always stays valid.
-      return send(200, { ok: true, token: pairingToken, version: app.getVersion() })
+      return send(200, {
+        ok: true,
+        token: pairingToken,
+        version: app.getVersion(),
+        geminiKey: store.geminiKey || process.env.GEMINI_API_KEY || ''
+      })
+    }
+
+    if (pathname === '/events/key') {
+      if (body && typeof body.key === 'string') {
+        store.geminiKey = body.key.trim()
+        saveStore()
+      }
+      return send(200, { ok: true, key: store.geminiKey || process.env.GEMINI_API_KEY || '' })
     }
 
     if (pathname === '/events/chat') {
       // Mirror a Chrome-extension chat exchange into the desktop session.
       const at = Date.now()
       if (body.prompt) {
-        store.messages.push({ id: id(), role: 'user', text: String(body.prompt).slice(0, 20000), origin: 'chrome-extension', at })
+        store.messages.push({
+          id: body.promptId || id(),
+          role: 'user',
+          text: String(body.prompt).slice(0, 20000),
+          origin: 'chrome-extension',
+          projectId: body.projectId || null,
+          at
+        })
       }
       if (body.reply) {
-        store.messages.push({ id: id(), role: 'assistant', text: String(body.reply).slice(0, 20000), origin: 'chrome-extension', at: at + 1 })
+        store.messages.push({
+          id: body.replyId || id(),
+          role: 'assistant',
+          text: String(body.reply).slice(0, 20000),
+          origin: 'chrome-extension',
+          projectId: body.projectId || null,
+          at: at + 1
+        })
       }
       store.messages = store.messages.slice(-500)
       saveStore()
@@ -236,13 +285,17 @@ function startBridge() {
     }
 
     if (pathname === '/events/focus') {
-      // Sent by the Chrome extension when the user clicks the Bob logo there.
+      // Sent by the Chrome extension when the user clicks the Desktop button there.
       if (win && !win.isDestroyed()) {
         if (win.isMinimized()) win.restore()
+        win.setAlwaysOnTop(true)
         win.show()
         win.focus()
+        setTimeout(() => {
+          if (win && !win.isDestroyed()) win.setAlwaysOnTop(false)
+        }, 350)
       }
-      return send(200, { ok: true })
+      return send(200, { ok: true, focused: true })
     }
 
     if (pathname === '/events/tab' || pathname === '/api/tabs') {

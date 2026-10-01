@@ -78,18 +78,32 @@ export const BottomComposer: React.FC = () => {
   }
 
   const handleChromeLaunch = async () => {
-    const bob = (window as any).bob;
-    const alive = await bob?.extensionAlive?.();
-    if (alive?.alive) {
-      const res = await bob?.requestExtensionPanel?.();
+    const bob = typeof window !== 'undefined' ? (window as any).bob : null;
+    if (bob?.requestExtensionPanel) {
+      const res = await bob.requestExtensionPanel();
       setLauncherToast(
         res?.queued
-          ? 'Opening Bob in Chrome — click his notification if Chrome asks for a click.'
-          : 'Bob’s local bridge is not listening right now.'
+          ? 'Opening Bob Side Panel in Chrome…'
+          : 'Connecting to Chrome side panel…'
       );
-    } else {
-      setIsChromeModalOpen(true);
+      setTimeout(() => setLauncherToast(null), 3000);
+      return;
     }
+
+    try {
+      const res = await fetch('http://127.0.0.1:54321/events/pending', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-bob-token': 'development-token' },
+        body: JSON.stringify({ reason: 'user-clicked-chrome' })
+      });
+      if (res.ok) {
+        setLauncherToast('Opening Bob Side Panel in Chrome…');
+        setTimeout(() => setLauncherToast(null), 3000);
+        return;
+      }
+    } catch {}
+
+    setIsChromeModalOpen(true);
   };
 
   const handleToggleVoice = async () => {

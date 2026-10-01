@@ -117,7 +117,7 @@ async function getBridgeStatus({ force = false } = {}) {
   return bridgeCache;
 }
 
-async function sendToBridge(path, body) {
+async function sendToBridge(path, body, { method = 'POST' } = {}) {
   let status = await getBridgeStatus();
   if (!status.connected) {
     // Retry once immediately in case Bob Desktop was just opened
@@ -125,11 +125,11 @@ async function sendToBridge(path, body) {
   }
   if (!status.connected) return { delivered: false, reason: status.detail || 'unreachable' };
   const settings = await getSettings();
-  const res = await bridgeFetch(path, { method: 'POST', body, token: settings.bridgeToken });
+  const res = await bridgeFetch(path, { method, body, token: settings.bridgeToken });
   if (res.ok) {
     bridgeCache.connected = true;
     bridgeCache.checkedAt = Date.now();
-    return { delivered: true };
+    return { delivered: true, body: res.json };
   }
   return { delivered: false, reason: res.status === 401 ? 'bad-token' : 'rejected' };
 }
@@ -151,7 +151,12 @@ async function pingBridgeHandshake() {
 async function pairWithDesktop() {
   const res = await bridgeFetch('/events/pair', { method: 'POST', body: {}, token: DEFAULT_BRIDGE_TOKEN });
   if (res.ok && res.data && typeof res.data.token === 'string' && res.data.token.length >= 16) {
-    await setSettings({ bridgeToken: res.data.token });
+    const settings = await getSettings();
+    const updates = { bridgeToken: res.data.token };
+    if (res.data.geminiKey && !settings.geminiKey) {
+      updates.geminiKey = res.data.geminiKey;
+    }
+    await setSettings(updates);
     return true;
   }
   return false;
@@ -258,6 +263,22 @@ async function pollPanelRequest() {
   const res = await bridgeFetch('/events/pending', { token: settings.bridgeToken });
   const pending = res.ok && res.data ? res.data.pending : null;
   if (!pending) return;
+
+  // Try to open side panel directly on the active or primary window
+  const windows = await chrome.windows.getAll();
+  const target = windows.find((w) => w.focused) || windows[0];
+  if (target && chrome.sidePanel && chrome.sidePanel.open) {
+    try {
+      await chrome.sidePanel.open({ windowId: target.id });
+      if (chrome.windows.update) {
+        await chrome.windows.update(target.id, { focused: true });
+      }
+      await chrome.action.setBadgeText({ text: '' }).catch(() => {});
+      return;
+    } catch {
+      // In case Chrome requires notification user gesture
+    }
+  }
 
   const notificationId = nowId('panel');
   chrome.notifications.create(notificationId, {
@@ -1012,12 +1033,37 @@ async function handleMessage(message, sender) {
     case 'CHAT': {
       const contextText = await buildContext(message.context || {});
       const prompt = String(message.prompt || '');
-      const result = await callGemini(prompt, contextText);
+      const projectId = (message.context && message.context.project) || null;
+      const promptId = 'msg_user_' + Date.now();
+      const replyId = 'msg_asst_' + (Date.now() + 1);
+
+      // 1. Immediately mirror the user's prompt into Bob Desktop
+      sendToBridge('/events/chat', {
+        promptId,
+        prompt,
+        projectId,
+        url: (message.context && message.context.url) || '',
+        title: (message.context && message.context.title) || '',
+      }).catch(() => {});
+
+      // 2. Call Gemini
+      let result = await callGemini(prompt, contextText);
+
+      // If no key in extension settings, try fetching the key from Bob Desktop bridge
+      if (!result.ok && result.reason === 'no-key') {
+        const keyRes = await bridgeFetch('/events/key');
+        if (keyRes.ok && keyRes.data && keyRes.data.key) {
+          await setSettings({ geminiKey: keyRes.data.key });
+          result = await callGemini(prompt, contextText);
+        }
+      }
+
+      // 3. Mirror assistant reply into Bob Desktop
       if (result && result.ok) {
-        // Mirror the exchange into Bob Desktop so it shows in the session.
         sendToBridge('/events/chat', {
-          prompt,
+          replyId,
           reply: result.reply,
+          projectId,
           url: (message.context && message.context.url) || '',
           title: (message.context && message.context.title) || '',
         }).catch(() => {});
@@ -1080,6 +1126,22 @@ async function handleMessage(message, sender) {
       if (!status.connected) return { ok: false, reason: status.detail || 'desktop-not-running' };
       const res = await sendToBridge('/events/focus', { source: 'chrome-extension' });
       return res.delivered ? { ok: true } : { ok: false, reason: res.reason || 'desktop-rejected' };
+    }
+
+    case 'GET_PROJECTS': {
+      const res = await sendToBridge('/events/projects', null, { method: 'GET' });
+      if (res.delivered && res.body && Array.isArray(res.body.projects)) {
+        return { ok: true, projects: res.body.projects };
+      }
+      return { ok: false, projects: [] };
+    }
+
+    case 'CREATE_PROJECT': {
+      const res = await sendToBridge('/events/projects', message.project || { name: 'New Research' });
+      if (res.delivered && res.body) {
+        return { ok: true, project: res.body.project, projects: res.body.projects };
+      }
+      return { ok: false, reason: res.reason || 'bridge-error' };
     }
 
     case 'OPEN_SIDE_PANEL': {

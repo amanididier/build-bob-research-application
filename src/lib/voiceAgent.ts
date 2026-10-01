@@ -10,6 +10,8 @@
  * - Audio visualizer wave animation hooks
  */
 
+import { tts } from './voice/ttsProvider';
+
 export interface VoiceProfile {
   id: string;
   name: string;
@@ -108,7 +110,6 @@ class BobVoiceAgent {
    * Speak response in a kind, conversational manner
    */
   public speak(text: string, onEnd?: () => void): void {
-    if (!this.synth) return;
     this.stopSpeaking();
 
     const cleanText = text
@@ -122,43 +123,34 @@ class BobVoiceAgent {
 
     if (!cleanText) return;
 
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    if (this.preferredVoice) {
-      utterance.voice = this.preferredVoice;
-    }
-    utterance.volume = this.voiceVolume;
-    utterance.pitch = this.voicePitch;
-    utterance.rate = this.voiceRate;
+    this.isSpeaking = true;
+    this.notify();
 
-    utterance.onstart = () => {
-      this.isSpeaking = true;
-      this.notify();
-    };
-
-    utterance.onend = () => {
-      this.isSpeaking = false;
-      this.currentUtterance = null;
-      this.notify();
-      if (onEnd) onEnd();
-    };
-
-    utterance.onerror = () => {
-      this.isSpeaking = false;
-      this.currentUtterance = null;
-      this.notify();
-    };
-
-    this.currentUtterance = utterance;
-    this.synth.speak(utterance);
+    tts.speak(cleanText, {
+      onStart: () => {
+        this.isSpeaking = true;
+        this.notify();
+      },
+      onEnd: () => {
+        this.isSpeaking = false;
+        this.notify();
+        if (onEnd) onEnd();
+      },
+      onError: () => {
+        this.isSpeaking = false;
+        this.notify();
+      }
+    });
   }
 
   public stopSpeaking(): void {
+    tts.stop();
     if (this.synth) {
       this.synth.cancel();
-      this.isSpeaking = false;
-      this.currentUtterance = null;
-      this.notify();
     }
+    this.isSpeaking = false;
+    this.currentUtterance = null;
+    this.notify();
   }
 
   public toggleSpeak(text: string, onEnd?: () => void): void {

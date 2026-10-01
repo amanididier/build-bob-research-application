@@ -1,6 +1,8 @@
 export class MicrophoneManager {
   private mediaStream: MediaStream | null = null;
   private audioContext: AudioContext | null = null;
+  private analyser: AnalyserNode | null = null;
+  private sourceNode: MediaStreamAudioSourceNode | null = null;
   private isCapturing = false;
 
   public async requestPermission(): Promise<boolean> {
@@ -35,6 +37,21 @@ export class MicrophoneManager {
           autoGainControl: true,
         },
       });
+
+      try {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) {
+          this.audioContext = new AudioCtx();
+          this.analyser = this.audioContext.createAnalyser();
+          this.analyser.fftSize = 256;
+          this.analyser.smoothingTimeConstant = 0.5;
+          this.sourceNode = this.audioContext.createMediaStreamSource(this.mediaStream);
+          this.sourceNode.connect(this.analyser);
+        }
+      } catch (audioErr) {
+        console.warn('AudioContext setup error:', audioErr);
+      }
+
       this.isCapturing = true;
       return this.mediaStream;
     } catch (err: any) {
@@ -47,7 +64,19 @@ export class MicrophoneManager {
     return this.mediaStream;
   }
 
+  public getAnalyser(): AnalyserNode | null {
+    return this.analyser;
+  }
+
   public stopCapture(): void {
+    if (this.sourceNode) {
+      try {
+        this.sourceNode.disconnect();
+      } catch {}
+      this.sourceNode = null;
+    }
+    this.analyser = null;
+
     if (this.mediaStream) {
       this.mediaStream.getTracks().forEach((track) => {
         try {
