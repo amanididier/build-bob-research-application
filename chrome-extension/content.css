@@ -1,1 +1,509 @@
-PLACEHOLDER
+/* Bob Research Companion — page-level UI.
+   Soft blue (selection-style), warm yellow (reader-style), green #89E219.
+   Vertical 90° Traffic Light Floating Pill with drag handle,
+   and Google Colab-style Inline Ask Bob card. */
+
+#bob-ui-root {
+  all: initial;
+  display: block;
+  position: static;
+  z-index: 2147483647;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+#bob-ui-root * {
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* ------------------------------------------------------------ highlights */
+
+/* Shared: thicker band above/below text (reader-app style) */
+mark.bob-hl {
+  color: inherit;
+  border-radius: 3px;
+  padding: 0.32em 0.2em;
+  margin: 0 0.02em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  transition: box-shadow 0.18s ease, background-color 0.18s ease;
+  line-height: 1.7;
+  font-weight: inherit;
+}
+
+/* Soft sky blue — matches first reference (selection-style blue) */
+mark.bob-hl-blue {
+  background-color: rgba(120, 175, 255, 0.48);
+  box-shadow: inset 0 0 0 1px rgba(90, 150, 240, 0.18);
+}
+
+/* Warm reader yellow — matches second reference */
+mark.bob-hl-yellow {
+  background-color: rgba(255, 214, 110, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(230, 180, 60, 0.2);
+}
+
+/* Green #89E219 — same soft translucent style */
+mark.bob-hl-green {
+  background-color: rgba(137, 226, 25, 0.42);
+  box-shadow: inset 0 0 0 1px rgba(100, 180, 20, 0.18);
+}
+
+mark.bob-hl.bob-hl-focus {
+  box-shadow: 0 0 0 2.5px #171717, 0 3px 12px rgba(0, 0, 0, 0.18);
+}
+
+/* -------------------------------------------------------- selection card */
+
+.bob-card {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 5px 6px;
+  background: rgba(23, 23, 23, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(12px);
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transition: opacity 0.14s ease, transform 0.14s ease;
+  user-select: none;
+  z-index: 2147483647;
+}
+
+.bob-card-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px) scale(0.98);
+}
+
+.bob-card-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: #f5f4f0;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.bob-card-action:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+}
+
+.bob-card-action.primary {
+  color: #fffc00;
+}
+
+.bob-card-action.primary:hover {
+  background: rgba(255, 252, 0, 0.2);
+  color: #ffffff;
+}
+
+/* -------------------------------------- vertical traffic light standing pill */
+
+.bob-traffic-pill {
+  position: fixed;
+  right: 18px;
+  top: 40%;
+  width: 44px;
+  padding: 8px 6px 10px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 26px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16);
+  backdrop-filter: blur(14px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+  z-index: 2147483646;
+  cursor: default;
+  transition: box-shadow 0.18s ease;
+}
+
+@media (prefers-color-scheme: dark) {
+  .bob-traffic-pill {
+    background: rgba(28, 27, 24, 0.92);
+    border-color: rgba(255, 255, 255, 0.14);
+  }
+}
+
+.bob-traffic-pill:hover {
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.22);
+}
+
+.bob-pill-drag-handle {
+  width: 32px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  cursor: grab;
+  color: #888880;
+  transition: color 0.12s ease;
+}
+
+.bob-pill-drag-handle:active {
+  cursor: grabbing;
+  color: #171717;
+}
+
+.bob-traffic-lights {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+}
+
+.bob-light-circle {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: transform 0.14s ease, box-shadow 0.14s ease;
+}
+
+.bob-light-circle:hover {
+  transform: scale(1.3);
+}
+
+.bob-light-circle.blue {
+  background: #78afff;
+  box-shadow: 0 0 6px rgba(120, 175, 255, 0.55);
+}
+
+.bob-light-circle.green {
+  background: #89E219;
+  box-shadow: 0 0 6px rgba(137, 226, 25, 0.55);
+}
+
+.bob-light-circle.yellow {
+  background: #ffd66e;
+  box-shadow: 0 0 6px rgba(255, 214, 110, 0.55);
+}
+
+.bob-pill-overflow-blur {
+  width: 22px;
+  height: 10px;
+  background: linear-gradient(to bottom, rgba(160, 160, 160, 0.5), transparent);
+  border-radius: 4px;
+  filter: blur(2px);
+  margin-top: -2px;
+}
+
+.bob-pill-nav-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: none;
+  background: #ffd66e;
+  color: #171717;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 800;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  transition: transform 0.14s ease;
+}
+
+.bob-pill-nav-btn:hover {
+  transform: scale(1.12);
+}
+
+.bob-pill-clear-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  transition: background 0.12s ease, transform 0.12s ease;
+}
+
+.bob-pill-clear-btn:hover {
+  background: #ef4444;
+  color: #ffffff;
+  transform: scale(1.1);
+}
+
+.bob-pill-preview-card {
+  position: absolute;
+  right: 54px;
+  top: 0;
+  width: 260px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 16px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(14px);
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #171717;
+}
+
+@media (prefers-color-scheme: dark) {
+  .bob-pill-preview-card {
+    background: rgba(28, 27, 24, 0.98);
+    border-color: rgba(255, 255, 255, 0.15);
+    color: #f5f4f0;
+  }
+}
+
+.bob-traffic-pill:hover .bob-pill-preview-card {
+  display: flex;
+}
+
+.bob-preview-item {
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.04);
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.bob-preview-item:hover {
+  background: rgba(255, 214, 110, 0.3);
+}
+
+.bob-preview-item-color {
+  font-size: 9.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.bob-preview-item-color.blue { color: #3b82f6; }
+.bob-preview-item-color.green { color: #65a30d; }
+.bob-preview-item-color.yellow { color: #ca8a04; }
+
+/* --------------------------------------- inline colab-style ask bob card */
+
+.bob-colab-card {
+  position: absolute;
+  width: 490px;
+  max-width: calc(100vw - 36px);
+  background: #ffffff;
+  color: #171717;
+  border: 1px solid #d4d4cd;
+  border-radius: 18px;
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.22);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 2147483647;
+  animation: bob-colab-pop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes bob-colab-pop {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-color-scheme: dark) {
+  .bob-colab-card {
+    background: #1c1b18;
+    color: #f5f4f0;
+    border-color: #383630;
+  }
+}
+
+.bob-colab-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.bob-colab-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.bob-colab-mascot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fffc00;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.bob-colab-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bob-colab-icon-btn {
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #888880;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.bob-colab-icon-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: #171717;
+}
+
+.bob-colab-excerpt {
+  padding: 6px 10px;
+  background: rgba(255, 214, 110, 0.2);
+  border-left: 3px solid #ffd66e;
+  border-radius: 0 6px 6px 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #55554f;
+  max-height: 60px;
+  overflow: hidden;
+}
+
+@media (prefers-color-scheme: dark) {
+  .bob-colab-excerpt {
+    color: #a8a69e;
+  }
+}
+
+.bob-colab-body {
+  max-height: 210px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 2px;
+}
+
+.bob-colab-thread-msg {
+  font-size: 12.5px;
+  line-height: 1.5;
+  padding: 8px 10px;
+  border-radius: 10px;
+  word-break: break-word;
+}
+
+.bob-colab-thread-msg.user {
+  align-self: flex-end;
+  background: #171717;
+  color: #ffffff;
+  max-width: 90%;
+}
+
+.bob-colab-thread-msg.bob {
+  align-self: flex-start;
+  background: rgba(0, 0, 0, 0.05);
+  max-width: 96%;
+}
+
+@media (prefers-color-scheme: dark) {
+  .bob-colab-thread-msg.bob {
+    background: rgba(255, 255, 255, 0.08);
+  }
+}
+
+.bob-colab-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #d4d4cd;
+  border-radius: 12px;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.bob-colab-form:focus-within {
+  border-color: #78afff;
+  box-shadow: 0 0 0 2px rgba(120, 175, 255, 0.25);
+}
+
+.bob-colab-input {
+  flex: 1 1 auto;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  outline: none;
+  padding: 4px 0;
+}
+
+.bob-colab-send {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: none;
+  background: #ffd66e;
+  color: #171717;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex: none;
+}
+
+.bob-colab-send:hover {
+  background: #ffcc4d;
+}
+
+/* ----------------------------------------------------------------- toast */
+
+.bob-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translate(-50%, 12px);
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.18s ease;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+  z-index: 2147483647;
+}
+
+.bob-toast-show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.bob-toast-ok {
+  background: #14532d;
+  color: #86efac;
+}
+
+.bob-toast-info {
+  background: #171717;
+  color: #f5f4f0;
+}
