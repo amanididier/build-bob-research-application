@@ -19,6 +19,7 @@
     tabs: [],
     tasks: [],
     scores: new Map(),
+    manualTabSelection: false,
     busy: false,
   };
 
@@ -251,33 +252,43 @@
   }
 
   function scoreTab(tab, focus) {
+    // Prefer the score Bob computed in the background (it can see page text).
+    if (typeof tab.relevance === 'number') {
+      return { score: tab.relevance, tier: tierOf(tab.relevance), why: tab.relevanceWhy || '' };
+    }
     if (!focus.size) return { score: null, tier: 'unknown', why: 'no focus set' };
 
     const title = String(tab.title || '').toLowerCase();
     const url = String(tab.url || '').toLowerCase();
-    const titleTokens = new Set(title.replace(/[^a-z0-9\s-]/g, ' ').split(/\s+/).filter(Boolean));
+    const body = String(tab.textSample || '').toLowerCase();
+    const titleTokens = title.replace(/[^a-z0-9\s-]/g, ' ').split(/\s+/).filter(Boolean);
 
-    let matched = [];
+    const matched = [];
     let weight = 0;
+    let bodyHits = 0;
     focus.forEach((focusWeight, keyword) => {
-      const inTitle = Array.from(titleTokens).some((token) => token === keyword || token.startsWith(keyword) || keyword.startsWith(token));
+      const inTitle = titleTokens.some((t) => t === keyword || t.startsWith(keyword) || keyword.startsWith(t)) || title.includes(keyword);
       const inUrl = url.includes(keyword);
-      if (inTitle || inUrl) {
+      const inBody = body ? body.includes(keyword) : false;
+      if (inTitle || inUrl || inBody) {
         matched.push(keyword);
-        weight += (inTitle ? 2 : 1) * (1 + Math.min(focusWeight, 3) * 0.2);
+        if (inBody) bodyHits += 1;
+        weight += (inTitle ? 2.2 : 0) + (inUrl ? 1.1 : 0) + (inBody ? 1.7 : 0) + Math.min(focusWeight, 4) * 0.15;
       }
     });
 
-    if (!matched.length) return { score: 12, tier: 'red', why: 'no keyword overlap' };
+    if (!matched.length) return { score: 6, tier: 'red', why: 'no keyword overlap' };
 
-    const score = Math.max(20, Math.min(100, Math.round(38 + weight * 11)));
-    const tier = score >= 80 ? 'green' : score >= 66 ? 'blue' : score >= 50 ? 'yellow' : 'red';
-    return { score, tier, why: matched.slice(0, 3).join(', ') };
+    const coverage = matched.length / focus.size;
+    const strength = Math.min(1, weight / (focus.size * 1.7));
+    const score = Math.max(4, Math.min(99, Math.round(100 * (0.55 * coverage + 0.45 * strength))));
+    const tier = tierOf(score);
+    return { score, tier, why: matched.slice(0, 3).join(', ') + (bodyHits ? ' · in page text' : '') };
   }
 
   function tierOf(score) {
     if (score === null) return 'unknown';
-    return score >= 80 ? 'green' : score >= 66 ? 'blue' : score >= 50 ? 'yellow' : 'red';
+    return score >= 80 ? 'green' : score >= 62 ? 'blue' : score >= 40 ? 'yellow' : 'red';
   }
 
   function renderTabs() {
@@ -325,6 +336,8 @@
       const result = await send({ type: 'SET_TAB_SELECTED', url: tab.url, selected: !tab.selected, tab });
       if (result && result.ok) {
         state.tabs = result.tabs;
+        state.manualTabSelection = true;
+        updateAutoButton();
         renderTabs();
       }
     });
@@ -573,6 +586,8 @@
       'btn-add-current-tab',
       'btn-select-all-tabs',
       'btn-clear-tabs',
+      'btn-auto-tabs',
+      'tabs-auto-hint',
       'research-focus',
       'task-form',
       'task-input',
@@ -632,6 +647,13 @@
         renderNotes();
       } else if (message.type === 'BOB_TAB_ADDED') {
         loadTabs();
+      } else if (message.type === 'BOB_TABS_CHANGED') {
+        if (Array.isArray(message.tabs)) {
+          state.tabs = message.tabs;
+          refreshScores().then(renderTabs).catch(() => renderTabs());
+        } else {
+          loadTabs();
+        }
       } else if (message.type === 'BOB_NOTES_CHANGED') {
         state.notes = message.notes || [];
         renderNotes();
@@ -650,8 +672,10 @@
     state.tabs = result.tabs || [];
     state.tasks = result.tasks || [];
     state.settings = { ...state.settings, ...(result.settings || {}), researchFocus: (result.settings && result.settings.researchFocus) || '' };
+    state.manualTabSelection = Boolean(result.settings && result.settings.manualTabSelection);
     state.hasGeminiKey = Boolean(result.hasGeminiKey);
     dom.researchFocus.value = state.settings.researchFocus || '';
+    updateAutoButton();
     renderBridge(result.bridge);
     renderNotes();
     renderTasks();
@@ -662,7 +686,37 @@
     const result = await send({ type: 'GET_TABS' });
     if (result && result.ok) {
       state.tabs = result.tabs || [];
+      await refreshScores();
       renderTabs();
+    }
+  }
+
+  // Ask the background to score every open tab against the research focus. The
+  // background can read page text, so these scores are content-driven.
+  async function refreshScores() {
+    const res = await send({ type: 'SCORE_TABS', pageTitle: state.tab ? state.tab.title : '' });
+    if (!res || !res.ok) return;
+    const byUrl = new Map((res.scores || []).map((s) => [s.url, s]));
+    state.tabs = state.tabs.map((t) => {
+      const s = byUrl.get(t.url);
+      return s ? { ...t, relevance: s.score, relevanceWhy: s.why } : t;
+    });
+    state.manualTabSelection = Boolean(res.manualTabSelection);
+    updateAutoButton();
+  }
+
+  function updateAutoButton() {
+    if (!dom.btnAutoTabs) return;
+    const auto = !state.manualTabSelection;
+    dom.btnAutoTabs.textContent = auto ? 'Auto: on' : 'Auto: off';
+    dom.btnAutoTabs.classList.toggle('active', auto);
+    dom.btnAutoTabs.title = auto
+      ? 'Bob is reading all open tabs and auto-picking the most relevant. Click to hand-pick yourself.'
+      : 'You hand-picked tabs, so Bob is using only those. Click to let Bob auto-pick again.';
+    if (dom.tabsAutoHint) {
+      dom.tabsAutoHint.textContent = auto
+        ? 'Auto mode: Bob reads every open tab each minute and cites the most relevant — no need to select.'
+        : 'Manual mode: Bob uses only the tabs you selected below.';
     }
   }
 
@@ -807,11 +861,37 @@
   }
 
   function wireTabsView() {
-    dom.btnScoreTabs.addEventListener('click', () => renderTabs());
+    dom.btnScoreTabs.addEventListener('click', () => refreshScores().then(renderTabs));
+
+    if (dom.btnAutoTabs) {
+      dom.btnAutoTabs.addEventListener('click', async () => {
+        if (state.manualTabSelection) {
+          const result = await send({ type: 'SET_AUTO_TABS' });
+          if (result && result.ok) {
+            state.manualTabSelection = false;
+            state.tabs = result.tabs || state.tabs;
+            updateAutoButton();
+            await refreshScores();
+            renderTabs();
+          }
+        } else {
+          // Leave auto mode: keep whatever Bob currently picked as the manual set.
+          const result = await send({ type: 'SET_ALL_TABS_SELECTED', selected: true, tabs: state.tabs.filter((t) => t.selected) });
+          if (result && result.ok) {
+            state.manualTabSelection = true;
+            updateAutoButton();
+            await loadTabs();
+            renderTabs();
+          }
+        }
+      });
+    }
 
     dom.btnSelectAllTabs.addEventListener('click', async () => {
       const result = await send({ type: 'SET_ALL_TABS_SELECTED', selected: true, tabs: state.tabs });
       if (result && result.ok) {
+        state.manualTabSelection = true;
+        updateAutoButton();
         await loadTabs();
         renderTabs();
       }
@@ -820,6 +900,8 @@
     dom.btnClearTabs.addEventListener('click', async () => {
       const result = await send({ type: 'SET_ALL_TABS_SELECTED', selected: false });
       if (result && result.ok) {
+        state.manualTabSelection = true;
+        updateAutoButton();
         await loadTabs();
         renderTabs();
       }

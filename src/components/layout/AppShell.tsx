@@ -13,6 +13,7 @@ import { ThinkingCard } from '../modals/ThinkingCard';
 import { ChromeExtensionModal } from '../modals/ChromeExtensionModal';
 import { OnboardingFlow } from '../onboarding/OnboardingFlow';
 import { AuthModal } from '../modals/AuthModal';
+import { ErrorBoundary } from '../ErrorBoundary';
 
 // Pages
 import { HomePage } from '../../pages/Home/HomePage';
@@ -26,7 +27,7 @@ import { NotificationsPage } from '../../pages/Notifications/NotificationsPage';
 import { DiagnosticsPage } from '../../pages/Diagnostics/DiagnosticsPage';
 
 export const AppShell: React.FC = () => {
-  const { currentPage, isAuthModalOpen, setIsAuthModalOpen, triggerThinking } = useApp();
+  const { currentPage, isAuthModalOpen, setIsAuthModalOpen, triggerThinking, activeResearchId, researchSubView } = useApp();
 
   const renderCurrentPage = () => {
     switch (currentPage) {
@@ -70,7 +71,9 @@ export const AppShell: React.FC = () => {
 
           {/* Page Content Viewport */}
           <main className="flex-1 overflow-y-auto relative">
-            {renderCurrentPage()}
+            <ErrorBoundary key={`${currentPage}-${activeResearchId}-${researchSubView}`}>
+              {renderCurrentPage()}
+            </ErrorBoundary>
           </main>
 
           {/* Bottom Floating Composer */}

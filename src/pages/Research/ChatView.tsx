@@ -60,7 +60,17 @@ export const ChatView: React.FC = () => {
     }
   };
 
-  const project = projects.find((p) => p.id === activeResearchId) || projects[0];
+  const project =
+    projects.find((p) => p.id === activeResearchId) ||
+    projects[0] || {
+      id: activeResearchId,
+      title: 'New research',
+      sourceCount: 0,
+      openTasks: 0,
+      status: 'active',
+      dotColor: '#4385f5',
+      summary: '',
+    };
 
   const handleCopy = (id: string, text: string) => {
     navigator.clipboard?.writeText(text);

@@ -11,7 +11,11 @@ contextBridge.exposeInMainWorld('bob', {
   info: () => ipcRenderer.invoke('bob:info'),
   getMemory: () => ipcRenderer.invoke('bob:getMemory'),
   saveMemory: (data) => ipcRenderer.invoke('bob:saveMemory', data),
-  onChange: (fn) => ipcRenderer.on('bob:changed', () => fn()),
+  onChange: (fn) => {
+    const handler = () => fn()
+    ipcRenderer.on('bob:changed', handler)
+    return () => ipcRenderer.removeListener('bob:changed', handler)
+  },
   checkForUpdates: () => ipcRenderer.invoke('bob:checkUpdates'),
   getUpdateState: () => ipcRenderer.invoke('bob:getUpdateState'),
   checkExtensionConnection: () => ipcRenderer.invoke('bob:checkExtensionConnection'),

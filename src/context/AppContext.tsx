@@ -576,7 +576,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const unsub = (window as any).bob.onChange(() => {
         syncFromDesktop();
       });
-      return unsub;
+      return typeof unsub === 'function' ? unsub : undefined;
     }
   }, [activeResearchId]);
 

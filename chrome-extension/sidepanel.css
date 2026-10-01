@@ -312,6 +312,12 @@ code {
   background: var(--surface-secondary);
 }
 
+.sp-btn.ghost.active {
+  background: var(--yellow);
+  color: #1e1d1b;
+  border-color: var(--yellow);
+}
+
 .sp-empty {
   font-size: 11.5px;
   color: var(--muted);

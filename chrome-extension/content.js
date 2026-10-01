@@ -868,7 +868,7 @@
       return true;
     }
     if (type === 'BOB_EXTRACT_PAGE_TEXT') {
-      sendResponse({ ok: true, title: document.title, url: location.href, excerpt: collectPageText(8000) });
+      sendResponse({ ok: true, title: document.title, url: location.href, excerpt: collectPageText(100000) });
       return false;
     }
     if (type === 'BOB_SAVE_SELECTION_AS_NOTE') {

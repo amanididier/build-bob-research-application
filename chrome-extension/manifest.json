@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Bob — Research Companion",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Bob's research companion for the web: highlights, notes, tab intelligence and chat in a native Chrome side panel, synced with Bob Desktop.",
   "permissions": [
     "sidePanel",
