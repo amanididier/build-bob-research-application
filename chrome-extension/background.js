@@ -754,7 +754,17 @@ async function handleMessage(message, sender) {
 
     case 'CHAT': {
       const contextText = await buildContext(message.context || {});
-      const result = await callGemini(String(message.prompt || ''), contextText);
+      const prompt = String(message.prompt || '');
+      const result = await callGemini(prompt, contextText);
+      if (result && result.ok) {
+        // Mirror the exchange into Bob Desktop so it shows in the session.
+        sendToBridge('/events/chat', {
+          prompt,
+          reply: result.reply,
+          url: (message.context && message.context.url) || '',
+          title: (message.context && message.context.title) || '',
+        }).catch(() => {});
+      }
       return result;
     }
 

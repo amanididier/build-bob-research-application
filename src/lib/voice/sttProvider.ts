@@ -13,17 +13,28 @@ export interface STTProvider {
 }
 
 const CHUNK_MS = 60_000;
-const STT_MODEL = 'gemini-2.5-flash';
+const STT_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest'];
 const STT_INSTRUCTION =
   'Transcribe this audio exactly as spoken. Output only the transcribed words, with normal punctuation. No commentary.';
 
 function pickMimeType(): string {
-  const candidates = ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'];
+  // Gemini accepts audio/webm and audio/mp4. Prefer webm/opus (universally
+  // supported by Chromium's MediaRecorder and by Gemini); mp4/aac only as a
+  // fallback. Never record with a codecs-suffixed container we then reject.
+  const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4;codecs=mp4a.40.2', 'audio/mp4'];
   if (typeof MediaRecorder === 'undefined') return '';
   for (const c of candidates) {
     if (MediaRecorder.isTypeSupported(c)) return c;
   }
   return '';
+}
+
+// Gemini wants a bare container MIME (audio/webm, audio/mp4), not the
+// MediaRecorder's full "audio/webm;codecs=opus" string.
+function geminiMime(recorderMime: string): string {
+  const base = (recorderMime || '').split(';')[0].trim().toLowerCase();
+  if (base === 'audio/webm' || base === 'audio/mp4' || base === 'audio/ogg' || base === 'audio/wav') return base;
+  return 'audio/webm';
 }
 
 async function blobToBase64(blob: Blob): Promise<string> {
@@ -122,37 +133,62 @@ class GeminiChunkedSTTProvider implements STTProvider {
       const key = bobAi.getGeminiKey();
       if (!key) return '';
       const data = await blobToBase64(blob);
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${STT_MODEL}:generateContent?key=${encodeURIComponent(key)}`,
-        {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  { text: STT_INSTRUCTION },
-                  { inline_data: { mime_type: blob.type || 'audio/webm', data } }
-                ]
-              }
-            ],
-            generationConfig: { temperature: 0 }
-          })
+      const mimeType = geminiMime(blob.type);
+
+      let lastError = '';
+      for (const model of STT_MODELS) {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [
+                    { text: STT_INSTRUCTION },
+                    { inlineData: { mimeType, data } }
+                  ]
+                }
+              ],
+              generationConfig: { temperature: 0 }
+            })
+          }
+        );
+
+        if (res.ok) {
+          const json = await res.json();
+          const text = String(json?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join('') || '').trim();
+          if (text) return text;
+          lastError = 'empty-response';
+          continue;
         }
-      );
-      if (!res.ok) {
-        if (res.status === 400 || res.status === 404) {
-          this.failOnce('Gemini rejected this audio format. Dictation stopped.');
-        } else if (res.status === 403 || res.status === 401) {
-          this.failOnce('Your Gemini key refused dictation (403). Check the key in Settings.');
-        } else if (res.status === 429) {
+
+        // Capture Gemini's own explanation so the pill shows the real reason.
+        let detail = '';
+        try {
+          const errJson = await res.json();
+          detail = String(errJson?.error?.message || '').split('\n')[0];
+        } catch {}
+
+        if (res.status === 404) {
+          lastError = detail || 'model-unavailable';
+          continue; // try the next model
+        }
+        if (res.status === 401 || res.status === 403) {
+          this.failOnce(`Gemini key refused dictation (${res.status}). Check the key in Settings.`);
+          return '';
+        }
+        if (res.status === 429) {
           this.failOnce('Gemini rate-limited dictation (429). Pause a moment and tap the mic again.');
+          return '';
         }
+        // 400 etc.: report Gemini's actual message (bad key, bad MIME, …).
+        this.failOnce(detail ? `Dictation: ${detail}` : `Dictation failed (HTTP ${res.status}).`);
         return '';
       }
-      const json = await res.json();
-      const text = String(json?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join('') || '').trim();
-      return text;
+      if (lastError) this.failOnce(`Dictation: ${lastError}`);
+      return '';
     } catch {
       return '';
     } finally {

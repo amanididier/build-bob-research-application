@@ -220,6 +220,21 @@ function startBridge() {
       return send(200, { ok: true, token: pairingToken, version: app.getVersion() })
     }
 
+    if (pathname === '/events/chat') {
+      // Mirror a Chrome-extension chat exchange into the desktop session.
+      const at = Date.now()
+      if (body.prompt) {
+        store.messages.push({ id: id(), role: 'user', text: String(body.prompt).slice(0, 20000), origin: 'chrome-extension', at })
+      }
+      if (body.reply) {
+        store.messages.push({ id: id(), role: 'assistant', text: String(body.reply).slice(0, 20000), origin: 'chrome-extension', at: at + 1 })
+      }
+      store.messages = store.messages.slice(-500)
+      saveStore()
+      notify()
+      return send(200, { ok: true })
+    }
+
     if (pathname === '/events/focus') {
       // Sent by the Chrome extension when the user clicks the Bob logo there.
       if (win && !win.isDestroyed()) {

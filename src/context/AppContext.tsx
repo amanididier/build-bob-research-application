@@ -539,6 +539,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 window.dispatchEvent(new CustomEvent('bob:tabs-updated', { detail: deskStore.tabs }));
               } catch {}
             }
+
+            // Mirror Chrome-extension chat exchanges into the open session.
+            if (Array.isArray(deskStore.messages) && deskStore.messages.length > 0) {
+              setSessionMessages((prev) => {
+                const current = prev[activeResearchId] || [];
+                const have = new Set(current.map((m) => m.id));
+                const added: ChatMessage[] = [];
+                for (const m of deskStore.messages) {
+                  if (!m || !m.id || m.origin !== 'chrome-extension' || have.has(m.id)) continue;
+                  have.add(m.id);
+                  added.push({
+                    id: m.id,
+                    role: m.role === 'assistant' ? 'assistant' : 'user',
+                    text: m.text || '',
+                    timestamp: m.at
+                      ? new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                      : 'Just now',
+                    modelTier: 'Chrome Extension',
+                  });
+                }
+                if (!added.length) return prev;
+                return { ...prev, [activeResearchId]: [...current, ...added] };
+              });
+            }
           }
         } catch (e) {
           console.warn('[bob] desktop sync error:', e);
