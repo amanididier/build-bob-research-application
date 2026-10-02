@@ -59,6 +59,37 @@ export const SettingsPage: React.FC = () => {
   const [hardware] = useState(() => detectSystemHardware());
   const activeProfile = MODEL_CATALOG[aiDownloadStatus.tier];
 
+  // Extension real-time connectivity state
+  const [extensionConnected, setExtensionConnected] = useState<boolean>(false);
+  const [bridgePort] = useState<number>(54321);
+
+  useEffect(() => {
+    const checkExt = async () => {
+      let connected = false;
+      if (typeof window !== 'undefined' && (window as any).bob?.extensionAlive) {
+        try {
+          const res = await (window as any).bob.extensionAlive();
+          if (res?.alive) connected = true;
+        } catch {}
+      }
+
+      if (!connected) {
+        try {
+          const res = await fetch('http://127.0.0.1:54321/events/health');
+          if (res.ok) {
+            const data = await res.json();
+            if (data.extensionConnected) connected = true;
+          }
+        } catch {}
+      }
+      setExtensionConnected(connected);
+    };
+
+    checkExt();
+    const t = setInterval(checkExt, 2000);
+    return () => clearInterval(t);
+  }, []);
+
   // Listen to desktop auto-updater status if running in Electron
   useEffect(() => {
     if (typeof window !== 'undefined' && (window as any).bob) {
@@ -527,12 +558,51 @@ export const SettingsPage: React.FC = () => {
 
           {/* Browser Bridge Section */}
           {activeTab === 'browser' && (
-            <div className="space-y-7">
+            <div className="space-y-6">
               <div className="border-b border-[var(--line)] pb-4">
                 <h3 className="text-[18px] font-bold text-[var(--t)] m-0 mb-1">Browser & Chrome Bridge</h3>
                 <p className="text-[12.5px] text-[var(--m)] m-0 leading-relaxed">
-                  Connect Bob with Chrome side panel.
+                  Real-time bi-directional link between Bob Desktop and your Chrome Extension side panel.
                 </p>
+              </div>
+
+              {/* Live Connection Status Banner */}
+              <div className="bg-[var(--s)] border border-[var(--line)] rounded-3xl p-5 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3.5">
+                    <div className="relative flex items-center justify-center shrink-0">
+                      <div className={`w-4 h-4 rounded-full transition-colors ${extensionConnected ? 'bg-emerald-500 shadow-md shadow-emerald-500/30' : 'bg-red-500 shadow-md shadow-red-500/30'}`} />
+                      {extensionConnected && <div className="absolute w-6 h-6 rounded-full bg-emerald-500/25 animate-ping" />}
+                    </div>
+                    <div>
+                      <b className="text-[13.5px] text-[var(--t)] block">
+                        {extensionConnected ? 'Chrome Side Panel Connected' : 'Chrome Side Panel Offline or Closed'}
+                      </b>
+                      <small className="text-[11.5px] text-[var(--m)] block mt-0.5">
+                        {extensionConnected
+                          ? `Local bridge is actively communicating on 127.0.0.1:${bridgePort} · Real-time message sync active`
+                          : `Desktop bridge is listening on port ${bridgePort}. Open Bob in Chrome to connect.`}
+                      </small>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={async () => {
+                      if (typeof window !== 'undefined' && (window as any).bob?.requestExtensionPanel) {
+                        await (window as any).bob.requestExtensionPanel();
+                      } else {
+                        await fetch('http://127.0.0.1:54321/events/pending', {
+                          method: 'POST',
+                          headers: { 'content-type': 'application/json', 'x-bob-token': 'development-token' },
+                          body: JSON.stringify({ reason: 'user-clicked-chrome' })
+                        }).catch(() => {});
+                      }
+                    }}
+                    className="h-9 px-4 rounded-2xl bg-[var(--y)] hover:opacity-95 text-[#17181c] text-[12px] font-bold transition-all shadow-xs shrink-0 cursor-pointer"
+                  >
+                    Open in Chrome
+                  </button>
+                </div>
               </div>
 
               <div className="bg-[var(--s)] border border-[var(--line)] rounded-3xl divide-y divide-[var(--line)] overflow-hidden shadow-sm">

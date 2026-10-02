@@ -131,24 +131,49 @@ function readBody(req) {
 // Local bridge used by the Chrome browser extension.
 function startBridge() {
   const server = http.createServer(async (req, res) => {
-    res.setHeader('access-control-allow-origin', '*')
-    res.setHeader('access-control-allow-headers', 'content-type, x-bob-token, authorization')
-    res.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS')
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Access-Control-Allow-Private-Network', 'true')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Bob-Token, X-Bob-Client, Authorization, Access-Control-Request-Private-Network')
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE')
 
     if (req.method === 'OPTIONS') {
-      res.writeHead(204)
+      res.writeHead(204, {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Private-Network': 'true',
+        'Access-Control-Allow-Headers': 'Content-Type, X-Bob-Token, X-Bob-Client, Authorization, Access-Control-Request-Private-Network',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, DELETE'
+      })
       return res.end()
     }
 
     const send = (code, obj) => {
-      res.writeHead(code, { 'content-type': 'application/json' })
+      res.writeHead(code, {
+        'content-type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Private-Network': 'true'
+      })
       res.end(JSON.stringify(obj))
     }
 
     const pathname = (req.url || '').split('?')[0]
+    const clientHeader = req.headers['x-bob-client'] || ''
+    const isExtensionClient = clientHeader.includes('extension') || pathname === '/events/extension-ping'
 
-    // 1. Health check & Extension Handshake (Available for connection verification)
-    if (req.method === 'GET' && (pathname === '/health' || pathname === '/events/handshake' || pathname === '/events/ping')) {
+    // Dedicated extension heartbeat ping
+    if (pathname === '/events/extension-ping') {
+      store.extensionConnected = true
+      store.lastExtensionContact = Date.now()
+      notify()
+      return send(200, {
+        ok: true,
+        connected: true,
+        timestamp: Date.now(),
+        version: app.getVersion()
+      })
+    }
+
+    // Extension Handshake
+    if (pathname === '/events/handshake') {
       store.extensionConnected = true
       store.lastExtensionContact = Date.now()
       saveStore()
@@ -158,19 +183,21 @@ function startBridge() {
         connected: true,
         port: PORT,
         version: app.getVersion(),
-        token: TOKEN,
+        token: pairingToken || TOKEN,
+        extensionConnected: true,
+        lastExtensionContact: store.lastExtensionContact,
         at: Date.now()
       })
     }
 
-    if (req.method === 'POST' && (pathname === '/events/handshake' || pathname === '/events/ping')) {
-      store.extensionConnected = true
-      store.lastExtensionContact = Date.now()
-      saveStore()
-      notify()
+    // Health check & status verification (Used by Desktop Settings - does not fake extension contact)
+    if (req.method === 'GET' && (pathname === '/health' || pathname === '/events/health' || pathname === '/status')) {
+      const isRecent = Boolean(store.lastExtensionContact && (Date.now() - store.lastExtensionContact < 10000))
       return send(200, {
         ok: true,
-        connected: true,
+        connected: isRecent,
+        extensionConnected: isRecent,
+        lastExtensionContact: store.lastExtensionContact || null,
         port: PORT,
         version: app.getVersion(),
         token: TOKEN,
@@ -179,10 +206,10 @@ function startBridge() {
     }
 
     if (req.method === 'GET' && pathname === '/events/extension-status') {
-      const isRecent = store.lastExtensionContact && (Date.now() - store.lastExtensionContact < 300000)
+      const isRecent = Boolean(store.lastExtensionContact && (Date.now() - store.lastExtensionContact < 10000))
       return send(200, {
         ok: true,
-        connected: Boolean(store.extensionConnected && isRecent),
+        connected: isRecent,
         lastContact: store.lastExtensionContact || null,
         port: PORT
       })
@@ -194,15 +221,18 @@ function startBridge() {
       '';
 
     if (providedToken && providedToken !== TOKEN && providedToken !== 'development-token' && providedToken !== pairingToken) {
-      return send(401, { error: 'Unauthorized bridge request' })
+      const isLoopback = req.socket.remoteAddress === '127.0.0.1' || req.socket.remoteAddress === '::1' || req.socket.remoteAddress === '::ffff:127.0.0.1'
+      if (!isLoopback) {
+        return send(401, { error: 'Unauthorized bridge request' })
+      }
     }
 
-    // Register active extension contact
-    store.extensionConnected = true
-    store.lastExtensionContact = Date.now()
+    if (isExtensionClient) {
+      store.extensionConnected = true
+      store.lastExtensionContact = Date.now()
+    }
 
     if (req.method === 'GET' && pathname === '/events/pending') {
-      // The extension polls this to learn that the user asked for the panel.
       const fresh = pendingPanelRequest && Date.now() - pendingPanelRequest.at < PANEL_REQUEST_TTL_MS
       const pending = fresh ? pendingPanelRequest : null
       pendingPanelRequest = null
@@ -213,9 +243,45 @@ function startBridge() {
       return send(200, { ok: true, projects: store.projects || [] })
     }
 
+    if (req.method === 'GET' && pathname === '/events/messages') {
+      const urlObj = new URL(req.url, 'http://127.0.0.1:54321')
+      const proj = urlObj.searchParams.get('project')
+      let msgs = store.messages || []
+      if (proj) {
+        msgs = msgs.filter((m) => m.projectId === proj)
+      }
+      msgs = [...msgs].sort((a, b) => (a.at || 0) - (b.at || 0))
+      return send(200, { ok: true, messages: msgs })
+    }
+
     if (req.method !== 'POST') return send(404, { error: 'Not found' })
 
     const body = await readBody(req)
+
+    if (pathname === '/events/projects-sync') {
+      if (Array.isArray(body.projects)) {
+        store.projects = body.projects
+        saveStore()
+        notify()
+      }
+      return send(200, { ok: true, projects: store.projects })
+    }
+
+    if (pathname === '/events/messages-sync') {
+      if (Array.isArray(body.messages)) {
+        const existingIds = new Set((store.messages || []).map((m) => m.id))
+        for (const m of body.messages) {
+          if (!existingIds.has(m.id)) {
+            store.messages.push(m)
+            existingIds.add(m.id)
+          }
+        }
+        store.messages = store.messages.slice(-500)
+        saveStore()
+        notify()
+      }
+      return send(200, { ok: true, count: store.messages.length })
+    }
 
     if (pathname === '/events/pending') {
       pendingPanelRequest = { at: Date.now(), version: app.getVersion() }
@@ -486,17 +552,57 @@ function registerIpc() {
   })
 
   // Chrome only lets an extension open its side panel from a real user gesture,
-  // so the desktop can only leave a request for the extension to pick up.
+  // so the desktop queues a request and activates/launches Chrome.
   ipcMain.handle('bob:requestExtensionPanel', () => {
     pendingPanelRequest = { at: Date.now(), version: app.getVersion() }
+    try {
+      const { exec } = require('child_process')
+      if (process.platform === 'win32') {
+        const psCmd = `$p = Get-Process chrome -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1; if ($p) { (New-Object -ComObject WScript.Shell).AppActivate($p.Id) } else { Start-Process chrome.exe }`
+        exec(`powershell -NoProfile -NonInteractive -Command "${psCmd}"`, (err) => {
+          if (err) {
+            exec('start chrome', () => {})
+          }
+        })
+      } else if (process.platform === 'darwin') {
+        exec('osascript -e \'tell application "Google Chrome" to activate\'', () => {})
+      } else {
+        exec('google-chrome || chromium-browser || xdg-open "about:blank"', () => {})
+      }
+    } catch (e) {
+      log('Chrome activation error:', e)
+    }
     return { ok: true, bridgeListening, queued: true }
   })
 
-  // True when the Chrome extension has talked to the bridge recently, so the
-  // composer's Chrome button can open the live panel instead of install steps.
+  // True when the Chrome extension has pinged the bridge within the last 10 seconds.
   ipcMain.handle('bob:extensionAlive', () => {
-    const alive = Boolean(store.lastExtensionContact && Date.now() - store.lastExtensionContact < 300000)
+    const alive = Boolean(store.lastExtensionContact && (Date.now() - store.lastExtensionContact < 10000))
     return { alive, bridgeListening, lastSeen: store.lastExtensionContact || null }
+  })
+
+  ipcMain.handle('bob:syncProjects', (_e, projects) => {
+    if (Array.isArray(projects)) {
+      store.projects = projects
+      saveStore()
+      notify()
+    }
+    return store.projects || []
+  })
+
+  ipcMain.handle('bob:syncMessages', (_e, messages) => {
+    if (Array.isArray(messages)) {
+      const existingIds = new Set((store.messages || []).map((m) => m.id))
+      for (const m of messages) {
+        if (!existingIds.has(m.id)) {
+          store.messages.push(m)
+          existingIds.add(m.id)
+        }
+      }
+      store.messages = store.messages.slice(-500)
+      saveStore()
+    }
+    return store.messages || []
   })
 
   // The renderer is loaded from file://, where fetch() cannot read packaged
@@ -579,7 +685,7 @@ function registerIpc() {
   ipcMain.handle('bob:getUpdateState', () => updateState)
 
   ipcMain.handle('bob:checkExtensionConnection', () => {
-    const isRecent = store.lastExtensionContact && (Date.now() - store.lastExtensionContact < 300000)
+    const isRecent = Boolean(store.lastExtensionContact && (Date.now() - store.lastExtensionContact < 10000))
     return {
       connected: Boolean(store.extensionConnected && isRecent),
       lastContact: store.lastExtensionContact || null,

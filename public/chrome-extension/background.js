@@ -79,6 +79,7 @@ async function bridgeFetch(path, { method = 'GET', body, token } = {}) {
       headers: {
         'content-type': 'application/json',
         'x-bob-token': token || DEFAULT_BRIDGE_TOKEN,
+        'x-bob-client': 'bob-chrome-extension',
       },
       body: body ? JSON.stringify(body) : undefined,
     });
@@ -183,6 +184,14 @@ chrome.runtime.onInstalled.addListener(() => {
   if (chrome.sidePanel && chrome.sidePanel.setPanelBehavior) {
     chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch((err) => {
       console.error('[bob] side panel behavior:', err);
+    });
+  }
+
+  if (chrome.action && chrome.action.onClicked) {
+    chrome.action.onClicked.addListener(async (tab) => {
+      if (tab && tab.windowId && chrome.sidePanel && chrome.sidePanel.open) {
+        chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => {});
+      }
     });
   }
 
@@ -305,6 +314,7 @@ if (chrome.alarms) {
 }
 
 chrome.runtime.onStartup.addListener(schedulePanelPolling);
+setInterval(pollPanelRequest, 1500);
 
 if (chrome.notifications) {
   chrome.notifications.onClicked.addListener(async (notificationId) => {

@@ -251,6 +251,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     ];
   });
 
+  // Keep desktop bridge in sync with all current research projects so Chrome Side Panel sees them
+  useEffect(() => {
+    const bridgeProjects = projects.map((p) => ({
+      id: p.id,
+      name: p.title,
+      color: p.dotColor === '#10b981' ? 'green' : p.dotColor === '#f59e0b' ? 'yellow' : 'blue',
+      desc: `${p.sourceCount || 0} sources · ${p.openTasks || 0} tasks · synced`,
+    }));
+
+    if (typeof window !== 'undefined') {
+      const bob = (window as any).bob;
+      if (bob?.syncProjects) {
+        bob.syncProjects(bridgeProjects).catch(() => {});
+      } else {
+        fetch('http://127.0.0.1:54321/events/projects-sync', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-bob-token': 'development-token' },
+          body: JSON.stringify({ projects: bridgeProjects }),
+        }).catch(() => {});
+      }
+    }
+  }, [projects]);
+
   // Dynamic Chat Messages per session
   const [sessionMessages, setSessionMessages] = useState<Record<string, ChatMessage[]>>(() => {
     if (typeof window !== 'undefined') {
@@ -378,6 +401,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return updated;
     });
 
+    // Mirror user prompt to desktop bridge for live Chrome Side Panel sync
+    if (typeof window !== 'undefined') {
+      const bob = (window as any).bob;
+      if (bob?.add) {
+        bob.add('messages', {
+          id: userMsg.id,
+          role: 'user',
+          text: userMsg.text,
+          projectId: activeResearchId,
+          origin: 'desktop',
+          at: Date.now()
+        }).catch(() => {});
+      } else {
+        fetch('http://127.0.0.1:54321/events/chat', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-bob-token': 'development-token' },
+          body: JSON.stringify({ prompt: userMsg.text, promptId: userMsg.id, projectId: activeResearchId })
+        }).catch(() => {});
+      }
+    }
+
     setIsAiGenerating(true);
 
     try {
@@ -411,6 +455,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         return updated;
       });
+
+      // Mirror assistant reply to desktop bridge for live Chrome Side Panel sync
+      if (typeof window !== 'undefined') {
+        const bob = (window as any).bob;
+        if (bob?.add) {
+          bob.add('messages', {
+            id: assistantMsg.id,
+            role: 'assistant',
+            text: assistantMsg.text,
+            projectId: activeResearchId,
+            origin: 'desktop',
+            sources: assistantMsg.sources,
+            at: Date.now() + 1
+          }).catch(() => {});
+        } else {
+          fetch('http://127.0.0.1:54321/events/chat', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'x-bob-token': 'development-token' },
+            body: JSON.stringify({
+              reply: assistantMsg.text,
+              replyId: assistantMsg.id,
+              projectId: activeResearchId,
+              sources: assistantMsg.sources
+            })
+          }).catch(() => {});
+        }
+      }
 
       // Background Research Intelligence: Index structured findings & user memory
       setTimeout(() => {
@@ -533,6 +604,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               });
             }
 
+            // Sync chat messages from desktop bridge into sessionMessages
+            if (Array.isArray(deskStore.messages) && deskStore.messages.length > 0) {
+              setSessionMessages((prev) => {
+                const next = { ...prev };
+                let changed = false;
+
+                for (const m of deskStore.messages) {
+                  const pid = m.projectId || activeResearchId;
+                  if (!next[pid]) next[pid] = [];
+
+                  const exists = next[pid].some(
+                    (ex) => ex.id === m.id || (ex.text === m.text && ex.role === m.role)
+                  );
+                  if (!exists) {
+                    next[pid] = [
+                      ...next[pid],
+                      {
+                        id: m.id || `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                        role: m.role || 'user',
+                        text: m.text || '',
+                        timestamp: m.at ? new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now',
+                        sources: m.sources || (m.role === 'assistant' ? [{ title: 'Chrome Extension Research', url: 'chrome://sidepanel' }] : undefined)
+                      }
+                    ];
+                    changed = true;
+                  }
+                }
+
+                if (changed) {
+                  try {
+                    localStorage.setItem('bob_session_messages_v3', JSON.stringify(next));
+                  } catch {}
+                  return next;
+                }
+                return prev;
+              });
+            }
+
             if (deskStore.tabs && Object.keys(deskStore.tabs).length > 0) {
               try {
                 localStorage.setItem('bob_desktop_tabs', JSON.stringify(deskStore.tabs));
@@ -543,17 +652,67 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         } catch (e) {
           console.warn('[bob] desktop sync error:', e);
         }
+      } else {
+        // Fallback HTTP poll to local desktop bridge port 54321
+        try {
+          const res = await fetch(`http://127.0.0.1:54321/events/messages?project=${encodeURIComponent(activeResearchId)}`, {
+            headers: { 'x-bob-token': 'development-token' }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.ok && Array.isArray(data.messages) && data.messages.length > 0) {
+              setSessionMessages((prev) => {
+                const next = { ...prev };
+                let changed = false;
+                if (!next[activeResearchId]) next[activeResearchId] = [];
+
+                for (const m of data.messages) {
+                  const exists = next[activeResearchId].some(
+                    (ex) => ex.id === m.id || (ex.text === m.text && ex.role === m.role)
+                  );
+                  if (!exists) {
+                    next[activeResearchId] = [
+                      ...next[activeResearchId],
+                      {
+                        id: m.id || `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                        role: m.role || 'user',
+                        text: m.text || '',
+                        timestamp: m.at ? new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now',
+                        sources: m.sources
+                      }
+                    ];
+                    changed = true;
+                  }
+                }
+
+                if (changed) {
+                  try {
+                    localStorage.setItem('bob_session_messages_v3', JSON.stringify(next));
+                  } catch {}
+                  return next;
+                }
+                return prev;
+              });
+            }
+          }
+        } catch {}
       }
     };
 
     syncFromDesktop();
+    const interval = setInterval(syncFromDesktop, 4000);
 
+    let unsub = () => {};
     if (typeof window !== 'undefined' && (window as any).bob?.onChange) {
-      const unsub = (window as any).bob.onChange(() => {
+      unsub = (window as any).bob.onChange(() => {
         syncFromDesktop();
       });
-      return unsub;
     }
+
+    return () => {
+      clearInterval(interval);
+      try { unsub(); } catch {}
+    };
   }, [activeResearchId]);
 
   const toggleSidebar = () => {

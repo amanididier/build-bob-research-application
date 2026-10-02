@@ -57,6 +57,24 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --win nsis --publish always
 
+      - name: Generate dual installer aliases (both Bob-Research-Companion-Setup.exe and Bob-Research-Companion-Setup-version.exe)
+        working-directory: apps/desktop
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+          echo "Processing installer aliases for version: $VERSION"
+          if [ -f "dist/Bob-Research-Companion-Setup.exe" ]; then
+            cp "dist/Bob-Research-Companion-Setup.exe" "dist/Bob-Research-Companion-Setup-${VERSION}.exe"
+            [ -f "dist/Bob-Research-Companion-Setup.exe.blockmap" ] && cp "dist/Bob-Research-Companion-Setup.exe.blockmap" "dist/Bob-Research-Companion-Setup-${VERSION}.exe.blockmap"
+            echo "Created dist/Bob-Research-Companion-Setup-${VERSION}.exe from canonical setup"
+          elif [ -f "dist/Bob-Research-Companion-Setup-${VERSION}.exe" ]; then
+            cp "dist/Bob-Research-Companion-Setup-${VERSION}.exe" "dist/Bob-Research-Companion-Setup.exe"
+            [ -f "dist/Bob-Research-Companion-Setup-${VERSION}.exe.blockmap" ] && cp "dist/Bob-Research-Companion-Setup-${VERSION}.exe.blockmap" "dist/Bob-Research-Companion-Setup.exe.blockmap"
+            echo "Created dist/Bob-Research-Companion-Setup.exe from versioned setup"
+          fi
+          ls -la dist/
+
       # Safety net so the release always carries the full asset set.
       # The .blockmap is required for differential downloads; without it
       # electron-updater falls back to a full 118 MB download.
@@ -70,3 +88,4 @@ jobs:
             apps/desktop/dist/*.exe
             apps/desktop/dist/*.blockmap
             apps/desktop/dist/latest.yml
+            public/bob-chrome-extension.zip

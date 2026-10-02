@@ -68,22 +68,29 @@
 
   async function checkBridgeStatus() {
     let isConn = false;
+    // 1. Direct active heartbeat ping to local bridge
     try {
-      const res = await send({ type: 'GET_BRIDGE_STATUS', force: true });
-      if (res && res.ok) {
-        const obj = res.status || res;
-        if (obj.connected !== undefined) isConn = Boolean(obj.connected);
+      const direct = await fetch('http://127.0.0.1:54321/events/extension-ping', {
+        method: 'GET',
+        headers: {
+          'x-bob-token': 'development-token',
+          'x-bob-client': 'bob-chrome-extension'
+        }
+      });
+      if (direct.ok) {
+        const data = await direct.json();
+        if (data.ok && data.connected) isConn = true;
       }
     } catch {}
 
-    // Direct HTTP health fallback to desktop companion port
+    // 2. Background service worker bridge check fallback
     if (!isConn) {
       try {
-        const direct = await fetch('http://127.0.0.1:54321/events/health', {
-          method: 'GET',
-          headers: { 'x-bob-token': 'development-token' }
-        });
-        if (direct.ok) isConn = true;
+        const res = await send({ type: 'GET_BRIDGE_STATUS', force: true });
+        if (res && res.ok) {
+          const obj = res.status || res;
+          if (obj.connected !== undefined) isConn = Boolean(obj.connected);
+        }
       } catch {}
     }
 
@@ -215,17 +222,30 @@
 
     let projects = [];
     try {
-      const res = await send({ type: 'GET_PROJECTS' });
-      if (res && res.ok && Array.isArray(res.projects)) {
-        projects = res.projects;
+      const direct = await fetch('http://127.0.0.1:54321/events/projects', {
+        headers: { 'x-bob-token': 'development-token', 'x-bob-client': 'bob-chrome-extension' }
+      });
+      if (direct.ok) {
+        const data = await direct.json();
+        if (data && Array.isArray(data.projects) && data.projects.length > 0) {
+          projects = data.projects;
+        }
       }
     } catch {}
 
     if (!projects || projects.length === 0) {
+      try {
+        const res = await send({ type: 'GET_PROJECTS' });
+        if (res && res.ok && Array.isArray(res.projects) && res.projects.length > 0) {
+          projects = res.projects;
+        }
+      } catch {}
+    }
+
+    if (!projects || projects.length === 0) {
       projects = [
-        { id: 'proj-1', name: 'Resource planning research', color: 'blue', desc: '12 sources · synced' },
-        { id: 'proj-2', name: 'AI opportunities in Africa', color: 'yellow', desc: '8 sources · synced' },
-        { id: 'proj-3', name: 'Local Infrastructure & Clean Energy', color: 'green', desc: '15 sources · synced' }
+        { id: 'urugendo', name: 'Urugendo transport study', color: 'blue', desc: 'Desktop Workspace · Active sync' },
+        { id: 'proj-1', name: 'Resource planning research', color: 'yellow', desc: 'Desktop Workspace · Active sync' }
       ];
     }
     state.projects = projects;
@@ -274,8 +294,48 @@
       );
     }
 
+    // Load existing chat history from Desktop project
+    loadProjectMessages(proj.id);
+
     saveSessionRecord(proj.name, 'research', proj.id);
     toast(`Connected to "${proj.name}"`);
+  }
+
+  let chatSyncTimer = null;
+  async function loadProjectMessages(projectId) {
+    if (!projectId || state.sessionMode !== 'research') return;
+    try {
+      const res = await fetch(`http://127.0.0.1:54321/events/messages?project=${encodeURIComponent(projectId)}`, {
+        headers: { 'x-bob-token': 'development-token', 'x-bob-client': 'bob-chrome-extension' }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ok && Array.isArray(data.messages) && data.messages.length > 0) {
+          const chatList = $('chatList');
+          if (chatList && state.activeProjectId === projectId) {
+            const renderedCount = chatList.querySelectorAll('.user-msg, .ai-card').length;
+            if (data.messages.length >= renderedCount) {
+              clear(chatList);
+              for (const m of data.messages) {
+                if (m.role === 'user') {
+                  appendUserMessage(m.text);
+                } else {
+                  appendAiMessage(m.text, m.sources || []);
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch {}
+
+    // Continue periodic background poll while this project is active
+    clearTimeout(chatSyncTimer);
+    chatSyncTimer = setTimeout(() => {
+      if (state.sessionMode === 'research' && state.activeProjectId === projectId) {
+        loadProjectMessages(projectId);
+      }
+    }, 2000);
   }
 
   // ------------------------------------------------------------- Chat Handling
@@ -381,12 +441,23 @@
       }
       appendAiMessage(replyText, citations);
 
-      // Mirror directly to desktop if connected
-      fetch('http://127.0.0.1:54321/events/chat', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-bob-token': 'development-token' },
-        body: JSON.stringify({ prompt: text, reply: replyText, projectId: state.activeProjectId })
-      }).catch(() => {});
+      // Mirror directly to desktop if connected and in a research project
+      if (state.sessionMode === 'research' && state.activeProjectId) {
+        fetch('http://127.0.0.1:54321/events/chat', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'x-bob-token': 'development-token',
+            'x-bob-client': 'bob-chrome-extension'
+          },
+          body: JSON.stringify({
+            prompt: text,
+            reply: replyText,
+            projectId: state.activeProjectId,
+            sources: citations
+          })
+        }).catch(() => {});
+      }
 
       // Trigger context task prompt if active tasks exist
       checkTaskMilestone(text);
@@ -1008,7 +1079,7 @@
 
     // Check desktop bridge immediately and set heartbeat
     await checkBridgeStatus();
-    setInterval(checkBridgeStatus, 8000);
+    setInterval(checkBridgeStatus, 2500);
 
     // Load initial context
     loadTabs().catch(() => {});
