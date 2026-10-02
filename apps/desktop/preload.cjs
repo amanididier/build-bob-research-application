@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('bob', {
   get: () => ipcRenderer.invoke('bob:get'),
+  setGeminiKey: (key) => ipcRenderer.invoke('bob:setGeminiKey', key),
   add: (kind, item) => ipcRenderer.invoke('bob:add', kind, item),
   remove: (kind, id) => ipcRenderer.invoke('bob:remove', kind, id),
   openWeb: (sub) => ipcRenderer.invoke('bob:openWeb', sub),

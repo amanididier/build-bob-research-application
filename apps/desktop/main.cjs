@@ -532,6 +532,14 @@ function setupAutoUpdater() {
 function registerIpc() {
   ipcMain.handle('bob:get', () => store)
 
+  // The renderer keeps the user's Gemini key in localStorage; push it into the
+  // persisted store so the local bridge can hand it to the Chrome extension.
+  ipcMain.handle('bob:setGeminiKey', (_e, key) => {
+    store.geminiKey = String(key || '').trim()
+    saveStore()
+    return { ok: true, hasKey: Boolean(store.geminiKey) }
+  })
+
   ipcMain.handle('bob:add', (_e, kind, item) => {
     if (!['notes', 'sources', 'projects', 'messages'].includes(kind)) return store
     store[kind].unshift({ id: id(), at: Date.now(), ...item })
