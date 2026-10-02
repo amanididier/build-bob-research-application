@@ -104,12 +104,19 @@ button {
   width: 32px;
   height: 32px;
   border-radius: 10px;
-  background: var(--yellow);
+  background: transparent;
   display: grid;
   place-items: center;
-  font-size: 17px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  box-shadow: none;
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.bobmark img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  border-radius: 7px;
 }
 
 .bobtitle {
@@ -1280,14 +1287,16 @@ button {
 
 .composer-bar {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 6px;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 24px;
-  padding: 7px 9px 7px 11px;
+  border-radius: 999px;
+  padding: 4px 8px 4px 10px;
+  min-height: 42px;
+  max-height: 120px;
   box-shadow: 0 4px 18px rgba(28, 34, 45, 0.08);
-  transition: border-radius 0.15s ease, border-color 0.15s;
+  transition: border-radius 0.15s ease, border-color 0.15s, min-height 0.15s;
 }
 
 .composer-bar:focus-within {
@@ -1297,7 +1306,31 @@ button {
 .composer-bar.single-line {
   border-radius: 999px;
   align-items: center;
+  padding: 4px 8px 4px 10px;
+  height: 42px;
+  min-height: 42px;
+}
+
+.composer-bar.single-line textarea {
+  height: 22px !important;
+  min-height: 22px !important;
+  max-height: 22px !important;
+  line-height: 22px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding: 0 4px;
+}
+
+.composer-bar:not(.single-line) {
+  border-radius: 20px;
+  align-items: flex-end;
   padding: 6px 8px 6px 10px;
+}
+
+.composer-bar:not(.single-line) textarea {
+  overflow-y: auto;
+  white-space: pre-wrap;
 }
 
 .composer-bar .c-plus,
@@ -1338,12 +1371,12 @@ button {
   border: 0;
   outline: 0;
   flex: 1;
-  min-height: 26px;
-  max-height: 120px;
+  min-height: 22px;
+  max-height: 100px;
   font-size: 12px;
   background: transparent;
-  padding: 4px 2px;
-  line-height: 1.45;
+  padding: 2px 4px;
+  line-height: 1.4;
   color: var(--text);
   overflow-y: hidden;
   scrollbar-width: none;
@@ -1374,6 +1407,19 @@ button {
   place-items: center;
   border: 0;
   cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.composer-bar .c-ico.listening {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.15);
+  animation: pulse-mic 1.2s infinite;
+}
+
+@keyframes pulse-mic {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+  100% { transform: scale(1); }
 }
 
 .composer-bar .c-ico svg {

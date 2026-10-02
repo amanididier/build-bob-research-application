@@ -10,7 +10,9 @@
   <div class="side" id="sideApp">
     <!-- Header: Bob title + Desktop Status + New Session + History + Close -->
     <header class="side-header">
-      <div class="bobmark">🐣</div>
+      <div class="bobmark">
+        <img src="icons/bob-logo.png" alt="Bob" width="22" height="22">
+      </div>
       <div class="bobtitle">Bob</div>
       <div class="head-actions">
         <button class="icon desk-ico" id="btn-open-desktop" title="Bob Desktop App" aria-label="Desktop">
@@ -187,7 +189,9 @@
     <!-- Quick Ask Modal Card -->
     <div class="inline-card" id="inlineCard">
       <div class="inline-head">
-        <div class="bob-mini">🐣</div>
+        <div class="bob-mini">
+          <img src="icons/bob-desktop-icon.png" alt="Bob" width="16" height="16">
+        </div>
         <b>Bob <span class="sub">· Quick Ask</span></b>
         <button class="icon-sm" id="btn-close-inline" title="Close">✕</button>
       </div>
@@ -231,7 +235,7 @@
             <i class="chev">▾</i>
           </button>
           <div class="bridge-drop" id="dstDrop">
-            <div class="bridge-opt" data-side="dst" data-val="Bob Desktop" data-desc="local"><div class="ao" style="background:#fff2b8">🐣</div><div><b>Bob Desktop</b><small>local</small></div></div>
+            <div class="bridge-opt" data-side="dst" data-val="Bob Desktop" data-desc="local"><div class="ao" style="background:#fff2b8"><img src="icons/bob-desktop-icon.png" alt="Bob" width="14" height="14"></div><div><b>Bob Desktop</b><small>local</small></div></div>
             <div class="bridge-opt" data-side="dst" data-val="ChatGPT" data-desc="openai.com"><div class="ao" style="background:#e7faef">✦</div><div><b>ChatGPT</b><small>openai.com</small></div></div>
             <div class="bridge-opt" data-side="dst" data-val="Claude" data-desc="claude.ai"><div class="ao" style="background:#fff1b8">◉</div><div><b>Claude</b><small>claude.ai</small></div></div>
             <div class="bridge-opt" data-side="dst" data-val="Gemini" data-desc="gemini.google.com"><div class="ao" style="background:#e8f6ff">✧</div><div><b>Gemini</b><small>gemini.google.com</small></div></div>
@@ -246,7 +250,7 @@
         <button class="c-flash" id="btn-tools" type="button" title="Tools" aria-label="Tools">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M13 2 4.5 13.5h6L9 22 19.5 9.5h-6L13 2z"/></svg>
         </button>
-        <textarea id="prompt" rows="1" placeholder="Ask Bob about your tabs, research, or this page…"></textarea>
+        <textarea id="prompt" rows="1" placeholder="Ask Bob about tabs or page…"></textarea>
         <div class="c-actions">
           <button class="c-ico" id="btn-voice" type="button" title="Voice Dictation" aria-label="Voice">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>

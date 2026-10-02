@@ -776,6 +776,11 @@
     });
   }
 
+  async function triggerHighlightOnActiveTab() {
+    await send({ type: 'AUTO_HIGHLIGHT' });
+    toast('✦ Auto-highlighted page · Highlighting peel active');
+  }
+
   // ------------------------------------------------------------- Quick Ask Inline
 
   function openInlineModal() {
@@ -821,12 +826,26 @@
     const ta = $('prompt');
     if (!ta) return;
     const bar = ta.closest('.composer-bar');
-    ta.style.height = '26px';
-    const h = Math.min(120, Math.max(26, ta.scrollHeight));
+    const val = (ta.value || '').trim();
+
+    // When empty (before user types), keep strictly as a sleek 42px single-line pill!
+    if (!val) {
+      ta.style.height = '22px';
+      if (bar) bar.classList.add('single-line');
+      return;
+    }
+
+    // Only grow vertically when multi-line content or long text is typed
+    ta.style.height = '22px';
+    const h = Math.min(100, Math.max(22, ta.scrollHeight));
     ta.style.height = h + 'px';
+
     if (bar) {
-      if (h <= 34) bar.classList.add('single-line');
-      else bar.classList.remove('single-line');
+      if (h <= 26 && !val.includes('\n')) {
+        bar.classList.add('single-line');
+      } else {
+        bar.classList.remove('single-line');
+      }
     }
   }
 
@@ -1049,11 +1068,106 @@
     if (btnSend) btnSend.addEventListener('click', sendPrompt);
 
     const btnVoice = $('btn-voice');
+    let recognition = null;
+    let isListening = false;
+
     if (btnVoice) {
       btnVoice.addEventListener('click', () => {
-        toast('Voice dictation active: speak now…');
+        const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRec) {
+          toast('Speech dictation not supported in this browser.');
+          return;
+        }
+
+        if (isListening && recognition) {
+          try { recognition.stop(); } catch {}
+          isListening = false;
+          btnVoice.classList.remove('listening');
+          toast('Dictation stopped');
+          return;
+        }
+
+        try {
+          recognition = new SpeechRec();
+          recognition.continuous = true;
+          recognition.interimResults = true;
+          recognition.lang = navigator.language || 'en-US';
+
+          recognition.onstart = () => {
+            isListening = true;
+            btnVoice.classList.add('listening');
+            toast('🎤 Listening… speak now');
+          };
+
+          recognition.onresult = (event) => {
+            let transcript = '';
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+              transcript += event.results[i][0].transcript;
+            }
+            const input = $('prompt');
+            if (input && transcript) {
+              input.value = (input.value ? input.value + ' ' : '') + transcript.trim();
+              syncComposerSize();
+            }
+          };
+
+          recognition.onerror = (event) => {
+            console.warn('[bob] speech error:', event.error);
+            isListening = false;
+            btnVoice.classList.remove('listening');
+            if (event.error !== 'no-speech') {
+              toast('Dictation: ' + event.error);
+            }
+          };
+
+          recognition.onend = () => {
+            isListening = false;
+            btnVoice.classList.remove('listening');
+          };
+
+          recognition.start();
+        } catch (err) {
+          console.warn('[bob] recognition start error:', err);
+          toast('Could not start microphone');
+        }
       });
     }
+
+    // Keyboard Shortcuts: Ctrl+B then A (Quick Ask), Ctrl+B then H (Auto-highlight)
+    let chordPending = false;
+    let chordTimer = null;
+
+    document.addEventListener('keydown', (e) => {
+      const isCtrl = e.ctrlKey || e.metaKey;
+
+      if (chordPending) {
+        if (e.key === 'a' || e.key === 'A') {
+          e.preventDefault();
+          chordPending = false;
+          clearTimeout(chordTimer);
+          openInlineModal();
+          return;
+        }
+        if (e.key === 'h' || e.key === 'H') {
+          e.preventDefault();
+          chordPending = false;
+          clearTimeout(chordTimer);
+          triggerHighlightOnActiveTab();
+          return;
+        }
+      }
+
+      if (isCtrl && (e.key === 'b' || e.key === 'B')) {
+        chordPending = true;
+        clearTimeout(chordTimer);
+        chordTimer = setTimeout(() => { chordPending = false; }, 1500);
+        return;
+      }
+
+      if (chordPending && e.key !== 'Control' && e.key !== 'Meta') {
+        chordPending = false;
+      }
+    });
 
     // Outside clicks to dismiss menus
     document.addEventListener('click', (e) => {
