@@ -114,7 +114,23 @@ function build() {
   end.writeUInt16LE(0, 20);
 
   mkdirSync(dirname(outFile), { recursive: true });
-  writeFileSync(outFile, Buffer.concat([...chunks, centralBuffer, end]));
+  const zipBuffer = Buffer.concat([...chunks, centralBuffer, end]);
+  writeFileSync(outFile, zipBuffer);
+
+  // Also write to desktop dist and root dist so desktop app can package it directly
+  const desktopDist = join(root, 'apps', 'desktop', 'dist');
+  mkdirSync(desktopDist, { recursive: true });
+  writeFileSync(join(desktopDist, 'bob-chrome-extension.zip'), zipBuffer);
+
+  // Sync unpacked files into public/chrome-extension/
+  const publicUnpacked = join(root, 'public', 'chrome-extension');
+  mkdirSync(publicUnpacked, { recursive: true });
+  for (const file of files) {
+    const rel = relative(sourceDir, file);
+    const dest = join(publicUnpacked, rel);
+    mkdirSync(dirname(dest), { recursive: true });
+    writeFileSync(dest, readFileSync(file));
+  }
 
   const required = ['manifest.json', 'background.js', 'content.js', 'content.css', 'sidepanel.html', 'sidepanel.js', 'sidepanel.css', 'icons/bob-logo.png'];
   const names = files.map((file) => relative(sourceDir, file).split('\\').join('/'));

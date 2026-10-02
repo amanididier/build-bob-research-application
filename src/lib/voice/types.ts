@@ -1,3 +1,5 @@
+export type VoiceMode = 'prompt' | 'call';
+
 export type VoiceState =
   | 'IDLE'
   | 'LISTENING'
@@ -14,9 +16,11 @@ export interface VoiceConfig {
   enabled: boolean;
   defaultVoice: string;
   speechStartThreshold: number; // energy threshold (0-100)
-  speechEndSilenceDurationMs: number; // duration of silence to declare end of turn (e.g. 1100ms)
+  speechEndSilenceDurationMs: number; // duration of silence to declare end of turn
+  promptSilenceDurationMs: number; // 10s for dictation review
+  callSilenceDurationMs: number; // 3s for call auto-reply
   minimumSpeechDurationMs: number; // ignore tiny clicks / noises < 250ms
-  maximumTurnDurationMs: number; // max speech turn before auto-finalizing (e.g. 30000ms)
+  maximumTurnDurationMs: number; // max speech turn before auto-finalizing
   ttsRate: number;
   ttsPitch: number;
   ttsVolume: number;
@@ -38,4 +42,7 @@ export interface AudioChunk {
   audioUrl?: string;
 }
 
-export type VoiceStateListener = (state: VoiceState, data?: { transcript?: string; error?: string }) => void;
+export type VoiceStateListener = (
+  state: VoiceState,
+  data?: { transcript?: string; aiReply?: string; mode?: VoiceMode; error?: string }
+) => void;

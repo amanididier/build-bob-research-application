@@ -3,279 +3,263 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bob</title>
+  <title>Bob — Research Companion</title>
   <link rel="stylesheet" href="sidepanel.css">
 </head>
 <body>
-  <div class="sp">
-    <header class="sp-header">
-      <div class="sp-brand" id="brand-header">
-        <div class="sp-logo-mascot" title="Bob Research">
-          <img src="icons/bob-logo.png" alt="Bob" width="22" height="22">
-        </div>
-        <span class="sp-brand-name">Bob</span>
-      </div>
-
-      <div class="sp-header-actions">
-        <button class="sp-icon-btn" id="btn-session-history" title="Session history" aria-label="Session history">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <div class="side" id="sideApp">
+    <!-- Header: Bob title + Desktop Status + New Session + History + Close -->
+    <header class="side-header">
+      <div class="bobmark">🐣</div>
+      <div class="bobtitle">Bob</div>
+      <div class="head-actions">
+        <button class="icon desk-ico" id="btn-open-desktop" title="Bob Desktop App" aria-label="Desktop">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+            <rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>
+          </svg>
+          <i class="status-dot off" id="desktop-status-dot" title="Bob Desktop status"></i>
+        </button>
+        <button class="icon new-sess" id="btn-new-session" title="New session" aria-label="New session">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 8v6M9 11h6"/>
+          </svg>
+        </button>
+        <button class="icon" id="btn-session-history" title="Session history" aria-label="History">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
             <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
           </svg>
         </button>
-
-        <button class="sp-desktop-btn" id="btn-open-desktop" title="Open Bob Desktop app" aria-label="Open Bob Desktop app">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+        <button class="icon" id="btn-close-panel" title="Close side panel" aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+            <path d="M13 4h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/>
           </svg>
-          <span class="sp-status-circle red" id="desktop-status-dot" title="Connecting to Desktop…"></span>
         </button>
       </div>
     </header>
 
-    <div class="sp-history-drawer" id="history-drawer" hidden>
-      <div class="sp-history-header">
-        <span>Session History</span>
-        <button class="sp-icon-btn-sm" id="btn-close-history" aria-label="Close">✕</button>
-      </div>
-      <div class="sp-history-list" id="history-list"></div>
-      <div class="sp-history-footer">
-        <small class="sp-history-hint">General chats auto-expire after 24h · Research projects persist to Desktop</small>
-      </div>
-    </div>
-
-    <nav class="sp-nav" role="tablist" aria-label="Bob sections">
-      <div class="sp-nav-tabs">
-        <button class="sp-nav-btn active" data-view="chat" role="tab" aria-selected="true">Research</button>
-        <button class="sp-nav-btn" data-view="summary" role="tab" aria-selected="false">Summary</button>
-        <button class="sp-nav-btn" data-view="tabs" role="tab" aria-selected="false">Tabs</button>
-        <button class="sp-nav-btn" data-view="tasks" role="tab" aria-selected="false">Tasks</button>
-      </div>
-      <button class="sp-new-session-btn" id="btn-new-session" title="Start new session" aria-label="Start new session">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-        </svg>
-      </button>
+    <!-- Top Navigation Bar: Research | Summary | Tabs | Tasks -->
+    <nav class="nav" role="tablist">
+      <button class="active" data-view="research" role="tab" aria-selected="true">Research</button>
+      <button data-view="summary" role="tab" aria-selected="false">Summary</button>
+      <button data-view="tabs" role="tab" aria-selected="false">Tabs</button>
+      <button data-view="tasks" role="tab" aria-selected="false">Tasks</button>
     </nav>
 
-    <main class="sp-main">
-      <section class="sp-view active" id="view-chat">
-        <div class="sp-landing" id="research-landing">
-          <div class="sp-landing-header">
-            <h3>Start Research</h3>
-            <p>Select your research mode to begin exploring with Bob.</p>
+    <!-- Main Content Area with Views -->
+    <main class="content">
+      <!-- 1. RESEARCH VIEW -->
+      <section class="view active" id="view-research">
+        <!-- Landing Screen (Default when no active session) -->
+        <div id="researchLanding">
+          <div class="section-head">
+            <h2>Start with Bob</h2>
+            <button class="pill yellow" id="btn-landing-new">＋ New</button>
           </div>
-          <div class="sp-cards-grid">
-            <button type="button" class="sp-landing-card yellow-card" id="card-general-chat">
-              <div class="card-icon-pill yellow">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                </svg>
-              </div>
-              <div class="card-content">
-                <div class="card-badge yellow">General Mode</div>
-                <div class="card-title">General Chat</div>
-                <div class="card-desc">Ask quick questions not tied to a research project. Ephemeral memory auto-clears after 24h.</div>
-              </div>
-            </button>
-
-            <button type="button" class="sp-landing-card blue-card" id="card-choose-research">
-              <div class="card-icon-pill blue">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-                </svg>
-              </div>
-              <div class="card-content">
-                <div class="card-badge blue">Desktop Sync</div>
-                <div class="card-title">Choose Research</div>
-                <div class="card-desc">Sync real-time with Bob Desktop. All highlights, notes, and messages are persisted directly to your desktop workspace.</div>
-              </div>
-            </button>
-          </div>
-        </div>
-
-        <div class="sp-project-sheet" id="project-sheet" hidden>
-          <div class="sp-project-sheet-head">
-            <span>Select Desktop Research Project</span>
-            <button class="sp-icon-btn-sm" id="btn-close-project-sheet" aria-label="Close">✕</button>
-          </div>
-          <div class="sp-project-search-wrap">
-            <input type="text" id="project-search-input" placeholder="Search or create a project…" autocomplete="off">
-          </div>
-          <div class="sp-project-list" id="project-list"></div>
-        </div>
-
-        <div class="sp-stream" id="chat-stream" hidden></div>
-      </section>
-
-      <section class="sp-view" id="view-summary">
-        <div class="sp-scroll">
-          <div class="sp-section-head">
-            <div>
-              <h2>Executive Summary</h2>
-              <p class="sp-hint">Smart cross-source synthesis extracted from your active research tabs.</p>
+          <div class="landing">
+            <div class="landing-card yellow-card" id="card-general-chat">
+              <div class="landing-icon" style="background:#ffe98b">✦</div>
+              <h3>General</h3>
+              <p>Ask anything without attaching it to a research project. Quick answers from your open tabs.</p>
             </div>
-            <button class="sp-pill-btn yellow-pill" id="btn-build-summary">
-              <span class="sp-pill-icon" id="summary-btn-icon">+</span>
-              <span id="summary-btn-text">Create</span>
-            </button>
-          </div>
-          <article id="summary-output" class="sp-empty">
-            No summary yet. Open research tabs, then click <b>Create</b> to synthesize key findings and takeaways.
-          </article>
-        </div>
-      </section>
-
-      <section class="sp-view" id="view-tabs">
-        <div class="sp-scroll">
-          <p class="sp-intro-text">
-            Selected tabs become Bob’s primary priority. In auto mode, Bob reads open tabs and cites the most relevant.
-          </p>
-
-          <div class="sp-all-tabs-bar" id="bar-all-tabs">
-            <button type="button" class="sp-radio-toggle" id="btn-all-tabs-toggle" aria-checked="false" role="checkbox">
-              <span class="sp-radio-circle" id="radio-all-tabs-circle"></span>
-              <span class="sp-radio-label">Select all tabs</span>
-            </button>
-            <span class="sp-tabs-count-chip" id="tabs-selected-count">0 selected</span>
-          </div>
-
-          <div class="sp-tabs-block">
-            <div class="sp-block-label">Selected tabs</div>
-            <div id="tabs-selected" class="sp-tab-list"></div>
-          </div>
-
-          <div class="sp-tabs-block">
-            <button class="sp-collapse-premium" id="btn-toggle-other" aria-expanded="true">
-              <div class="sp-collapse-left">
-                <span class="sp-collapse-icon" id="collapse-chevron">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="6 9 12 15 18 9"/>
-                  </svg>
-                </span>
-                <span class="sp-block-label-inline">Other open tabs</span>
-              </div>
-              <span class="sp-badge-count" id="other-tabs-count">0</span>
-            </button>
-            <div id="tabs-other" class="sp-tab-list"></div>
-          </div>
-        </div>
-      </section>
-
-      <section class="sp-view" id="view-tasks">
-        <div class="sp-scroll">
-          <div class="sp-section-head">
-            <div>
-              <h2>Research Tasks</h2>
-              <p class="sp-hint">Milestones and action items remaining for this project.</p>
+            <div class="landing-card blue-card" id="card-choose-research">
+              <div class="landing-icon" style="background:#bfe8ff">⌘</div>
+              <h3>Choose research</h3>
+              <p>Continue an existing project and keep Bob synced with your desktop workspace.</p>
             </div>
-            <button class="sp-pill-btn blue-pill" id="btn-auto-plan" title="Generate AI research roadmap">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-              </svg>
-              <span>Auto Plan</span>
-            </button>
           </div>
-
-          <form id="task-form" class="sp-task-form-apple">
-            <input id="task-input" type="text" placeholder="Add a research task…" aria-label="New task">
-            <button class="sp-btn-task-add" type="submit">Add</button>
-          </form>
-
-          <div id="task-list" class="sp-task-list"></div>
         </div>
+
+        <!-- Project Selector Sheet (When Choose Research is clicked) -->
+        <div id="projectSheet" style="display:none">
+          <div class="section-head">
+            <h2>Choose research project</h2>
+            <button class="icon" id="btn-back-projects" title="Back">←</button>
+          </div>
+          <input class="search" id="project-search-input" placeholder="Search or create a project…" autocomplete="off">
+          <div id="project-list"></div>
+        </div>
+
+        <!-- Active Chat Stream -->
+        <div id="researchChat" style="display:none">
+          <div class="section-head">
+            <h2 id="sessionTitle">Research session</h2>
+            <button class="pill bluepill" id="btn-chat-new">＋ New</button>
+          </div>
+          <div class="chat-list" id="chatList"></div>
+        </div>
+      </section>
+
+      <!-- 2. SUMMARY VIEW -->
+      <section class="view" id="view-summary">
+        <div class="section-head">
+          <h2>Research summary</h2>
+          <button class="pill yellow" id="summaryBtn">＋ Create</button>
+        </div>
+        <div id="summaryEmpty" class="card">
+          <b style="font-size:11px">A concise view of your progress.</b>
+          <p class="muted">Create a cross-tab summary when you are ready. Bob synthesizes key insights, agreements, and next exploration steps from your active research tabs.</p>
+        </div>
+        <div id="summaryContent" style="display:none"></div>
+      </section>
+
+      <!-- 3. TABS VIEW -->
+      <section class="view" id="view-tabs">
+        <div class="section-head">
+          <h2>Tabs</h2>
+          <button class="pill bluepill" id="btn-select-all-tabs">Select all</button>
+        </div>
+        <p class="muted" style="margin:0 2px 12px">Selected tabs become Bob's priority context for answers and synthesis.</p>
+        <div id="tabList"></div>
+      </section>
+
+      <!-- 4. TASKS VIEW -->
+      <section class="view" id="view-tasks">
+        <div class="section-head">
+          <div>
+            <h2>Tasks</h2>
+            <p class="muted" style="margin:3px 0 0">Remaining steps for this research.</p>
+          </div>
+          <button class="pill bluepill" id="btn-auto-plan">✦ Create</button>
+        </div>
+        <div class="task-stats">
+          <div class="task-stat"><b id="taskOpen">0</b><span>Open</span></div>
+          <div class="task-stat"><b id="taskDone">0</b><span>Done</span></div>
+          <div class="task-stat"><b id="taskTotal">0</b><span>Total</span></div>
+        </div>
+        <div id="taskList"></div>
+        <form class="task-add" id="taskForm">
+          <input id="taskInput" placeholder="Add a task…" autocomplete="off">
+          <button type="submit">Add</button>
+        </form>
       </section>
     </main>
 
-    <div class="sp-task-confirm-chip" id="task-confirm-chip" hidden>
-      <div class="sp-chip-content">
-        <span class="sp-chip-q" id="task-confirm-text">Have you finished exploring this task?</span>
-      </div>
-      <div class="sp-chip-actions">
-        <button class="sp-chip-btn yes" id="btn-task-confirm-yes">Yes, completed</button>
-        <button class="sp-chip-btn no" id="btn-task-confirm-no">Not yet</button>
+    <!-- Task Confirmation Chip (Context-aware popup after topic answered) -->
+    <div class="task-confirm-card" id="taskConfirmCard" style="display:none">
+      <div class="confirm-text" id="taskConfirmText">Have you finished exploring this step?</div>
+      <div class="confirm-actions">
+        <button class="pill-sm green" id="btn-confirm-yes">Yes, completed</button>
+        <button class="pill-sm gray" id="btn-confirm-no">Not yet</button>
       </div>
     </div>
 
-    <footer class="sp-footer">
-      <div class="sp-bridge-handoff-bar" id="bridge-handoff-bar" hidden>
-        <div class="sp-bridge-pills-row">
-          <div class="sp-bridge-pill source-pill">
-            <span class="pill-tag">FROM</span>
-            <select id="bridge-source-select" class="sp-pill-select">
-              <option value="ChatGPT">ChatGPT</option>
-              <option value="Claude">Claude</option>
-              <option value="Perplexity">Perplexity</option>
-              <option value="Gemini">Gemini</option>
-              <option value="DeepSeek">DeepSeek</option>
-            </select>
-          </div>
-
-          <span class="sp-bridge-arrow">→</span>
-
-          <div class="sp-bridge-pill dest-pill">
-            <span class="pill-tag">TO</span>
-            <select id="bridge-dest-select" class="sp-pill-select">
-              <option value="Claude">Claude</option>
-              <option value="ChatGPT">ChatGPT</option>
-              <option value="Gemini">Gemini</option>
-              <option value="Perplexity">Perplexity</option>
-              <option value="DeepSeek">DeepSeek</option>
-            </select>
-          </div>
-
-          <span class="flex-spacer"></span>
-
-          <button class="sp-icon-btn-sm" id="btn-close-bridge-handoff" title="Close Bridge mode">✕</button>
-        </div>
+    <!-- Tools Menu Popup (Opens on ⚡ click) -->
+    <div class="tool-menu" id="toolMenu">
+      <div class="tool" id="tool-auto-highlight">
+        <div class="ti" style="background:#e8f6ff">✧</div>
+        <div><b>Auto Highlight</b><span>Find important passages on this page</span></div>
       </div>
+      <div class="tool" id="tool-clear-highlights">
+        <div class="ti" style="background:#f1f3f6">✕</div>
+        <div><b>Clear highlights</b><span>Remove highlights on this page</span></div>
+      </div>
+      <div class="tool" id="tool-bridge">
+        <div class="ti" style="background:#fff1b8">↔</div>
+        <div><b>AI Context Bridge</b><span>Move context from one AI to another</span></div>
+      </div>
+      <div class="tool" id="tool-notes">
+        <div class="ti" style="background:#e7faef">▤</div>
+        <div><b>Research notes</b><span>Save useful information from this page</span></div>
+      </div>
+    </div>
 
-      <div class="sp-composer" id="composer">
-        <div class="sp-composer-row">
-          <textarea id="prompt-input" rows="1" placeholder="Ask Bob about this page…" aria-label="Message Bob"></textarea>
-          <button class="sp-round-btn" id="btn-tools" title="Tools" aria-label="Tools" aria-haspopup="true">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.1 2.1-2.4-.6-.6-2.4z"/>
+    <!-- Session History Drawer (Opens on ◷ click) -->
+    <div class="history" id="history">
+      <div class="history-head">
+        <h3>Session history</h3>
+        <button class="icon-sm" id="btn-close-history" title="Close">✕</button>
+      </div>
+      <div id="historyList"></div>
+      <div class="history-foot">
+        <small class="muted">General chats auto-expire after 24h · Projects persist to Desktop</small>
+      </div>
+    </div>
+
+    <!-- Saved Notes Sheet (Opens from Tools -> Research Notes) -->
+    <div class="notes-sheet" id="notesSheet" style="display:none">
+      <div class="notes-head">
+        <h3>Saved Research Notes</h3>
+        <button class="icon-sm" id="btn-close-notes" title="Close">✕</button>
+      </div>
+      <div class="notes-body" id="notesList"></div>
+    </div>
+
+    <!-- Quick Ask Modal Card -->
+    <div class="inline-card" id="inlineCard">
+      <div class="inline-head">
+        <div class="bob-mini">🐣</div>
+        <b>Bob <span class="sub">· Quick Ask</span></b>
+        <button class="icon-sm" id="btn-close-inline" title="Close">✕</button>
+      </div>
+      <div class="inline-body" id="inlineBody"></div>
+      <div class="inline-input">
+        <div class="inline-bar single-line">
+          <input id="inlineInput" placeholder="Ask anything about this page…" autocomplete="off">
+          <button class="send" id="btn-inline-send" type="button" aria-label="Send">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 19V5M5 12l7-7 7 7"/>
             </svg>
           </button>
-          <button class="sp-send" id="btn-send" title="Send" aria-label="Send message">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-            </svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- Composer: Docked cleanly at the bottom -->
+    <div class="composer">
+      <!-- AI Context Bridge Bar (Expands above prompt input when bridge is active) -->
+      <div class="composer-top" id="bridgeTop">
+        <div class="bridge-pill" id="srcPill">
+          <button type="button" class="bridge-btn" id="btn-src-pill">
+            <i class="bridge-dot src"></i>
+            <span id="srcLabel">ChatGPT</span>
+            <i class="chev">▾</i>
+          </button>
+          <div class="bridge-drop" id="srcDrop">
+            <div class="bridge-opt" data-side="src" data-val="ChatGPT" data-desc="openai.com"><div class="ao" style="background:#e7faef">✦</div><div><b>ChatGPT</b><small>openai.com</small></div></div>
+            <div class="bridge-opt" data-side="src" data-val="Claude" data-desc="claude.ai"><div class="ao" style="background:#fff1b8">◉</div><div><b>Claude</b><small>claude.ai</small></div></div>
+            <div class="bridge-opt" data-side="src" data-val="Gemini" data-desc="gemini.google.com"><div class="ao" style="background:#e8f6ff">✧</div><div><b>Gemini</b><small>gemini.google.com</small></div></div>
+            <div class="bridge-opt" data-side="src" data-val="Perplexity" data-desc="perplexity.ai"><div class="ao" style="background:#f3e8ff">◈</div><div><b>Perplexity</b><small>perplexity.ai</small></div></div>
+          </div>
+        </div>
+        <div class="bridge-arrow" title="Bridge direction">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M7 8h10M14 5l3 3-3 3M17 16H7M10 13l-3 3 3 3"/></svg>
+        </div>
+        <div class="bridge-pill" id="dstPill">
+          <button type="button" class="bridge-btn" id="btn-dst-pill">
+            <i class="bridge-dot dst"></i>
+            <span id="dstLabel">Bob Desktop</span>
+            <i class="chev">▾</i>
+          </button>
+          <div class="bridge-drop" id="dstDrop">
+            <div class="bridge-opt" data-side="dst" data-val="Bob Desktop" data-desc="local"><div class="ao" style="background:#fff2b8">🐣</div><div><b>Bob Desktop</b><small>local</small></div></div>
+            <div class="bridge-opt" data-side="dst" data-val="ChatGPT" data-desc="openai.com"><div class="ao" style="background:#e7faef">✦</div><div><b>ChatGPT</b><small>openai.com</small></div></div>
+            <div class="bridge-opt" data-side="dst" data-val="Claude" data-desc="claude.ai"><div class="ao" style="background:#fff1b8">◉</div><div><b>Claude</b><small>claude.ai</small></div></div>
+            <div class="bridge-opt" data-side="dst" data-val="Gemini" data-desc="gemini.google.com"><div class="ao" style="background:#e8f6ff">✧</div><div><b>Gemini</b><small>gemini.google.com</small></div></div>
+          </div>
+        </div>
+        <button class="icon-sm" id="btn-close-bridge" title="Close Bridge">✕</button>
+      </div>
+
+      <!-- Main Input Bar -->
+      <div class="composer-bar single-line">
+        <button class="c-plus" id="btn-open-inline" type="button" title="Quick Ask" aria-label="Quick Ask">+</button>
+        <button class="c-flash" id="btn-tools" type="button" title="Tools" aria-label="Tools">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M13 2 4.5 13.5h6L9 22 19.5 9.5h-6L13 2z"/></svg>
+        </button>
+        <textarea id="prompt" rows="1" placeholder="Ask Bob about your tabs, research, or this page…"></textarea>
+        <div class="c-actions">
+          <button class="c-ico" id="btn-voice" type="button" title="Voice Dictation" aria-label="Voice">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+          </button>
+          <button class="send" id="btn-send" type="button" aria-label="Send">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
         </div>
       </div>
+    </div>
 
-      <div class="sp-popover" id="tools-popover" hidden>
-        <div class="sp-popover-title">Bob Tools</div>
-        <button class="sp-pop-item" data-tool="auto-highlight">
-          <span class="sp-tool-icon">✦</span>
-          <span>Auto-highlight this page</span>
-        </button>
-        <button class="sp-pop-item" data-tool="clear-highlights">
-          <span class="sp-tool-icon">⊘</span>
-          <span>Clear highlights on this page</span>
-        </button>
-        <div class="sp-popover-sep"></div>
-        <button class="sp-pop-item" data-tool="bridge">
-          <span class="sp-tool-icon">⇄</span>
-          <span>AI Context Bridge (Handoff)</span>
-        </button>
-        <button class="sp-pop-item" data-tool="notes">
-          <span class="sp-tool-icon">❐</span>
-          <span>Research Notes</span>
-        </button>
-      </div>
-
-      <div class="sp-sheet" id="notes-sheet" hidden>
-        <div class="sp-sheet-head">
-          <h3>Saved Research Notes</h3>
-          <button class="sp-icon-btn-sm" id="btn-close-notes-sheet" aria-label="Close">✕</button>
-        </div>
-        <div class="sp-sheet-body">
-          <div class="sp-notes-list" id="notes-list"></div>
-        </div>
-      </div>
-    </footer>
+    <!-- Toast Notification -->
+    <div class="toast" id="toast"></div>
   </div>
 
   <script src="sidepanel.js"></script>

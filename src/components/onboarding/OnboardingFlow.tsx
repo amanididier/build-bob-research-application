@@ -60,6 +60,9 @@ export const OnboardingFlow: React.FC = () => {
     setExtConnectionStatus('checking');
     setExtErrorMessage('');
 
+    // Ensure tactile feedback
+    await new Promise((r) => setTimeout(r, 450));
+
     try {
       // 1. Direct check via Electron IPC
       if (typeof window !== 'undefined' && (window as any).bob?.checkExtensionConnection) {
@@ -71,30 +74,41 @@ export const OnboardingFlow: React.FC = () => {
         }
       }
 
-      // 2. Direct ping to local bridge on port 54321
-      const response = await fetch('http://127.0.0.1:54321/events/extension-status', {
-        headers: { 'x-bob-token': 'development-token' }
-      }).catch(() => null);
+      // 2. Direct ping to local bridge on port 54321 (127.0.0.1 or localhost)
+      const endpoints = [
+        'http://127.0.0.1:54321/events/extension-status',
+        'http://localhost:54321/events/extension-status',
+        'http://127.0.0.1:54321/events/handshake',
+        'http://localhost:54321/events/handshake',
+      ];
 
-      if (response && response.ok) {
-        const data = await response.json();
-        if (data.connected) {
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(endpoint, {
+            headers: { 'x-bob-token': 'development-token' },
+            signal: AbortSignal.timeout(1200)
+          }).catch(() => null);
+
+          if (response && response.ok) {
+            const data = await response.json();
+            if (data.connected || data.ok) {
+              if (endpoint.includes('extension-status') && data.connected) {
+                setIsExtensionConnected(true);
+                setExtConnectionStatus('connected');
+                return;
+              }
+            }
+          }
+        } catch {}
+      }
+
+      // 3. Check desktop store directly if in Electron
+      if (typeof window !== 'undefined' && (window as any).bob?.get) {
+        const desk = await (window as any).bob.get();
+        if (desk && (desk.extensionConnected || (desk.notes && desk.notes.length > 2) || (desk.tabs && Object.keys(desk.tabs).length > 0))) {
           setIsExtensionConnected(true);
           setExtConnectionStatus('connected');
           return;
-        }
-      }
-
-      // 3. Handshake fallback
-      const handshakeResp = await fetch('http://127.0.0.1:54321/events/handshake').catch(() => null);
-      if (handshakeResp && handshakeResp.ok) {
-        if (typeof window !== 'undefined' && (window as any).bob?.get) {
-          const desk = await (window as any).bob.get();
-          if (desk && (desk.extensionConnected || (desk.notes && desk.notes.length > 2) || (desk.tabs && Object.keys(desk.tabs).length > 0))) {
-            setIsExtensionConnected(true);
-            setExtConnectionStatus('connected');
-            return;
-          }
         }
       }
 
@@ -156,7 +170,7 @@ export const OnboardingFlow: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-[#f4f3ef] dark:bg-[#0f0f0f] animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
       <div className="w-full max-w-[760px] bg-[var(--s)] border border-[var(--line)] shadow-2xl rounded-[32px] p-9 relative flex flex-col justify-between min-h-[620px]">
         
         {/* Step Indicator & Ambient Progress */}
@@ -389,11 +403,11 @@ export const OnboardingFlow: React.FC = () => {
                   type="button"
                   onClick={handleCheckExtensionConnection}
                   disabled={extConnectionStatus === 'checking'}
-                  className="px-6 py-2.5 rounded-full bg-black hover:bg-neutral-850 dark:bg-white dark:hover:bg-neutral-200 text-white dark:text-black font-bold text-[13px] flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 cursor-pointer disabled:opacity-60"
+                  className="px-7 py-2.5 rounded-full bg-black hover:bg-neutral-800 text-white font-bold text-[13px] flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 cursor-pointer disabled:opacity-60 border border-neutral-700"
                 >
                   {extConnectionStatus === 'checking' ? (
                     <>
-                      <RotateCw className="w-4 h-4 animate-spin" />
+                      <RotateCw className="w-4 h-4 animate-spin text-amber-400" />
                       <span>Checking connection...</span>
                     </>
                   ) : (
@@ -406,20 +420,22 @@ export const OnboardingFlow: React.FC = () => {
 
                 {extConnectionStatus === 'connected' && (
                   <div className="w-full p-3 rounded-2xl bg-[#e6f7ed] text-[#14844d] border border-emerald-300 text-[12px] font-semibold flex items-center justify-center gap-2 animate-in fade-in">
-                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
                     <span>Extension connected & verified! Real-time syncing with Bob Desktop on port 54321 is active.</span>
                   </div>
                 )}
 
                 {extConnectionStatus === 'error' && (
-                  <div className="w-full p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-700/60 text-[12px] space-y-1 text-left animate-in fade-in">
-                    <div className="font-bold flex items-center gap-1.5">
+                  <div className="w-full p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-700/60 text-[12px] space-y-1.5 text-left animate-in fade-in">
+                    <div className="font-bold flex items-center gap-1.5 text-amber-800 dark:text-amber-200">
                       <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                      <span>Extension not connected yet</span>
+                      <span>Extension not connected yet — please check the steps again:</span>
                     </div>
-                    <p className="text-[11px] leading-relaxed m-0 text-amber-800 dark:text-amber-300">
-                      {extErrorMessage}
-                    </p>
+                    <ul className="text-[11.5px] leading-relaxed m-0 text-amber-800 dark:text-amber-300 list-disc list-inside space-y-1 pl-1">
+                      <li>Confirm you extracted <code>bob-chrome-extension.zip</code> and clicked <b>Load unpacked</b> in <code>chrome://extensions</code> with <b>Developer mode</b> ON.</li>
+                      <li>Click the <b>Bob icon</b> in your Chrome toolbar or open a web page to wake up the extension service worker.</li>
+                      <li>Ensure Bob Desktop is running on port 54321.</li>
+                    </ul>
                   </div>
                 )}
               </div>
@@ -641,22 +657,11 @@ export const OnboardingFlow: React.FC = () => {
           ) : (
             <div />
           )}
-          {/* Hide Continue button on step 5 until extension is verified as connected */}
+          {/* Hide Continue button completely on step 5 until extension is verified as connected */}
           {step === 5 && !isExtensionConnected ? (
-            <div className="flex items-center gap-3">
-              <span className="text-[12px] text-[var(--m)] italic">
-                Verify extension above to continue
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsExtensionConnected(true);
-                  handleNextStep();
-                }}
-                className="text-[11.5px] text-[var(--m)] hover:text-[var(--t)] underline cursor-pointer"
-              >
-                Skip for now
-              </button>
+            <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[var(--s2)] border border-[var(--line)] text-[12px] text-[var(--m)] animate-in fade-in">
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+              <span>Click <b>Check Connection</b> above to enable Continue</span>
             </div>
           ) : (
             <button

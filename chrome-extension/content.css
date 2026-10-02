@@ -1,5 +1,5 @@
 /* Bob Research Companion — page-level UI.
-   Soft blue (selection-style), warm yellow (reader-style), green #89E219.
+   Sky-blue, Duolingo green, and Snapchat yellow highlighters.
    Vertical 90° Traffic Light Floating Pill with drag handle,
    and Google Colab-style Inline Ask Bob card. */
 
@@ -18,35 +18,29 @@
 
 /* ------------------------------------------------------------ highlights */
 
-/* Shared: thicker band above/below text (reader-app style) */
 mark.bob-hl {
   color: inherit;
-  border-radius: 3px;
-  padding: 0.32em 0.2em;
-  margin: 0 0.02em;
+  border-radius: 4px;
+  padding: 0.14em 0.22em;
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
   transition: box-shadow 0.18s ease, background-color 0.18s ease;
-  line-height: 1.7;
-  font-weight: inherit;
+  line-height: 1.4;
 }
 
-/* Soft sky blue — matches first reference (selection-style blue) */
+/* Sky Blue (bright and clear) */
 mark.bob-hl-blue {
-  background-color: rgba(120, 175, 255, 0.48);
-  box-shadow: inset 0 0 0 1px rgba(90, 150, 240, 0.18);
+  background-color: rgba(56, 189, 248, 0.42);
 }
 
-/* Warm reader yellow — matches second reference */
-mark.bob-hl-yellow {
-  background-color: rgba(255, 214, 110, 0.55);
-  box-shadow: inset 0 0 0 1px rgba(230, 180, 60, 0.2);
-}
-
-/* Green #89E219 — same soft translucent style */
+/* Duolingo Green (fresh and legible) */
 mark.bob-hl-green {
-  background-color: rgba(137, 226, 25, 0.42);
-  box-shadow: inset 0 0 0 1px rgba(100, 180, 20, 0.18);
+  background-color: rgba(74, 222, 128, 0.45);
+}
+
+/* Snapchat Yellow (clean bright yellow, not orange) */
+mark.bob-hl-yellow {
+  background-color: rgba(255, 252, 0, 0.52);
 }
 
 mark.bob-hl.bob-hl-focus {
@@ -143,6 +137,7 @@ mark.bob-hl.bob-hl-focus {
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.22);
 }
 
+/* Drag Handle with Hand Icon */
 .bob-pill-drag-handle {
   width: 32px;
   height: 22px;
@@ -158,6 +153,7 @@ mark.bob-hl.bob-hl-focus {
   color: #171717;
 }
 
+/* Traffic Light Circles (3 vertical circles) */
 .bob-traffic-lights {
   display: flex;
   flex-direction: column;
@@ -180,20 +176,21 @@ mark.bob-hl.bob-hl-focus {
 }
 
 .bob-light-circle.blue {
-  background: #78afff;
-  box-shadow: 0 0 6px rgba(120, 175, 255, 0.55);
+  background: #38bdf8;
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.5);
 }
 
 .bob-light-circle.green {
-  background: #89E219;
-  box-shadow: 0 0 6px rgba(137, 226, 25, 0.55);
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
 }
 
 .bob-light-circle.yellow {
-  background: #ffd66e;
-  box-shadow: 0 0 6px rgba(255, 214, 110, 0.55);
+  background: #facc15;
+  box-shadow: 0 0 6px rgba(250, 204, 21, 0.5);
 }
 
+/* Blur indicator if >3 highlights exist */
 .bob-pill-overflow-blur {
   width: 22px;
   height: 10px;
@@ -203,12 +200,13 @@ mark.bob-hl.bob-hl-focus {
   margin-top: -2px;
 }
 
+/* Play/Nav button in yellow circle */
 .bob-pill-nav-btn {
   width: 26px;
   height: 26px;
   border-radius: 50%;
   border: none;
-  background: #ffd66e;
+  background: #fffc00;
   color: #171717;
   display: grid;
   place-items: center;
@@ -223,6 +221,7 @@ mark.bob-hl.bob-hl-focus {
   transform: scale(1.12);
 }
 
+/* Clear / Stop button in clean red */
 .bob-pill-clear-btn {
   width: 22px;
   height: 22px;
@@ -244,6 +243,7 @@ mark.bob-hl.bob-hl-focus {
   transform: scale(1.1);
 }
 
+/* Hover Preview Card */
 .bob-pill-preview-card {
   position: absolute;
   right: 54px;
@@ -284,7 +284,7 @@ mark.bob-hl.bob-hl-focus {
 }
 
 .bob-preview-item:hover {
-  background: rgba(255, 214, 110, 0.3);
+  background: rgba(255, 252, 0, 0.25);
 }
 
 .bob-preview-item-color {
@@ -294,8 +294,8 @@ mark.bob-hl.bob-hl-focus {
   margin-bottom: 2px;
 }
 
-.bob-preview-item-color.blue { color: #3b82f6; }
-.bob-preview-item-color.green { color: #65a30d; }
+.bob-preview-item-color.blue { color: #0284c7; }
+.bob-preview-item-color.green { color: #16a34a; }
 .bob-preview-item-color.yellow { color: #ca8a04; }
 
 /* --------------------------------------- inline colab-style ask bob card */
@@ -381,8 +381,8 @@ mark.bob-hl.bob-hl-focus {
 
 .bob-colab-excerpt {
   padding: 6px 10px;
-  background: rgba(255, 214, 110, 0.2);
-  border-left: 3px solid #ffd66e;
+  background: rgba(255, 252, 0, 0.15);
+  border-left: 3px solid #facc15;
   border-radius: 0 6px 6px 0;
   font-size: 11.5px;
   line-height: 1.45;
@@ -444,8 +444,8 @@ mark.bob-hl.bob-hl-focus {
 }
 
 .bob-colab-form:focus-within {
-  border-color: #78afff;
-  box-shadow: 0 0 0 2px rgba(120, 175, 255, 0.25);
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
 }
 
 .bob-colab-input {
@@ -463,7 +463,7 @@ mark.bob-hl.bob-hl-focus {
   height: 26px;
   border-radius: 50%;
   border: none;
-  background: #ffd66e;
+  background: #fffc00;
   color: #171717;
   display: grid;
   place-items: center;
@@ -472,7 +472,7 @@ mark.bob-hl.bob-hl-focus {
 }
 
 .bob-colab-send:hover {
-  background: #ffcc4d;
+  background: #facc15;
 }
 
 /* ----------------------------------------------------------------- toast */

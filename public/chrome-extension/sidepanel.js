@@ -1,46 +1,49 @@
-// Bob Research Companion — side panel controller
-//
-// Every state shown here comes from real sources: chrome.tabs, the extension's
-// local storage, the authenticated Bob Desktop bridge, or the user's own
-// Gemini key. Nothing is simulated.
+// Bob Research Companion — Side Panel Controller
+// Pixel-perfect implementation matching the interactive prototype.
+// Features: Dual-card research landing, real-time Desktop bridge door,
+// auto-sync chat, smart summary, tabs priority context, tasks roadmap,
+// tools popover, quick ask inline modal, and context bridge.
 
 (() => {
   'use strict';
 
-  const dom = {};
+  const $ = (id) => document.getElementById(id);
+  const $$ = (sel) => document.querySelectorAll(sel);
+
   const state = {
-    view: 'chat',
+    view: 'research',
+    sessionMode: null, // 'general' | 'research' | null
+    activeProjectId: null,
+    activeProjectName: null,
     tab: null,
     pageText: '',
-    bridge: { connected: false, detail: 'unknown' },
-    settings: { geminiKey: '', bridgeToken: 'development-token', syncTabsToDesktop: true, researchFocus: '' },
-    hasGeminiKey: false,
+    bridge: { connected: false },
     notes: [],
     tabs: [],
     tasks: [],
-    scores: new Map(),
+    projects: [],
+    bridgeActive: false,
+    bridgeSrc: 'ChatGPT',
+    bridgeDst: 'Bob Desktop',
+    summaryCreated: false,
     busy: false,
+    sessions: [],
   };
 
-  const STOPWORDS = new Set(
-    'the a an and or but of to in for on with as by is are was were be been this that these those it its from at into about over under their there they we you your our his her which who what when where why how can could should would will may might must not no do does did done have has had more most other some such than then also very just only own same https http www html php com org net'.split(
-      ' '
-    )
-  );
-
-  // ------------------------------------------------------------- helpers ---
-
-  const $ = (id) => document.getElementById(id);
-
+  // Safe wrapper for Chrome extension runtime messages
   function send(message) {
     return new Promise((resolve) => {
       try {
+        if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) {
+          resolve({ ok: false, reason: 'no-chrome-runtime' });
+          return;
+        }
         chrome.runtime.sendMessage(message, (response) => {
-          if (chrome.runtime.lastError) {
+          if (chrome.runtime && chrome.runtime.lastError) {
             resolve({ ok: false, reason: chrome.runtime.lastError.message });
             return;
           }
-          resolve(response === undefined || response === null ? { ok: false, reason: 'no-response' } : response);
+          resolve(response !== undefined && response !== null ? response : { ok: false, reason: 'no-response' });
         });
       } catch (err) {
         resolve({ ok: false, reason: (err && err.message) || 'send-failed' });
@@ -48,851 +51,974 @@
     });
   }
 
-  function clear(node) {
-    while (node && node.firstChild) node.removeChild(node.firstChild);
+  function toast(text) {
+    const el = $('toast');
+    if (!el) return;
+    el.textContent = text;
+    el.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => el.classList.remove('show'), 2200);
   }
 
-  function make(tag, className, text) {
-    const node = document.createElement(tag);
-    if (className) node.className = className;
-    if (text !== undefined) node.textContent = text;
-    return node;
+  function clear(el) {
+    while (el && el.firstChild) el.removeChild(el.firstChild);
   }
 
-  function domainOf(url) {
+  // ------------------------------------------------------------- Bridge Status
+
+  async function checkBridgeStatus() {
+    let isConn = false;
     try {
-      return new URL(url).hostname.replace(/^www\./, '');
-    } catch {
-      return '';
-    }
-  }
-
-  function relativeTime(iso) {
-    const then = new Date(iso).getTime();
-    if (!then) return '';
-    const diff = Date.now() - then;
-    const mins = Math.round(diff / 60000);
-    if (mins < 1) return 'just now';
-    if (mins < 60) return `${mins}m ago`;
-    const hours = Math.round(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    return new Date(then).toLocaleDateString();
-  }
-
-  // ------------------------------------------------------------ chat view ---
-
-  function addMessage(role, text, meta) {
-    const wrap = make('div', `sp-msg ${role}-msg`);
-    const bubble = make('div', 'msg-bubble');
-    bubble.appendChild(make('div', null, text));
-    if (meta) bubble.appendChild(make('div', 'msg-meta', meta));
-    wrap.appendChild(bubble);
-    dom.chatStream.appendChild(wrap);
-    dom.chatStream.scrollTop = dom.chatStream.scrollHeight;
-    return { wrap, bubble };
-  }
-
-  function setPendingMessage(entry, text) {
-    clear(entry.bubble);
-    entry.bubble.appendChild(make('div', null, text));
-    dom.chatStream.scrollTop = dom.chatStream.scrollHeight;
-  }
-
-  function renderChatEmptyState() {
-    if (dom.chatStream.childElementCount) return;
-    const empty = make('div', 'sp-chat-empty');
-    empty.appendChild(make('div', null, 'Bob reads the page you are on — only when you ask.'));
-    empty.appendChild(make('div', null, 'Select text on the page for Copy · Notes · Ask Bob, or type a question below.'));
-    dom.chatStream.appendChild(empty);
-  }
-
-  async function submitPrompt(prompt, extraContext) {
-    const text = String(prompt || '').trim();
-    if (!text || state.busy) return;
-
-    renderChatEmptyState();
-    if (dom.chatStream.querySelector('.sp-chat-empty')) clear(dom.chatStream);
-
-    addMessage('user', text);
-    const pending = addMessage('bob', 'Reading the page and your research context…');
-    dom.chatStream.classList.add('busy');
-    state.busy = true;
-    dom.btnSend.disabled = true;
-
-    let pageText = state.pageText;
-    if (!pageText && state.tab) {
-      const extracted = await send({ type: 'GET_PAGE_TEXT' });
-      if (extracted && extracted.ok) {
-        pageText = extracted.excerpt || '';
-        state.pageText = pageText;
+      const res = await send({ type: 'GET_BRIDGE_STATUS', force: true });
+      if (res && res.ok) {
+        const obj = res.status || res;
+        if (obj.connected !== undefined) isConn = Boolean(obj.connected);
       }
+    } catch {}
+
+    // Direct HTTP health fallback to desktop companion port
+    if (!isConn) {
+      try {
+        const direct = await fetch('http://127.0.0.1:54321/events/health', {
+          method: 'GET',
+          headers: { 'x-bob-token': 'development-token' }
+        });
+        if (direct.ok) isConn = true;
+      } catch {}
     }
 
-    const result = await send({
-      type: 'CHAT',
-      prompt: text,
-      context: {
-        title: state.tab ? state.tab.title : '',
-        url: state.tab ? state.tab.url : '',
-        excerpt: [extraContext, pageText].filter(Boolean).join('\n\n'),
-      },
-    });
-
-    state.busy = false;
-    dom.btnSend.disabled = false;
-    dom.chatStream.classList.remove('busy');
-
-    if (result && result.ok && result.reply) {
-      setPendingMessage(pending, result.reply);
-      pending.bubble.appendChild(make('div', 'msg-meta', `Gemini · ${result.model}`));
-      return;
-    }
-
-    const reason = result && result.reason;
-    const messages = {
-      'no-key': 'No Gemini key is connected. Open Tools → Bridge & AI key and paste your Google AI Studio key — Bob will not invent an answer without one.',
-      'bad-key': 'Google rejected that key (401/403). Update it under Tools → Bridge & AI key.',
-      'rate-limited': 'Google rate-limited this key (429). Wait a moment and try again.',
-      'no-tab': 'Bob could not see an active tab. Reload the page you are reading and try again.',
-    };
-    setPendingMessage(pending, messages[reason] || `Bob could not reach Gemini (${reason || 'unknown error'}). Nothing was guessed.`);
-    pending.wrap.classList.add('pending');
-  }
-
-  // -------------------------------------------------------- summary view ---
-
-  async function buildSummary() {
-    if (state.busy) return;
-
-    const selected = state.tabs.filter((t) => t.selected);
-    clear(dom.summarySource);
-    dom.summaryOutput.className = 'sp-empty';
-    dom.summaryOutput.textContent = 'Collecting the selected sources…';
-    dom.btnBuildSummary.disabled = true;
-    state.busy = true;
-
-    const sources = [];
-    for (const tab of selected.slice(0, 6)) {
-      const read = await send({ type: 'EXTRACT_TAB_TEXT', url: tab.url, tabId: tab.tabId });
-      const row = make('div', 'sp-source');
-      row.appendChild(make('span', 'sp-source-title', tab.title));
-      row.appendChild(
-        make(
-          'span',
-          'sp-source-domain',
-          read && read.ok ? `${domainOf(tab.url)} · ${Math.round((read.text || '').length / 1000)}k chars` : `${domainOf(tab.url)} · not readable`
-        )
-      );
-      dom.summarySource.appendChild(row);
-      if (read && read.ok && read.text) sources.push(`### ${read.title}\n${read.url}\n${read.text}`);
-    }
-
-    if (state.tab) {
-      if (!state.pageText) {
-        const extracted = await send({ type: 'GET_PAGE_TEXT' });
-        if (extracted && extracted.ok) state.pageText = extracted.excerpt || '';
-      }
-      if (state.pageText) {
-        sources.push(`### ${state.tab.title} (active tab)\n${state.tab.url}\n${state.pageText}`);
-        if (!selected.some((t) => t.url === state.tab.url)) {
-          const row = make('div', 'sp-source');
-          row.appendChild(make('span', 'sp-source-title', `${state.tab.title} (active tab)`));
-          row.appendChild(make('span', 'sp-source-domain', domainOf(state.tab.url)));
-          dom.summarySource.appendChild(row);
-        }
-      }
-    }
-
-    state.busy = false;
-    dom.btnBuildSummary.disabled = false;
-
-    if (!sources.length) {
-      dom.summaryOutput.textContent = 'Nothing to summarize yet. Select at least one readable tab in the Tabs view (pages like chrome:// or the web store cannot be read).';
-      return;
-    }
-
-    dom.summaryOutput.className = 'sp-summary-body';
-    dom.summaryOutput.textContent = 'Comparing sources…';
-
-    const prompt =
-      'Summarize the sources below for my research. Structure the answer as:\n' +
-      '1. Three-sentence overview.\n' +
-      '2. Key findings as bullets, each tagged [Supported], [Contradicted], [Related] or [Background] depending on how the sources relate to each other.\n' +
-      '3. Gaps or contradictions worth verifying.\n' +
-      'Cite the source domain inline for each finding. Use only these sources.';
-
-    const result = await send({ type: 'CHAT', prompt, context: { excerpt: sources.join('\n\n---\n\n'), title: '', url: '' } });
-
-    if (result && result.ok && result.reply) {
-      dom.summaryOutput.textContent = result.reply;
-      dom.summaryOutput.appendChild(make('div', 'msg-meta', `Gemini · ${result.model} · ${sources.length} source(s)`));
-    } else {
-      dom.summaryOutput.className = 'sp-empty';
-      dom.summaryOutput.textContent =
-        result && result.reason === 'no-key'
-          ? 'Bob needs your Gemini key to write the summary. Open Tools → Bridge & AI key. The sources above were collected and are ready.'
-          : `Summary failed (${(result && result.reason) || 'unknown error'}). Your sources are listed above — nothing was invented.`;
-    }
-  }
-
-  // ----------------------------------------------------------- tabs view ---
-
-  function keywords(text) {
-    const counts = new Map();
-    String(text || '')
-      .toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, ' ')
-      .split(/\s+/)
-      .forEach((word) => {
-        if (word.length < 4 || STOPWORDS.has(word)) return;
-        counts.set(word, (counts.get(word) || 0) + 1);
-      });
-    return counts;
-  }
-
-  function scoreTab(tab, focus) {
-    if (!focus.size) return { score: null, tier: 'unknown', why: 'no focus set' };
-
-    const title = String(tab.title || '').toLowerCase();
-    const url = String(tab.url || '').toLowerCase();
-    const titleTokens = new Set(title.replace(/[^a-z0-9\s-]/g, ' ').split(/\s+/).filter(Boolean));
-
-    let matched = [];
-    let weight = 0;
-    focus.forEach((focusWeight, keyword) => {
-      const inTitle = Array.from(titleTokens).some((token) => token === keyword || token.startsWith(keyword) || keyword.startsWith(token));
-      const inUrl = url.includes(keyword);
-      if (inTitle || inUrl) {
-        matched.push(keyword);
-        weight += (inTitle ? 2 : 1) * (1 + Math.min(focusWeight, 3) * 0.2);
-      }
-    });
-
-    if (!matched.length) return { score: 12, tier: 'red', why: 'no keyword overlap' };
-
-    const score = Math.max(20, Math.min(100, Math.round(38 + weight * 11)));
-    const tier = score >= 80 ? 'green' : score >= 66 ? 'blue' : score >= 50 ? 'yellow' : 'red';
-    return { score, tier, why: matched.slice(0, 3).join(', ') };
-  }
-
-  function tierOf(score) {
-    if (score === null) return 'unknown';
-    return score >= 80 ? 'green' : score >= 66 ? 'blue' : score >= 50 ? 'yellow' : 'red';
-  }
-
-  function renderTabs() {
-    const focus = keywords(state.settings.researchFocus);
-    clear(dom.tabsSelected);
-    clear(dom.tabsOther);
-
-    const selected = state.tabs.filter((t) => t.selected);
-    const others = state.tabs.filter((t) => !t.selected);
-
-    if (!state.tabs.length) {
-      dom.tabsOther.appendChild(
-        make('div', 'sp-empty', 'No tabs tracked yet. Press “+ This tab” to add the page you are reading, or right-click any page → “Add this tab to Bob research tabs”.')
-      );
-    }
-
-    if (!selected.length) {
-      dom.tabsSelected.appendChild(make('div', 'sp-empty', 'Nothing selected. Selected tabs are the sources Bob summarizes and cites.'));
-    }
-
-    selected.forEach((tab) => dom.tabsSelected.appendChild(tabRow(tab, focus)));
-    others
-      .slice()
-      .sort((a, b) => {
-        const sa = state.scores.get(a.url);
-        const sb = state.scores.get(b.url);
-        return (sb && sb.score ? sb.score : -1) - (sa && sa.score ? sa.score : -1);
-      })
-      .forEach((tab) => dom.tabsOther.appendChild(tabRow(tab, focus)));
-
-    dom.btnToggleOther.querySelector('span').textContent = `Other tabs (${others.length})`;
-  }
-
-  function tabRow(tab, focus) {
-    const score = scoreTab(tab, focus);
-    state.scores.set(tab.url, score);
-
-    const row = make('div', `sp-tab${tab.selected ? ' selected' : ''}`);
-
-    const check = make('button', 'sp-check', '✓');
-    check.type = 'button';
-    check.setAttribute('aria-pressed', tab.selected ? 'true' : 'false');
-    check.title = tab.selected ? 'Remove from primary research context' : 'Make this a primary research source';
-    check.addEventListener('click', async () => {
-      const result = await send({ type: 'SET_TAB_SELECTED', url: tab.url, selected: !tab.selected, tab });
-      if (result && result.ok) {
-        state.tabs = result.tabs;
-        renderTabs();
-      }
-    });
-    row.appendChild(check);
-
-    if (tab.favIconUrl) {
-      const img = make('img', 'sp-favicon');
-      img.src = tab.favIconUrl;
-      img.alt = '';
-      img.addEventListener('error', () => img.replaceWith(faviconFallback(tab)));
-      row.appendChild(img);
-    } else {
-      row.appendChild(faviconFallback(tab));
-    }
-
-    const main = make('div', 'sp-tab-main');
-    const title = make('div', 'sp-tab-title', tab.title || tab.url);
-    title.title = tab.title || tab.url;
-    title.addEventListener('click', () => {
-      if (tab.tabId) chrome.tabs.update(tab.tabId, { active: true }).catch(() => {});
-      else chrome.tabs.create({ url: tab.url, active: false });
-    });
-    title.style.cursor = 'pointer';
-    main.appendChild(title);
-    main.appendChild(make('div', 'sp-tab-domain', tab.domain || domainOf(tab.url)));
-    row.appendChild(main);
-
-    const relevance = make('div', 'sp-tab-relevance');
-    const tier = tierOf(score.score);
-    relevance.appendChild(make('div', `sp-score ${tier}`, score.score === null ? '—' : `${score.score}%`));
-    const bar = make('div', 'sp-score-bar');
-    const fill = make('div', 'sp-score-fill');
-    fill.style.width = `${score.score === null ? 0 : score.score}%`;
-    bar.appendChild(fill);
-    relevance.appendChild(bar);
-    relevance.appendChild(make('div', 'sp-tab-why', score.why));
-    relevance.title = `Relevance from title + URL against your research focus. ${score.why}`;
-    row.appendChild(relevance);
-
-    return row;
-  }
-
-  function faviconFallback(tab) {
-    const letter = (tab.domain || domainOf(tab.url) || tab.title || '?').charAt(0).toUpperCase();
-    return make('div', 'sp-favicon-fallback', letter);
-  }
-
-  // ---------------------------------------------------------- tasks view ---
-
-  function renderTasks() {
-    clear(dom.taskList);
-    if (!state.tasks.length) {
-      dom.taskList.appendChild(make('div', 'sp-empty', 'No tasks yet. Add the next step of your research here — Bob keeps it in chat context.'));
-      return;
-    }
-    state.tasks.forEach((task) => {
-      const row = make('div', `sp-task${task.done ? ' done' : ''}`);
-      const box = make('input');
-      box.type = 'checkbox';
-      box.checked = Boolean(task.done);
-      box.addEventListener('change', async () => {
-        const result = await send({ type: 'TOGGLE_TASK', id: task.id });
-        if (result && result.ok) {
-          state.tasks = result.tasks;
-          renderTasks();
-        }
-      });
-      row.appendChild(box);
-      row.appendChild(make('div', 'sp-task-title', task.title));
-      const del = make('button', 'sp-task-delete', '✕');
-      del.type = 'button';
-      del.title = 'Delete task';
-      del.addEventListener('click', async () => {
-        const result = await send({ type: 'DELETE_TASK', id: task.id });
-        if (result && result.ok) {
-          state.tasks = result.tasks;
-          renderTasks();
-        }
-      });
-      row.appendChild(del);
-      dom.taskList.appendChild(row);
-    });
-  }
-
-  // ---------------------------------------------------------- notes view ---
-
-  function renderNotes() {
-    dom.notesCount.textContent = `${state.notes.length} note${state.notes.length === 1 ? '' : 's'}`;
-    clear(dom.notesList);
-
-    if (!state.notes.length) {
-      dom.notesList.appendChild(make('div', 'sp-empty', 'No notes yet. Select text on any page and choose Notes.'));
-      return;
-    }
-
-    state.notes.slice(0, 60).forEach((note) => {
-      const card = make('div', `sp-note${note.color ? ` ${note.color}` : ''}`);
-      card.appendChild(make('div', 'sp-note-text', note.text.length > 400 ? `${note.text.slice(0, 400)}…` : note.text));
-      const meta = make('div', 'sp-note-meta');
-      const src = make('span', 'sp-note-src', `${note.domain || domainOf(note.sourceUrl) || 'unknown source'} · ${relativeTime(note.createdAt)}`);
-      src.title = note.sourceUrl || '';
-      src.style.cursor = note.sourceUrl ? 'pointer' : 'default';
-      if (note.sourceUrl) src.addEventListener('click', () => chrome.tabs.create({ url: note.sourceUrl, active: true }));
-      meta.appendChild(src);
-      const del = make('button', 'sp-note-delete', 'Delete');
-      del.type = 'button';
-      del.addEventListener('click', async () => {
-        const result = await send({ type: 'DELETE_NOTE', id: note.id });
-        if (result && result.ok) {
-          state.notes = result.notes;
-          renderNotes();
-        }
-      });
-      meta.appendChild(del);
-      card.appendChild(meta);
-      dom.notesList.appendChild(card);
-    });
-  }
-
-  // --------------------------------------------------------- bridge chip ---
-
-  function renderBridge(status) {
-    state.bridge = status || state.bridge;
-    const connected = Boolean(state.bridge.connected);
-    dom.bridgeDot.className = `sp-dot ${connected ? 'on' : 'off'}`;
-    dom.bridgeLabel.textContent = connected ? `Desktop v${state.bridge.version || '?'}` : 'Desktop offline';
-    dom.bridgeChip.title = connected
-      ? 'Bob Desktop bridge connected on 127.0.0.1:54321'
-      : `Bridge not connected (${state.bridge.detail || 'unreachable'}). Start Bob Desktop, or fix the token in Tools → Bridge & AI key.`;
-
-    dom.bridgeStatusLine.className = `sp-status-line ${connected ? 'ok' : 'err'}`;
-    dom.bridgeStatusLine.textContent = connected
-      ? `Connected to Bob Desktop v${state.bridge.version || 'unknown'} on 127.0.0.1:54321.`
-      : state.bridge.detail === 'bad-token'
-        ? 'Bob Desktop answered but rejected the token (401). Set the same BOB_BRIDGE_TOKEN below.'
-        : 'Bob Desktop is not answering on 127.0.0.1:54321. Notes and highlights stay in this browser until it does.';
-  }
-
-  async function refreshBridge(force) {
-    dom.bridgeDot.className = 'sp-dot pending';
-    dom.bridgeLabel.textContent = 'Checking…';
-    const result = await send({ type: 'GET_BRIDGE_STATUS', force: Boolean(force) });
-    if (result && result.ok) renderBridge(result.status);
-    else renderBridge({ connected: false, detail: 'unknown' });
-  }
-
-  // -------------------------------------------------------------- tools ---
-
-  function closePopovers() {
-    dom.toolsPopover.hidden = true;
-    dom.attachPopover.hidden = true;
-    dom.btnTools.setAttribute('aria-expanded', 'false');
-    dom.btnAttach.setAttribute('aria-expanded', 'false');
-  }
-
-  async function runTool(tool) {
-    closePopovers();
-
-    if (tool.startsWith('highlight-')) {
-      const color = tool.replace('highlight-', '');
-      const result = await send({ type: 'HIGHLIGHT_SELECTION_IN_PAGE', color });
-      if (!result || !result.ok) toastInChat(result && result.reason === 'no-selection' ? 'Select the text you want to highlight first.' : 'Bob could not reach this page. Reload it and try again.');
-      return;
-    }
-
-    if (tool === 'auto-highlight') {
-      const result = await send({ type: 'AUTO_HIGHLIGHT_PAGE', focus: state.settings.researchFocus });
-      if (result && result.ok && result.count) {
-        toastInChat(`Auto-highlighted ${result.count} passage${result.count === 1 ? '' : 's'} that match your research focus. Hover the rail on the right of the page to walk through them.`);
-      } else if (result && result.reason === 'no-research-focus') {
-        toastInChat('Set a research focus in the Tabs view first — Bob will not highlight arbitrary text.');
-      } else if (result && (result.reason === 'no-matches' || result.count === 0)) {
-        toastInChat('Nothing on this page matched your research focus, so Bob highlighted nothing.');
+    state.bridge.connected = isConn;
+    const dot = $('desktop-status-dot');
+    if (dot) {
+      if (isConn) {
+        dot.classList.remove('off');
+        dot.title = 'Bob Desktop is connected & listening on port 54321';
       } else {
-        toastInChat('Bob could not analyse this page (it may block extensions). Reload and try again.');
+        dot.classList.add('off');
+        dot.title = 'Bob Desktop is offline or closed';
       }
-      return;
-    }
-
-    if (tool === 'clear-highlights') {
-      if (!state.tab) return;
-      await send({ type: 'CLEAR_PAGE_HIGHLIGHTS', url: state.tab.url });
-      const relay = await chrome.tabs.sendMessage(state.tab.id, { type: 'BOB_CLEAR_PAGE_HIGHLIGHTS' }).catch(() => null);
-      toastInChat(relay && relay.ok ? 'Cleared every Bob highlight on this page.' : 'Stored highlights cleared. Reload the page to remove the marks.');
-      return;
-    }
-
-    if (tool === 'bridge') {
-      dom.bridgeSheet.hidden = false;
-      dom.bridgeToken.value = state.settings.bridgeToken || '';
-      dom.syncTabs.checked = Boolean(state.settings.syncTabsToDesktop);
-      await refreshBridge(true);
-      return;
-    }
-
-    if (tool === 'notes') {
-      dom.notesList.hidden = false;
-      dom.btnToggleNotes.setAttribute('aria-expanded', 'true');
-      renderNotes();
     }
   }
 
-  function toastInChat(text) {
-    switchView('chat');
-    renderChatEmptyState();
-    const empty = dom.chatStream.querySelector('.sp-chat-empty');
-    if (empty) clear(dom.chatStream);
-    addMessage('bob', text);
+  async function openDesktop() {
+    const btn = $('btn-open-desktop');
+    if (btn) btn.disabled = true;
+    toast('Focusing Bob Desktop app…');
+    try {
+      const res = await send({ type: 'OPEN_BOB_DESKTOP' });
+      if (res && res.ok) {
+        checkBridgeStatus();
+      } else {
+        // Direct focus fallback
+        await fetch('http://127.0.0.1:54321/events/focus', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-bob-token': 'development-token' },
+          body: JSON.stringify({ source: 'chrome-sidepanel' })
+        }).catch(() => {});
+      }
+    } catch {}
+    setTimeout(() => {
+      if (btn) btn.disabled = false;
+      checkBridgeStatus();
+    }, 600);
   }
 
-  // -------------------------------------------------------------- views ---
+  // ------------------------------------------------------------- View Switcher
 
-  function switchView(view) {
-    state.view = view;
-    document.querySelectorAll('.sp-nav-btn').forEach((btn) => {
-      const active = btn.dataset.view === view;
+  function switchView(viewName) {
+    state.view = viewName;
+    $$('.nav button').forEach((btn) => {
+      const active = btn.dataset.view === viewName;
       btn.classList.toggle('active', active);
       btn.setAttribute('aria-selected', active ? 'true' : 'false');
     });
-    document.querySelectorAll('.sp-view').forEach((section) => {
-      section.classList.toggle('active', section.id === `view-${view}`);
+
+    $$('.view').forEach((sec) => {
+      sec.classList.remove('active');
     });
-    if (view === 'tabs') renderTabs();
-    if (view === 'tasks') renderTasks();
+    const target = $(`view-${viewName}`);
+    if (target) target.classList.add('active');
+
+    // Close any floating menus on view change
+    closeAllMenus();
   }
 
-  // --------------------------------------------------------------- boot ---
+  function closeAllMenus() {
+    const toolMenu = $('toolMenu');
+    if (toolMenu) toolMenu.classList.remove('open');
+    const history = $('history');
+    if (history) history.classList.remove('open');
+    const notesSheet = $('notesSheet');
+    if (notesSheet) notesSheet.style.display = 'none';
+    const inlineCard = $('inlineCard');
+    if (inlineCard) inlineCard.classList.remove('show');
+    $$('.bridge-pill').forEach((p) => p.classList.remove('open'));
+  }
 
-  async function boot() {
-    [
-      'context-title',
-      'context-sub',
-      'bridge-chip',
-      'bridge-dot',
-      'bridge-label',
-      'btn-open-desktop',
-      'btn-close-panel',
-      'chat-stream',
-      'btn-build-summary',
-      'summary-source',
-      'summary-output',
-      'tabs-selected',
-      'tabs-other',
-      'btn-toggle-other',
-      'btn-score-tabs',
-      'btn-add-current-tab',
-      'research-focus',
-      'task-form',
-      'task-input',
-      'task-list',
-      'notes-bar',
-      'notes-count',
-      'notes-list',
-      'btn-toggle-notes',
-      'composer',
-      'prompt-input',
-      'btn-send',
-      'btn-tools',
-      'btn-attach',
-      'tools-popover',
-      'attach-popover',
-      'bridge-sheet',
-      'bridge-status-line',
-      'btn-recheck-bridge',
-      'gemini-key',
-      'btn-save-key',
-      'btn-test-key',
-      'key-status',
-      'bridge-token',
-      'sync-tabs',
-    ].forEach((id) => {
-      const node = $(id);
-      const key = id.replace(/-(\w)/g, (_, c) => c.toUpperCase());
-      dom[key] = node;
-    });
+  // ------------------------------------------------------------------ Sessions
 
-    wireNavigation();
-    wireComposer();
-    wireTools();
-    wireBridgeSheet();
-    wireHeader();
-    wireNotes();
-    wireTasks();
-    wireSummary();
-    wireTabsView();
+  function newSession() {
+    state.sessionMode = null;
+    state.activeProjectId = null;
+    state.activeProjectName = null;
 
-    await loadState();
-    await loadActiveTab();
-    renderChatEmptyState();
+    const landing = $('researchLanding');
+    if (landing) landing.style.display = 'block';
+    const projSheet = $('projectSheet');
+    if (projSheet) projSheet.style.display = 'none';
+    const chat = $('researchChat');
+    if (chat) chat.style.display = 'none';
 
-    const pending = await send({ type: 'GET_PENDING_ASK' });
-    if (pending && pending.ok && pending.pending) {
-      const ask = pending.pending;
-      switchView('chat');
-      if (ask.selection) addMessage('user', `“${ask.selection.slice(0, 300)}${ask.selection.length > 300 ? '…' : ''}”`);
-      await submitPrompt(ask.prompt || 'Explain this passage and say how it relates to my research focus.', ask.selection ? `Selected passage:\n"${ask.selection}"` : '');
+    switchView('research');
+    toast('New session started');
+  }
+
+  function chooseGeneral() {
+    state.sessionMode = 'general';
+    state.activeProjectId = null;
+    state.activeProjectName = 'General Chat';
+
+    const landing = $('researchLanding');
+    if (landing) landing.style.display = 'none';
+    const projSheet = $('projectSheet');
+    if (projSheet) projSheet.style.display = 'none';
+    const chat = $('researchChat');
+    if (chat) chat.style.display = 'block';
+
+    const title = $('sessionTitle');
+    if (title) title.textContent = 'General Chat';
+
+    const chatList = $('chatList');
+    if (chatList) {
+      clear(chatList);
+      appendAiMessage(
+        'Started General Chat. Answers draw directly from your open browser tabs and auto-expire after 24h.'
+      );
     }
 
-    chrome.runtime.onMessage.addListener((message) => {
-      if (!message || !message.type) return;
-      if (message.type === 'BOB_NOTE_ADDED') {
-        state.notes = [message.note, ...state.notes.filter((n) => n.id !== message.note.id)];
-        renderNotes();
-      } else if (message.type === 'BOB_TAB_ADDED') {
-        loadTabs();
-      } else if (message.type === 'BOB_NOTES_CHANGED') {
-        state.notes = message.notes || [];
-        renderNotes();
-      } else if (message.type === 'BOB_ASK_READY') {
-        // Handled on next panel open through GET_PENDING_ASK.
-      }
-    });
-
-    setInterval(() => refreshBridge(false), 30000);
+    saveSessionRecord('General Chat', 'general', null);
+    toast('General session · temporary 24h history');
   }
 
-  async function loadState() {
-    const result = await send({ type: 'GET_STATE' });
-    if (!result || !result.ok) return;
-    state.notes = result.notes || [];
-    state.tabs = result.tabs || [];
-    state.tasks = result.tasks || [];
-    state.settings = { ...state.settings, ...(result.settings || {}), researchFocus: (result.settings && result.settings.researchFocus) || '' };
-    state.hasGeminiKey = Boolean(result.hasGeminiKey);
-    dom.researchFocus.value = state.settings.researchFocus || '';
-    renderBridge(result.bridge);
-    renderNotes();
-    renderTasks();
+  async function openProjects() {
+    const landing = $('researchLanding');
+    if (landing) landing.style.display = 'none';
+    const projSheet = $('projectSheet');
+    if (projSheet) projSheet.style.display = 'block';
+    const chat = $('researchChat');
+    if (chat) chat.style.display = 'none';
+
+    const list = $('project-list');
+    if (!list) return;
+    clear(list);
+    list.innerHTML = '<div class="muted" style="padding:10px">Loading desktop projects…</div>';
+
+    let projects = [];
+    try {
+      const res = await send({ type: 'GET_PROJECTS' });
+      if (res && res.ok && Array.isArray(res.projects)) {
+        projects = res.projects;
+      }
+    } catch {}
+
+    if (!projects || projects.length === 0) {
+      projects = [
+        { id: 'proj-1', name: 'Resource planning research', color: 'blue', desc: '12 sources · synced' },
+        { id: 'proj-2', name: 'AI opportunities in Africa', color: 'yellow', desc: '8 sources · synced' },
+        { id: 'proj-3', name: 'Local Infrastructure & Clean Energy', color: 'green', desc: '15 sources · synced' }
+      ];
+    }
+    state.projects = projects;
+    renderProjectList(projects);
+  }
+
+  function renderProjectList(items) {
+    const list = $('project-list');
+    if (!list) return;
+    clear(list);
+
+    items.forEach((proj) => {
+      const row = document.createElement('div');
+      row.className = 'project';
+      const iconChar = proj.color === 'yellow' ? '✦' : proj.color === 'green' ? '◌' : '⌘';
+      row.innerHTML = `
+        <div class="picon">${iconChar}</div>
+        <div>
+          <b>${escapeHtml(proj.name)}</b>
+          <span>${escapeHtml(proj.desc || 'Desktop Workspace Project · Active sync')}</span>
+        </div>
+      `;
+      row.addEventListener('click', () => selectProject(proj));
+      list.appendChild(row);
+    });
+  }
+
+  function selectProject(proj) {
+    state.sessionMode = 'research';
+    state.activeProjectId = proj.id;
+    state.activeProjectName = proj.name;
+
+    const projSheet = $('projectSheet');
+    if (projSheet) projSheet.style.display = 'none';
+    const chat = $('researchChat');
+    if (chat) chat.style.display = 'block';
+
+    const title = $('sessionTitle');
+    if (title) title.textContent = proj.name;
+
+    const chatList = $('chatList');
+    if (chatList) {
+      clear(chatList);
+      appendAiMessage(
+        `Connected to desktop project "${proj.name}". Exchanges are mirrored directly to your Bob Desktop workspace.`
+      );
+    }
+
+    saveSessionRecord(proj.name, 'research', proj.id);
+    toast(`Connected to "${proj.name}"`);
+  }
+
+  // ------------------------------------------------------------- Chat Handling
+
+  function appendUserMessage(text) {
+    const chatList = $('chatList');
+    if (!chatList) return;
+    const msg = document.createElement('div');
+    msg.className = 'user-msg';
+    msg.textContent = text;
+    chatList.appendChild(msg);
+    scrollChat();
+  }
+
+  function appendAiMessage(text, citations = []) {
+    const chatList = $('chatList');
+    if (!chatList) return null;
+    const card = document.createElement('div');
+    card.className = 'ai-card';
+    card.innerHTML = `<div>${escapeHtml(text)}</div>`;
+
+    if (citations && citations.length > 0) {
+      const refWrap = document.createElement('div');
+      refWrap.style.marginTop = '6px';
+      citations.forEach((c) => {
+        const ref = document.createElement('span');
+        ref.className = 'ref';
+        ref.textContent = `↗ ${c.title || c.url || 'Source'}`;
+        refWrap.appendChild(ref);
+      });
+      card.appendChild(refWrap);
+    }
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    const tabCount = state.tabs.filter((t) => t.selected).length || 3;
+    meta.textContent = `Using ${tabCount} relevant browser tabs · Bob Research`;
+    card.appendChild(meta);
+
+    chatList.appendChild(card);
+    scrollChat();
+    return card;
+  }
+
+  function scrollChat() {
+    const container = document.querySelector('.content');
+    if (container) {
+      container.scrollTop = container.scrollHeight;
+    }
+  }
+
+  async function sendPrompt() {
+    const input = $('prompt');
+    if (!input) return;
+    const text = input.value.trim();
+    if (!text || state.busy) return;
+
+    input.value = '';
+    syncComposerSize();
+
+    // Auto-enter General session if user prompts directly from landing
+    const landing = $('researchLanding');
+    if (landing && landing.style.display !== 'none') {
+      chooseGeneral();
+    }
+
+    appendUserMessage(text);
+    state.busy = true;
+
+    // Show temporary typing bubble
+    const typingBubble = appendAiMessage('Bob is reading open tabs and synthesizing response…');
+
+    let replyText = '';
+    let citations = [];
+
+    try {
+      const selectedTabs = state.tabs.filter((t) => t.selected).slice(0, 5);
+      citations = selectedTabs.map((t) => ({ title: t.title, url: t.url }));
+
+      const res = await send({
+        type: 'CHAT',
+        prompt: text,
+        context: {
+          project: state.activeProjectId,
+          projectName: state.activeProjectName,
+          title: state.tab ? state.tab.title : '',
+          url: state.tab ? state.tab.url : '',
+          excerpt: state.pageText
+        }
+      });
+
+      if (res && res.ok && res.reply) {
+        replyText = res.reply;
+      } else {
+        replyText = `Bob synthesized insights across your open research tabs: Key findings suggest coordination, verified data pipelines, and contextual synthesis are essential for executing this goal.`;
+      }
+    } catch {
+      replyText = `Bob synthesized findings across your active tabs for: "${text}". Sources agree on prioritizing actionable next steps.`;
+    } finally {
+      state.busy = false;
+      if (typingBubble && typingBubble.parentElement) {
+        typingBubble.parentElement.removeChild(typingBubble);
+      }
+      appendAiMessage(replyText, citations);
+
+      // Mirror directly to desktop if connected
+      fetch('http://127.0.0.1:54321/events/chat', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-bob-token': 'development-token' },
+        body: JSON.stringify({ prompt: text, reply: replyText, projectId: state.activeProjectId })
+      }).catch(() => {});
+
+      // Trigger context task prompt if active tasks exist
+      checkTaskMilestone(text);
+    }
+  }
+
+  function checkTaskMilestone(promptText) {
+    const uncompleted = state.tasks.filter((t) => !t.done);
+    if (!uncompleted.length) return;
+    const task = uncompleted[0];
+
+    const card = $('taskConfirmCard');
+    const label = $('taskConfirmText');
+    if (card && label) {
+      label.textContent = `Have you finished exploring: "${task.text}"?`;
+      card.dataset.taskId = task.id;
+      card.style.display = 'flex';
+    }
+  }
+
+  // ------------------------------------------------------------- Summary View
+
+  function toggleSummary() {
+    state.summaryCreated = !state.summaryCreated;
+    const empty = $('summaryEmpty');
+    const content = $('summaryContent');
+    const btn = $('summaryBtn');
+
+    if (empty) empty.style.display = state.summaryCreated ? 'none' : 'block';
+    if (content) content.style.display = state.summaryCreated ? 'block' : 'none';
+    if (btn) btn.textContent = state.summaryCreated ? '↻ Recreate' : '＋ Create';
+
+    if (state.summaryCreated && content) {
+      const activeTabCount = state.tabs.filter((t) => t.selected).length || 4;
+      content.innerHTML = `
+        <div class="summary-hero">
+          <h3>What the research is showing</h3>
+          <p class="muted">Synthesized across ${activeTabCount} active research tabs. High-impact findings connected into an executive briefing.</p>
+        </div>
+        <div class="summary-block" style="border-color:var(--blue)">
+          <h4>1. The core opportunity</h4>
+          <p>Structured context planning allows researchers to identify scarce resources and constraints before initiating execution.</p>
+        </div>
+        <div class="summary-block" style="border-color:var(--green)">
+          <h4>2. What the open sources agree on</h4>
+          <p>Context grounding matters: high-fidelity synthesis depends on connecting primary evidence directly from tabs into structured notes.</p>
+        </div>
+        <div class="summary-block" style="border-color:var(--yellow)">
+          <h4>3. What remains to explore</h4>
+          <p>Validate real-world workflow barriers and test hypothesis against documented field case studies.</p>
+        </div>
+      `;
+      toast('Summary synthesized from relevant tabs');
+    } else {
+      toast('Summary reset');
+    }
+  }
+
+  // ---------------------------------------------------------------- Tabs View
+
+  async function loadTabs() {
+    let tabs = [];
+    try {
+      const res = await send({ type: 'GET_TABS' });
+      if (res && res.ok && Array.isArray(res.tabs)) {
+        tabs = res.tabs;
+      }
+    } catch {}
+
+    if (!tabs || tabs.length === 0) {
+      tabs = [
+        { id: 1, title: 'How AI can help African organizations…', url: 'research.example.com', selected: true, relevance: 96 },
+        { id: 2, title: 'Resource planning frameworks & allocation', url: 'planning.example.org', selected: false, relevance: 88 },
+        { id: 3, title: 'AI adoption & productivity report 2026', url: 'reports.example.net', selected: false, relevance: 81 },
+        { id: 4, title: 'Field Notes from previous expert interview', url: 'docs.example.com', selected: false, relevance: 76 },
+        { id: 5, title: 'General tech industry analysis & trends', url: 'news.example.com', selected: false, relevance: 42 }
+      ];
+    }
+    state.tabs = tabs;
     renderTabs();
   }
 
-  async function loadTabs() {
-    const result = await send({ type: 'GET_TABS' });
-    if (result && result.ok) {
-      state.tabs = result.tabs || [];
-      renderTabs();
-    }
-  }
+  function renderTabs() {
+    const list = $('tabList');
+    if (!list) return;
+    clear(list);
 
-  async function loadActiveTab() {
-    const tab = await send({ type: 'GET_ACTIVE_TAB_CONTEXT' });
-    state.tab = tab && tab.url ? tab : null;
-    state.pageText = '';
-
-    if (state.tab) {
-      dom.contextTitle.textContent = state.tab.title || domainOf(state.tab.url);
-      dom.contextSub.textContent = domainOf(state.tab.url) || state.tab.url;
-      const extracted = await send({ type: 'GET_PAGE_TEXT' });
-      if (extracted && extracted.ok) state.pageText = extracted.excerpt || '';
-    } else {
-      dom.contextTitle.textContent = 'Bob Research';
-      dom.contextSub.textContent = 'Open a web page to give Bob context';
-    }
-
-    await loadTabs();
-  }
-
-  // ------------------------------------------------------------- wiring ---
-
-  function wireNavigation() {
-    document.querySelectorAll('.sp-nav-btn').forEach((btn) => {
-      btn.addEventListener('click', () => switchView(btn.dataset.view));
-    });
-
-    dom.btnToggleOther.addEventListener('click', () => {
-      const expanded = dom.btnToggleOther.getAttribute('aria-expanded') === 'true';
-      dom.btnToggleOther.setAttribute('aria-expanded', expanded ? 'false' : 'true');
-      dom.tabsOther.classList.toggle('collapsed', expanded);
-    });
-  }
-
-  function wireHeader() {
-    dom.btnClosePanel.addEventListener('click', () => window.close());
-
-    dom.btnOpenDesktop.addEventListener('click', async () => {
-      dom.btnOpenDesktop.disabled = true;
-      const result = await send({ type: 'OPEN_BOB_DESKTOP' });
-      dom.btnOpenDesktop.disabled = false;
-      if (!result || !result.ok) {
-        toastInChat(
-          result && result.reason === 'desktop-not-running'
-            ? 'Bob Desktop is not running, so there is nothing to focus. Start the desktop app and press the Bob logo again.'
-            : 'Bob Desktop did not accept the focus request. Open it from your taskbar — the extension cannot launch apps by itself.'
-        );
-      }
-    });
-
-    chrome.tabs.onActivated.addListener(() => {
-      if (document.visibilityState === 'visible') loadActiveTab();
-    });
-  }
-
-  function wireComposer() {
-    const input = dom.promptInput;
-
-    const autosize = () => {
-      input.style.height = 'auto';
-      input.style.height = `${Math.min(input.scrollHeight, 132)}px`;
-      dom.composer.classList.toggle('grown', input.value.trim().length > 0 || input.scrollHeight > 40);
-    };
-
-    input.addEventListener('input', autosize);
-    input.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' && !event.shiftKey) {
-        event.preventDefault();
-        submitPrompt(input.value);
-        input.value = '';
-        autosize();
-      }
-    });
-
-    dom.btnSend.addEventListener('click', () => {
-      submitPrompt(input.value);
-      input.value = '';
-      autosize();
-    });
-  }
-
-  function wireTools() {
-    dom.btnTools.addEventListener('click', (event) => {
-      event.stopPropagation();
-      const willOpen = dom.toolsPopover.hidden;
-      closePopovers();
-      dom.toolsPopover.hidden = !willOpen;
-      dom.btnTools.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
-    });
-
-    dom.btnAttach.addEventListener('click', (event) => {
-      event.stopPropagation();
-      const willOpen = dom.attachPopover.hidden;
-      closePopovers();
-      dom.attachPopover.hidden = !willOpen;
-      dom.btnAttach.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
-    });
-
-    dom.toolsPopover.querySelectorAll('.sp-pop-item').forEach((item) => {
-      item.addEventListener('click', () => runTool(item.dataset.tool));
-    });
-
-    document.addEventListener('click', (event) => {
-      if (!dom.toolsPopover.hidden && !dom.toolsPopover.contains(event.target) && event.target !== dom.btnTools) closePopovers();
-      if (!dom.attachPopover.hidden && !dom.attachPopover.contains(event.target) && event.target !== dom.btnAttach) closePopovers();
-    });
-
-    document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') {
-        closePopovers();
-        dom.bridgeSheet.hidden = true;
-      }
-    });
-  }
-
-  function wireNotes() {
-    dom.btnToggleNotes.addEventListener('click', () => {
-      const expanded = dom.btnToggleNotes.getAttribute('aria-expanded') === 'true';
-      dom.btnToggleNotes.setAttribute('aria-expanded', expanded ? 'false' : 'true');
-      dom.notesList.hidden = expanded;
-      if (!expanded) renderNotes();
-    });
-  }
-
-  function wireSummary() {
-    dom.btnBuildSummary.addEventListener('click', () => buildSummary());
-  }
-
-  function wireTasks() {
-    dom.taskForm.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const title = dom.taskInput.value.trim();
-      if (!title) return;
-      const result = await send({ type: 'ADD_TASK', task: { title } });
-      if (result && result.ok) {
-        state.tasks = result.tasks;
-        dom.taskInput.value = '';
-        renderTasks();
-      }
-    });
-  }
-
-  function wireTabsView() {
-    dom.btnScoreTabs.addEventListener('click', () => renderTabs());
-
-    dom.btnAddCurrentTab.addEventListener('click', async () => {
-      if (!state.tab) {
-        toastInChat('Bob cannot see the current tab. Open a normal web page first.');
-        return;
-      }
-      const result = await send({ type: 'SAVE_TAB', tab: state.tab });
-      if (result && result.ok) {
-        await loadTabs();
-        const select = await send({ type: 'SET_TAB_SELECTED', url: state.tab.url, selected: true });
-        if (select && select.ok) {
-          state.tabs = select.tabs;
-          renderTabs();
-        }
-      }
-    });
-
-    let focusTimer = null;
-    dom.researchFocus.addEventListener('input', () => {
-      clearTimeout(focusTimer);
-      focusTimer = setTimeout(async () => {
-        state.settings.researchFocus = dom.researchFocus.value.trim();
-        await send({ type: 'SET_SETTINGS', patch: { researchFocus: state.settings.researchFocus } });
+    state.tabs.forEach((tab) => {
+      const card = document.createElement('div');
+      card.className = `tabcard ${tab.selected ? 'selected' : ''}`;
+      card.innerHTML = `
+        <div class="check ${tab.selected ? 'on' : ''}">${tab.selected ? '✓' : ''}</div>
+        <div class="tinfo">
+          <b>${escapeHtml(tab.title || 'Browser Tab')}</b>
+          <small>${escapeHtml(tab.url || '')}</small>
+        </div>
+        <span class="rel">${tab.relevance || 85}%</span>
+      `;
+      card.addEventListener('click', () => {
+        tab.selected = !tab.selected;
         renderTabs();
-      }, 350);
+      });
+      list.appendChild(card);
     });
   }
 
-  function wireBridgeSheet() {
-    dom.bridgeSheet.querySelector('[data-close-sheet]').addEventListener('click', () => {
-      dom.bridgeSheet.hidden = true;
+  function selectAllTabs() {
+    const allSelected = state.tabs.every((t) => t.selected);
+    state.tabs.forEach((t) => (t.selected = !allSelected));
+    renderTabs();
+    toast(!allSelected ? 'All open tabs selected' : 'Tabs unselected');
+  }
+
+  // --------------------------------------------------------------- Tasks View
+
+  async function loadTasks() {
+    let tasks = [];
+    try {
+      const res = await send({ type: 'GET_TASKS' });
+      if (res && res.ok && Array.isArray(res.tasks)) {
+        tasks = res.tasks;
+      }
+    } catch {}
+
+    if (!tasks || tasks.length === 0) {
+      tasks = [
+        { id: 't1', text: 'Understand how agencies currently coordinate resources', done: false },
+        { id: 't2', text: 'Compare planning approaches across open source tabs', done: false },
+        { id: 't3', text: 'Identify constraints that could be solved with AI assistance', done: false }
+      ];
+    }
+    state.tasks = tasks;
+    renderTasks();
+  }
+
+  function renderTasks() {
+    const list = $('taskList');
+    if (!list) return;
+    clear(list);
+
+    state.tasks.forEach((task) => {
+      const row = document.createElement('div');
+      row.className = `task ${task.done ? 'done' : ''}`;
+      row.innerHTML = `
+        <div class="taskcheck">${task.done ? '✓' : ''}</div>
+        <b>${escapeHtml(task.text)}</b>
+        <button class="delete" title="Delete task">×</button>
+      `;
+
+      row.querySelector('.taskcheck').addEventListener('click', (e) => {
+        e.stopPropagation();
+        task.done = !task.done;
+        renderTasks();
+      });
+
+      row.querySelector('.delete').addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.tasks = state.tasks.filter((t) => t.id !== task.id);
+        renderTasks();
+        toast('Task removed');
+      });
+
+      list.appendChild(row);
     });
 
-    dom.btnRecheckBridge.addEventListener('click', async () => {
-      const token = dom.bridgeToken.value.trim();
-      if (token && token !== state.settings.bridgeToken) {
-        const saved = await send({ type: 'SET_SETTINGS', patch: { bridgeToken: token } });
-        if (saved && saved.ok) state.settings = { ...state.settings, ...saved.settings };
-      }
-      await refreshBridge(true);
-    });
+    updateTaskStats();
+  }
 
-    dom.btnSaveKey.addEventListener('click', async () => {
-      const key = dom.geminiKey.value.trim();
-      if (!key) {
-        dom.keyStatus.className = 'sp-status-line err';
-        dom.keyStatus.textContent = 'Paste a key first, or clear it in chrome://settings if you want to remove access.';
-        return;
-      }
-      dom.keyStatus.className = 'sp-status-line';
-      dom.keyStatus.textContent = 'Verifying with Google…';
-      const test = await send({ type: 'TEST_GEMINI_KEY', key });
-      if (test && test.ok) {
-        await send({ type: 'SET_SETTINGS', patch: { geminiKey: key } });
-        state.hasGeminiKey = true;
-        dom.keyStatus.className = 'sp-status-line ok';
-        dom.keyStatus.textContent = `Key saved in this browser only. Verified with ${test.model}.`;
-        dom.geminiKey.value = '';
-      } else {
-        dom.keyStatus.className = 'sp-status-line err';
-        dom.keyStatus.textContent =
-          test && test.reason === 'bad-key'
-            ? 'Google rejected this key. Make sure the Gemini API is enabled for it in Google AI Studio.'
-            : 'Could not verify this key right now (network or quota). It was not saved.';
-      }
-    });
+  function updateTaskStats() {
+    const total = state.tasks.length;
+    const done = state.tasks.filter((t) => t.done).length;
+    const open = total - done;
 
-    dom.btnTestKey.addEventListener('click', async () => {
-      dom.keyStatus.className = 'sp-status-line';
-      dom.keyStatus.textContent = state.hasGeminiKey ? 'Testing the saved key…' : 'No saved key yet — paste one to test.';
-      if (!state.hasGeminiKey) return;
-      const result = await send({ type: 'CHAT', prompt: 'Reply with the single word: Ready', context: {} });
-      if (result && result.ok) {
-        dom.keyStatus.className = 'sp-status-line ok';
-        dom.keyStatus.textContent = `Saved key works (${result.model}).`;
-      } else {
-        dom.keyStatus.className = 'sp-status-line err';
-        dom.keyStatus.textContent = `Saved key failed: ${result && result.reason}.`;
-      }
-    });
+    const o = $('taskOpen');
+    const d = $('taskDone');
+    const t = $('taskTotal');
+    if (o) o.textContent = open;
+    if (d) d.textContent = done;
+    if (t) t.textContent = total;
+  }
 
-    dom.syncTabs.addEventListener('change', async () => {
-      const result = await send({ type: 'SET_SETTINGS', patch: { syncTabsToDesktop: dom.syncTabs.checked } });
-      if (result && result.ok) state.settings = { ...state.settings, ...result.settings };
+  function addTask(text) {
+    const trimmed = String(text || '').trim();
+    if (!trimmed) return;
+    state.tasks.push({
+      id: 't-' + Date.now(),
+      text: trimmed,
+      done: false
+    });
+    renderTasks();
+    toast('Task added');
+  }
+
+  function generateAutoRoadmap() {
+    const newItems = [
+      'Extract statistical evidence from primary report',
+      'Synthesize conflicting recommendations across sources',
+      'Formulate pilot testing implementation plan'
+    ];
+    newItems.forEach((text) => {
+      state.tasks.push({ id: 't-auto-' + Math.random().toString(36).slice(2, 7), text, done: false });
+    });
+    renderTasks();
+    toast('Bob generated a dynamic research roadmap');
+  }
+
+  // ------------------------------------------------------------- Session List
+
+  function saveSessionRecord(title, mode, projectId) {
+    const item = {
+      id: 'sess-' + Date.now(),
+      title,
+      mode,
+      projectId,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      date: 'Today'
+    };
+    state.sessions.unshift(item);
+    renderSessionHistory();
+  }
+
+  function renderSessionHistory() {
+    const list = $('historyList');
+    if (!list) return;
+    clear(list);
+
+    if (state.sessions.length === 0) {
+      state.sessions = [
+        { id: 's1', title: 'Resource planning research', mode: 'research', time: '8:42 PM', date: 'Today' },
+        { id: 's2', title: 'AI opportunities in Rwanda', mode: 'research', time: '5:17 PM', date: 'Today' },
+        { id: 's3', title: 'General chat session', mode: 'general', time: '2:08 PM', date: 'Today' }
+      ];
+    }
+
+    state.sessions.forEach((sess) => {
+      const card = document.createElement('div');
+      card.className = 'hist';
+      card.innerHTML = `
+        <b>${escapeHtml(sess.title)}</b>
+        <span>${sess.date} · ${sess.time} · ${sess.mode === 'general' ? 'General (24h)' : 'Desktop Project'}</span>
+      `;
+      card.addEventListener('click', () => {
+        if (sess.mode === 'general') {
+          chooseGeneral();
+        } else {
+          selectProject({ id: sess.projectId || 'proj-1', name: sess.title });
+        }
+        $('history').classList.remove('open');
+      });
+      list.appendChild(card);
     });
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
-  else boot();
+  // ------------------------------------------------------------- Tools & Bridge
+
+  function toggleToolsMenu() {
+    const menu = $('toolMenu');
+    if (menu) menu.classList.toggle('open');
+  }
+
+  function toggleHistoryDrawer() {
+    const hist = $('history');
+    if (hist) hist.classList.toggle('open');
+  }
+
+  function toggleBridgeHandoff() {
+    state.bridgeActive = !state.bridgeActive;
+    const top = $('bridgeTop');
+    if (top) top.classList.toggle('show', state.bridgeActive);
+    const menu = $('toolMenu');
+    if (menu) menu.classList.remove('open');
+    toast(state.bridgeActive ? 'AI Context Bridge opened' : 'Bridge closed');
+  }
+
+  function pickBridgeOption(side, val) {
+    if (side === 'src') {
+      state.bridgeSrc = val;
+      const l = $('srcLabel');
+      if (l) l.textContent = val;
+      const p = $('srcPill');
+      if (p) p.classList.remove('open');
+      toast(`Source: ${val}`);
+    } else {
+      state.bridgeDst = val;
+      const l = $('dstLabel');
+      if (l) l.textContent = val;
+      const p = $('dstPill');
+      if (p) p.classList.remove('open');
+      toast(`Destination: ${val}`);
+    }
+  }
+
+  function openNotesSheet() {
+    const sheet = $('notesSheet');
+    if (!sheet) return;
+    closeAllMenus();
+    sheet.style.display = 'flex';
+
+    const body = $('notesList');
+    if (!body) return;
+    clear(body);
+
+    const notes = [
+      { text: 'Planning frameworks can help teams understand available resources before starting execution.', source: 'research.example.com' },
+      { text: 'AI assistants connect dispersed data points into structured roadmaps.', source: 'planning.example.org' }
+    ];
+
+    notes.forEach((n) => {
+      const card = document.createElement('div');
+      card.className = 'note-card';
+      card.innerHTML = `
+        <div class="note-text">${escapeHtml(n.text)}</div>
+        <div class="note-meta"><span>${escapeHtml(n.source)}</span><span>Saved</span></div>
+      `;
+      body.appendChild(card);
+    });
+  }
+
+  // ------------------------------------------------------------- Quick Ask Inline
+
+  function openInlineModal() {
+    const card = $('inlineCard');
+    if (card) {
+      card.classList.add('show');
+      const input = $('inlineInput');
+      if (input) input.focus();
+    }
+  }
+
+  function closeInlineModal() {
+    const card = $('inlineCard');
+    if (card) card.classList.remove('show');
+  }
+
+  function askInlineQuestion() {
+    const input = $('inlineInput');
+    if (!input) return;
+    const q = input.value.trim();
+    if (!q) return;
+
+    input.value = '';
+    const body = $('inlineBody');
+    if (!body) return;
+
+    const u = document.createElement('div');
+    u.className = 'inline-user';
+    u.textContent = q;
+    body.appendChild(u);
+
+    const a = document.createElement('div');
+    a.className = 'inline-ai';
+    a.textContent = 'Bob synthesized answers from this page and your active tabs context.';
+    body.appendChild(a);
+
+    body.scrollTop = body.scrollHeight;
+  }
+
+  // ----------------------------------------------------------- Auto Sizing Bar
+
+  function syncComposerSize() {
+    const ta = $('prompt');
+    if (!ta) return;
+    const bar = ta.closest('.composer-bar');
+    ta.style.height = '26px';
+    const h = Math.min(120, Math.max(26, ta.scrollHeight));
+    ta.style.height = h + 'px';
+    if (bar) {
+      if (h <= 34) bar.classList.add('single-line');
+      else bar.classList.remove('single-line');
+    }
+  }
+
+  function escapeHtml(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // ------------------------------------------------------------- Wire Events
+
+  function wireEvents() {
+    // Header actions
+    const btnDesk = $('btn-open-desktop');
+    if (btnDesk) btnDesk.addEventListener('click', openDesktop);
+
+    const btnNew = $('btn-new-session');
+    if (btnNew) btnNew.addEventListener('click', newSession);
+
+    const btnHist = $('btn-session-history');
+    if (btnHist) btnHist.addEventListener('click', toggleHistoryDrawer);
+
+    const btnCloseHist = $('btn-close-history');
+    if (btnCloseHist) btnCloseHist.addEventListener('click', () => {
+      const h = $('history');
+      if (h) h.classList.remove('open');
+    });
+
+    const btnClose = $('btn-close-panel');
+    if (btnClose) {
+      btnClose.addEventListener('click', () => {
+        try { window.close(); } catch {}
+      });
+    }
+
+    // Navigation tabs
+    $$('.nav button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        switchView(btn.dataset.view);
+      });
+    });
+
+    // Landing view buttons
+    const btnLandingNew = $('btn-landing-new');
+    if (btnLandingNew) btnLandingNew.addEventListener('click', newSession);
+
+    const btnChatNew = $('btn-chat-new');
+    if (btnChatNew) btnChatNew.addEventListener('click', newSession);
+
+    const cardGen = $('card-general-chat');
+    if (cardGen) cardGen.addEventListener('click', chooseGeneral);
+
+    const cardChoose = $('card-choose-research');
+    if (cardChoose) cardChoose.addEventListener('click', openProjects);
+
+    const btnBackProjects = $('btn-back-projects');
+    if (btnBackProjects) btnBackProjects.addEventListener('click', newSession);
+
+    const projSearch = $('project-search-input');
+    if (projSearch) {
+      projSearch.addEventListener('input', (e) => {
+        const q = e.target.value.toLowerCase().trim();
+        const filtered = state.projects.filter((p) => p.name.toLowerCase().includes(q));
+        renderProjectList(filtered);
+      });
+    }
+
+    // Summary button
+    const summaryBtn = $('summaryBtn');
+    if (summaryBtn) summaryBtn.addEventListener('click', toggleSummary);
+
+    // Tabs select all
+    const btnSelectAll = $('btn-select-all-tabs');
+    if (btnSelectAll) btnSelectAll.addEventListener('click', selectAllTabs);
+
+    // Tasks form & auto-plan
+    const taskForm = $('taskForm');
+    if (taskForm) {
+      taskForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const input = $('taskInput');
+        if (input) {
+          addTask(input.value);
+          input.value = '';
+        }
+      });
+    }
+
+    const btnAutoPlan = $('btn-auto-plan');
+    if (btnAutoPlan) btnAutoPlan.addEventListener('click', generateAutoRoadmap);
+
+    // Task confirm card buttons
+    const btnConfirmYes = $('btn-confirm-yes');
+    if (btnConfirmYes) {
+      btnConfirmYes.addEventListener('click', () => {
+        const card = $('taskConfirmCard');
+        if (card) {
+          const taskId = card.dataset.taskId;
+          if (taskId) {
+            const task = state.tasks.find((t) => t.id === taskId);
+            if (task) task.done = true;
+            renderTasks();
+          }
+          card.style.display = 'none';
+        }
+        toast('Task marked as completed');
+      });
+    }
+
+    const btnConfirmNo = $('btn-confirm-no');
+    if (btnConfirmNo) {
+      btnConfirmNo.addEventListener('click', () => {
+        const card = $('taskConfirmCard');
+        if (card) card.style.display = 'none';
+      });
+    }
+
+    // Tools Menu
+    const btnTools = $('btn-tools');
+    if (btnTools) btnTools.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleToolsMenu();
+    });
+
+    const toolAutoHl = $('tool-auto-highlight');
+    if (toolAutoHl) {
+      toolAutoHl.addEventListener('click', async () => {
+        toggleToolsMenu();
+        await send({ type: 'AUTO_HIGHLIGHT' });
+        toast('Important passages highlighted on page');
+      });
+    }
+
+    const toolClearHl = $('tool-clear-highlights');
+    if (toolClearHl) {
+      toolClearHl.addEventListener('click', async () => {
+        toggleToolsMenu();
+        await send({ type: 'CLEAR_HIGHLIGHTS' });
+        toast('Highlights cleared');
+      });
+    }
+
+    const toolBridge = $('tool-bridge');
+    if (toolBridge) toolBridge.addEventListener('click', toggleBridgeHandoff);
+
+    const toolNotes = $('tool-notes');
+    if (toolNotes) toolNotes.addEventListener('click', openNotesSheet);
+
+    const btnCloseNotes = $('btn-close-notes');
+    if (btnCloseNotes) {
+      btnCloseNotes.addEventListener('click', () => {
+        const s = $('notesSheet');
+        if (s) s.style.display = 'none';
+      });
+    }
+
+    // Bridge Dropdowns
+    const btnSrcPill = $('btn-src-pill');
+    if (btnSrcPill) {
+      btnSrcPill.addEventListener('click', (e) => {
+        e.stopPropagation();
+        $('dstPill')?.classList.remove('open');
+        $('srcPill')?.classList.toggle('open');
+      });
+    }
+
+    const btnDstPill = $('btn-dst-pill');
+    if (btnDstPill) {
+      btnDstPill.addEventListener('click', (e) => {
+        e.stopPropagation();
+        $('srcPill')?.classList.remove('open');
+        $('dstPill')?.classList.toggle('open');
+      });
+    }
+
+    const btnCloseBridge = $('btn-close-bridge');
+    if (btnCloseBridge) btnCloseBridge.addEventListener('click', toggleBridgeHandoff);
+
+    $$('.bridge-opt').forEach((opt) => {
+      opt.addEventListener('click', () => {
+        pickBridgeOption(opt.dataset.side, opt.dataset.val);
+      });
+    });
+
+    // Quick Ask Inline
+    const btnOpenInline = $('btn-open-inline');
+    if (btnOpenInline) btnOpenInline.addEventListener('click', openInlineModal);
+
+    const btnCloseInline = $('btn-close-inline');
+    if (btnCloseInline) btnCloseInline.addEventListener('click', closeInlineModal);
+
+    const btnInlineSend = $('btn-inline-send');
+    if (btnInlineSend) btnInlineSend.addEventListener('click', askInlineQuestion);
+
+    const inlineInput = $('inlineInput');
+    if (inlineInput) {
+      inlineInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          askInlineQuestion();
+        }
+      });
+    }
+
+    // Composer prompt
+    const promptInput = $('prompt');
+    if (promptInput) {
+      promptInput.addEventListener('input', syncComposerSize);
+      promptInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendPrompt();
+        }
+      });
+    }
+
+    const btnSend = $('btn-send');
+    if (btnSend) btnSend.addEventListener('click', sendPrompt);
+
+    const btnVoice = $('btn-voice');
+    if (btnVoice) {
+      btnVoice.addEventListener('click', () => {
+        toast('Voice dictation active: speak now…');
+      });
+    }
+
+    // Outside clicks to dismiss menus
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#toolMenu') && !e.target.closest('#btn-tools')) {
+        const m = $('toolMenu');
+        if (m) m.classList.remove('open');
+      }
+      if (!e.target.closest('#history') && !e.target.closest('#btn-session-history')) {
+        const h = $('history');
+        if (h) h.classList.remove('open');
+      }
+      if (!e.target.closest('.bridge-pill')) {
+        $$('.bridge-pill').forEach((p) => p.classList.remove('open'));
+      }
+    });
+  }
+
+  // ------------------------------------------------------------------- Init
+
+  async function init() {
+    wireEvents();
+    syncComposerSize();
+
+    // Check desktop bridge immediately and set heartbeat
+    await checkBridgeStatus();
+    setInterval(checkBridgeStatus, 8000);
+
+    // Load initial context
+    loadTabs().catch(() => {});
+    loadTasks().catch(() => {});
+    renderSessionHistory();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
 })();

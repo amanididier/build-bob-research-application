@@ -1,122 +1,235 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { PhoneOff } from 'lucide-react';
-import { useVoiceStore } from '../../store/useVoiceStore';
+import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { voiceController } from '../../lib/voice/voiceController';
-import { BobAvatar } from '../BobAvatar';
+import { useVoiceStore } from '../../store/useVoiceStore';
+import { PhoneOff, Mic, MicOff, MessageSquare, Volume2, Sparkles, Brain } from 'lucide-react';
+import { AudioWaveVisualizer } from './AudioWaveVisualizer';
 
-const BAR_COUNT = 56;
+interface VoiceCallOverlayProps {
+  onClose: () => void;
+}
 
-export const VoiceWaveform: React.FC<{ height?: number; className?: string }> = ({
-  height = 26,
-  className = ''
-}) => {
-  const barsRef = useRef<HTMLDivElement>(null);
-  const historyRef = useRef<number[]>(Array(BAR_COUNT).fill(2));
-
-  useEffect(() => {
-    let raf = 0;
-    const unsub = voiceController.addEnergyListener((energy) => {
-      const level = Math.min(1, energy / 60);
-      const arr = historyRef.current;
-      arr.push(2 + level * (height - 4));
-      if (arr.length > BAR_COUNT) arr.shift();
-    });
-    const tick = () => {
-      const el = barsRef.current;
-      if (el) {
-        const arr = historyRef.current;
-        const kids = el.children;
-        for (let i = 0; i < kids.length; i++) {
-          (kids[i] as HTMLElement).style.height = `${arr[i] ?? 2}px`;
-        }
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => {
-      unsub();
-      cancelAnimationFrame(raf);
-    };
-  }, [height]);
-
-  return (
-    <div
-      ref={barsRef}
-      className={`flex items-center justify-between gap-[2px] ${className}`}
-      style={{ height }}
-      aria-hidden
-    >
-      {Array.from({ length: BAR_COUNT }, (_, i) => (
-        <span key={i} className="flex-1 rounded-full bg-[var(--y)]/80 transition-none" style={{ height: 2 }} />
-      ))}
-    </div>
-  );
-};
-
-export const VoiceCallOverlay: React.FC = () => {
-  const { voiceState, currentTranscript, stopVoiceMode } = useVoiceStore();
+export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({ onClose }) => {
   const { userName } = useApp();
-  const [hovering, setHovering] = useState(false);
+  const {
+    voiceState,
+    currentTranscript,
+    lastBobReply,
+    stopVoiceMode,
+    interrupt,
+  } = useVoiceStore();
 
-  const bobTurn = voiceState === 'SPEAKING' || voiceState === 'THINKING';
-  const status =
-    voiceState === 'SPEAKING'
-      ? 'Bob is speaking…'
-      : voiceState === 'THINKING'
-        ? 'Bob is thinking…'
-        : voiceState === 'TRANSCRIBING' || voiceState === 'SUBMITTING'
-          ? 'Transcribing…'
-          : voiceState === 'USER_SPEAKING'
-            ? 'Listening to you…'
-            : 'Call connected — start talking.';
+  const [isMuted, setIsMuted] = useState(false);
+  const [isAvatarHovered, setIsAvatarHovered] = useState(false);
+
+  const isBobTurn = voiceState === 'SPEAKING' || voiceState === 'THINKING';
+  const isUserTurn = voiceState === 'USER_SPEAKING' || voiceState === 'LISTENING';
+
+  const handleEndCall = () => {
+    stopVoiceMode();
+    onClose();
+  };
+
+  const handleToggleMute = () => {
+    if (isBobTurn) {
+      interrupt();
+    }
+    setIsMuted(!isMuted);
+  };
 
   return (
-    <div className="fixed inset-0 z-40 flex flex-col items-center justify-center gap-6 bg-[var(--s)]/97 backdrop-blur-xl animate-in fade-in duration-200">
-      <button
-        onMouseEnter={() => setHovering(true)}
-        onMouseLeave={() => setHovering(false)}
-        onClick={stopVoiceMode}
-        title="End call"
-        className={`relative w-36 h-36 rounded-full grid place-items-center shadow-2xl transition-all duration-200 ${
-          hovering ? 'bg-[#e5484d] scale-105' : 'bg-[var(--s2)] border border-[var(--line)]'
-        }`}
-      >
-        {hovering ? (
-          <PhoneOff className="w-10 h-10 text-white" />
-        ) : bobTurn ? (
-          <span className="relative grid place-items-center">
-            <span className="absolute w-32 h-32 rounded-full bg-[var(--y)]/25 animate-ping" />
-            <BobAvatar size={72} />
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-between p-6 sm:p-10 bg-neutral-950/92 backdrop-blur-2xl text-white select-none animate-in fade-in duration-300">
+      {/* Top Status Header */}
+      <div className="w-full max-w-2xl flex items-center justify-between pt-2">
+        <div className="flex items-center gap-3">
+          <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
+          <span className="text-[13px] font-bold tracking-wide uppercase text-neutral-400">
+            Live Call with Bob
           </span>
-        ) : (
-          <span className="text-4xl font-extrabold text-[var(--t)] uppercase">
-            {(userName || 'A').trim().charAt(0)}
+          <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[11px] font-semibold text-emerald-400">
+            Natural Voice Mode
           </span>
-        )}
-      </button>
-
-      <div className="text-center space-y-1 px-6">
-        <div className="text-[13px] font-bold text-[var(--t)]">{bobTurn ? 'Bob' : userName || 'You'}</div>
-        <div className="text-[12px] text-[var(--m)]">{status}</div>
-      </div>
-
-      <div className="w-full max-w-[520px] px-6">
-        <VoiceWaveform height={34} className="opacity-90" />
-      </div>
-
-      {currentTranscript.trim() && !bobTurn && (
-        <div className="w-full max-w-[520px] mx-6 p-3.5 rounded-2xl bg-[var(--s2)] border border-[var(--line)] text-[12.5px] leading-relaxed text-[var(--t)] max-h-[140px] overflow-y-auto animate-in fade-in duration-150">
-          {currentTranscript}
         </div>
-      )}
 
-      <button
-        onClick={stopVoiceMode}
-        className="text-[12px] font-semibold text-[var(--m)] hover:text-[#e5484d] transition-colors"
-      >
-        End call
-      </button>
+        <button
+          onClick={handleEndCall}
+          className="text-[12px] font-semibold text-neutral-400 hover:text-white px-3 py-1.5 rounded-xl hover:bg-neutral-900 border border-transparent hover:border-neutral-800 transition-all cursor-pointer"
+        >
+          Exit to text
+        </button>
+      </div>
+
+      {/* Central Interactive Avatar Area */}
+      <div className="flex flex-col items-center justify-center my-auto w-full max-w-lg space-y-8">
+        {/* Dynamic Avatar Circle */}
+        <div className="relative flex items-center justify-center">
+          {/* Animated concentric audio reactive rings */}
+          {voiceState === 'USER_SPEAKING' && (
+            <>
+              <div className="absolute w-52 h-52 rounded-full border border-amber-500/30 animate-ping [animation-duration:2s]" />
+              <div className="absolute w-44 h-44 rounded-full bg-amber-500/10 blur-xl animate-pulse" />
+            </>
+          )}
+
+          {voiceState === 'SPEAKING' && (
+            <>
+              <div className="absolute w-56 h-56 rounded-full border border-blue-500/30 animate-ping [animation-duration:2.5s]" />
+              <div className="absolute w-48 h-48 rounded-full bg-blue-500/15 blur-xl animate-pulse" />
+            </>
+          )}
+
+          {voiceState === 'THINKING' && (
+            <div className="absolute w-48 h-48 rounded-full border-2 border-dashed border-amber-400/40 animate-spin [animation-duration:8s]" />
+          )}
+
+          {/* Main Avatar Button */}
+          <button
+            type="button"
+            onMouseEnter={() => setIsAvatarHovered(true)}
+            onMouseLeave={() => setIsAvatarHovered(false)}
+            onClick={isAvatarHovered ? handleEndCall : isBobTurn ? interrupt : undefined}
+            title={isAvatarHovered ? 'Click to End Call' : isBobTurn ? 'Bob speaking (click to interrupt)' : 'Voice active'}
+            className={`w-36 h-36 rounded-full flex flex-col items-center justify-center transition-all duration-300 shadow-2xl cursor-pointer relative z-10 ${
+              isAvatarHovered
+                ? 'bg-red-600 scale-105 ring-8 ring-red-500/30 shadow-[0_0_50px_rgba(220,38,38,0.6)]'
+                : isBobTurn
+                ? 'bg-gradient-to-tr from-blue-700 via-indigo-600 to-sky-500 ring-4 ring-blue-400/40 shadow-[0_0_45px_rgba(59,130,246,0.4)]'
+                : 'bg-gradient-to-tr from-amber-600 via-amber-500 to-yellow-400 ring-4 ring-amber-400/30 shadow-[0_0_40px_rgba(245,158,11,0.35)]'
+            }`}
+          >
+            {isAvatarHovered ? (
+              <div className="flex flex-col items-center justify-center gap-1.5 animate-in zoom-in-95 duration-150">
+                <PhoneOff className="w-8 h-8 text-white stroke-[2.2]" />
+                <span className="text-[11px] font-extrabold uppercase tracking-wider text-white">End Call</span>
+              </div>
+            ) : isBobTurn ? (
+              <div className="flex flex-col items-center justify-center gap-1">
+                <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center shadow-inner">
+                  <Brain className="w-7 h-7 text-white animate-pulse" />
+                </div>
+                <span className="text-[12.5px] font-black tracking-wide text-white drop-shadow">Bob</span>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center gap-1">
+                <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-[18px] font-extrabold text-white">
+                  {(userName || 'A')[0].toUpperCase()}
+                </div>
+                <span className="text-[12px] font-bold text-white tracking-wide">
+                  {userName || 'You'}
+                </span>
+              </div>
+            )}
+          </button>
+        </div>
+
+        {/* State Label */}
+        <div className="flex flex-col items-center gap-2">
+          <div className="px-4 py-1.5 rounded-full bg-neutral-900 border border-neutral-800 text-[12.5px] font-semibold flex items-center gap-2">
+            {voiceState === 'LISTENING' && (
+              <>
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Listening... speak naturally</span>
+              </>
+            )}
+            {voiceState === 'USER_SPEAKING' && (
+              <>
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                <span>Hearing you...</span>
+              </>
+            )}
+            {voiceState === 'THINKING' && (
+              <>
+                <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-spin" />
+                <span>Bob is thinking...</span>
+              </>
+            )}
+            {voiceState === 'SPEAKING' && (
+              <>
+                <Volume2 className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
+                <span>Bob is replying... (talk to interrupt)</span>
+              </>
+            )}
+          </div>
+
+          <span className="text-[11px] text-neutral-400">
+            {isBobTurn ? 'Bob is replying with Edge voice' : 'Stops after 3s of silence to answer'}
+          </span>
+        </div>
+
+        {/* ChatGPT Style Real-time Audio Waveform */}
+        <div className="w-full max-w-sm px-4 py-2 rounded-2xl bg-neutral-900/60 border border-neutral-800/80">
+          <AudioWaveVisualizer
+            active={voiceState === 'USER_SPEAKING' || voiceState === 'LISTENING'}
+            color={isBobTurn ? '#60a5fa' : '#f59e0b'}
+            height={32}
+          />
+        </div>
+
+        {/* Dynamic Speech & Transcript Cards */}
+        <div className="w-full space-y-3 min-h-[110px] max-h-[220px] overflow-y-auto px-1">
+          {/* User live speech card */}
+          {currentTranscript.trim() && (
+            <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-left animate-in fade-in duration-200">
+              <div className="text-[11px] font-bold text-amber-400 flex items-center gap-1.5 mb-1">
+                <Mic className="w-3 h-3 text-amber-400" />
+                <span>You said</span>
+              </div>
+              <p className="text-[13px] text-neutral-200 m-0 leading-relaxed font-medium">
+                {currentTranscript}
+              </p>
+            </div>
+          )}
+
+          {/* Bob speech response card */}
+          {lastBobReply && (
+            <div className="p-3.5 rounded-2xl bg-blue-500/10 border border-blue-500/25 text-left animate-in fade-in duration-200">
+              <div className="text-[11px] font-bold text-blue-400 flex items-center gap-1.5 mb-1">
+                <Volume2 className="w-3 h-3 text-blue-400" />
+                <span>Bob</span>
+              </div>
+              <p className="text-[13px] text-neutral-200 m-0 leading-relaxed">
+                {lastBobReply}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Bottom Floating Call Control Bar */}
+      <div className="w-full max-w-md pb-4 flex items-center justify-center gap-4">
+        {/* Mute button */}
+        <button
+          onClick={handleToggleMute}
+          title={isMuted ? 'Unmute microphone' : 'Mute microphone'}
+          className={`w-12 h-12 rounded-full flex items-center justify-center transition-all cursor-pointer border ${
+            isMuted
+              ? 'bg-amber-500/20 border-amber-500 text-amber-400'
+              : 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:text-white hover:bg-neutral-800'
+          }`}
+        >
+          {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+        </button>
+
+        {/* Big End Call Button */}
+        <button
+          onClick={handleEndCall}
+          title="End conversation"
+          className="h-12 px-7 rounded-full bg-red-600 hover:bg-red-500 text-white font-bold text-[13px] flex items-center gap-2.5 shadow-lg shadow-red-900/40 transition-all active:scale-95 cursor-pointer"
+        >
+          <PhoneOff className="w-4 h-4 stroke-[2.5]" />
+          <span>End Call</span>
+        </button>
+
+        {/* Text Mode button */}
+        <button
+          onClick={handleEndCall}
+          title="Switch back to message composer"
+          className="w-12 h-12 rounded-full bg-neutral-900 border border-neutral-800 text-neutral-300 hover:text-white hover:bg-neutral-800 flex items-center justify-center transition-all cursor-pointer"
+        >
+          <MessageSquare className="w-5 h-5" />
+        </button>
+      </div>
     </div>
   );
 };
+
+export { AudioWaveVisualizer as VoiceWaveform } from './AudioWaveVisualizer';

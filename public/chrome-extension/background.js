@@ -25,6 +25,11 @@ const DEFAULT_SETTINGS = {
   syncTabsToDesktop: true,
   highlightCycleIndex: 0,
   researchFocus: '',
+  // By default Bob reads every open tab and picks the most relevant ones on its
+  // own. The moment the user hand-picks tabs, manualTabSelection flips true and
+  // auto-selection/auto-sync defers to their choice.
+  manualTabSelection: false,
+  autoSyncTabs: true,
 };
 
 const HIGHLIGHT_COLORS = ['green', 'blue', 'yellow'];
@@ -112,7 +117,7 @@ async function getBridgeStatus({ force = false } = {}) {
   return bridgeCache;
 }
 
-async function sendToBridge(path, body) {
+async function sendToBridge(path, body, { method = 'POST' } = {}) {
   let status = await getBridgeStatus();
   if (!status.connected) {
     // Retry once immediately in case Bob Desktop was just opened
@@ -120,11 +125,11 @@ async function sendToBridge(path, body) {
   }
   if (!status.connected) return { delivered: false, reason: status.detail || 'unreachable' };
   const settings = await getSettings();
-  const res = await bridgeFetch(path, { method: 'POST', body, token: settings.bridgeToken });
+  const res = await bridgeFetch(path, { method, body, token: settings.bridgeToken });
   if (res.ok) {
     bridgeCache.connected = true;
     bridgeCache.checkedAt = Date.now();
-    return { delivered: true };
+    return { delivered: true, body: res.json };
   }
   return { delivered: false, reason: res.status === 401 ? 'bad-token' : 'rejected' };
 }
@@ -137,7 +142,38 @@ function broadcast(message) {
 async function pingBridgeHandshake() {
   await getBridgeStatus({ force: true });
 }
-pingBridgeHandshake().catch(() => {});
+
+// ------------------------------------------------------------- pairing ---
+// Bind this extension to the running desktop install. The extension trades the
+// shared bootstrap token for a per-install secret once, then uses that secret.
+// The desktop still accepts the bootstrap token, so an extension that has not
+// paired (or an older build) keeps working — pairing is strictly additive.
+async function pairWithDesktop() {
+  const res = await bridgeFetch('/events/pair', { method: 'POST', body: {}, token: DEFAULT_BRIDGE_TOKEN });
+  if (res.ok && res.data && typeof res.data.token === 'string' && res.data.token.length >= 16) {
+    const settings = await getSettings();
+    const updates = { bridgeToken: res.data.token };
+    if (res.data.geminiKey && !settings.geminiKey) {
+      updates.geminiKey = res.data.geminiKey;
+    }
+    await setSettings(updates);
+    return true;
+  }
+  return false;
+}
+
+// Pair (once) then handshake, so the desktop sees this extension as live and
+// the composer's Chrome button can open the panel instead of the install steps.
+async function syncWithDesktop() {
+  const settings = await getSettings();
+  const isPaired = settings.bridgeToken && settings.bridgeToken !== DEFAULT_BRIDGE_TOKEN;
+  if (!isPaired) await pairWithDesktop();
+  await pingBridgeHandshake();
+}
+
+syncWithDesktop().catch(() => {});
+// Read and score all open tabs shortly after startup (auto mode default).
+setTimeout(() => autoSyncTabs().catch(() => {}), 4000);
 
 // ------------------------------------------------------------- side panel ---
 
@@ -208,10 +244,12 @@ async function openPanelForTab(tabId) {
 // --------------------------------------------------------------------------
 
 const PANEL_POLL_ALARM = 'bob-panel-poll';
+const AUTO_SYNC_ALARM = 'bob-auto-sync';
 
 function schedulePanelPolling() {
   if (!chrome.alarms) return;
   chrome.alarms.create(PANEL_POLL_ALARM, { periodInMinutes: 0.5 });
+  chrome.alarms.create(AUTO_SYNC_ALARM, { periodInMinutes: 1 });
 }
 
 async function pollPanelRequest() {
@@ -225,6 +263,22 @@ async function pollPanelRequest() {
   const res = await bridgeFetch('/events/pending', { token: settings.bridgeToken });
   const pending = res.ok && res.data ? res.data.pending : null;
   if (!pending) return;
+
+  // Try to open side panel directly on the active or primary window
+  const windows = await chrome.windows.getAll();
+  const target = windows.find((w) => w.focused) || windows[0];
+  if (target && chrome.sidePanel && chrome.sidePanel.open) {
+    try {
+      await chrome.sidePanel.open({ windowId: target.id });
+      if (chrome.windows.update) {
+        await chrome.windows.update(target.id, { focused: true });
+      }
+      await chrome.action.setBadgeText({ text: '' }).catch(() => {});
+      return;
+    } catch {
+      // In case Chrome requires notification user gesture
+    }
+  }
 
   const notificationId = nowId('panel');
   chrome.notifications.create(notificationId, {
@@ -241,7 +295,12 @@ async function pollPanelRequest() {
 
 if (chrome.alarms) {
   chrome.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === PANEL_POLL_ALARM) pollPanelRequest();
+    if (alarm.name === PANEL_POLL_ALARM) {
+      syncWithDesktop();
+      pollPanelRequest();
+    } else if (alarm.name === AUTO_SYNC_ALARM) {
+      autoSyncTabs().catch(() => {});
+    }
   });
 }
 
@@ -382,6 +441,189 @@ function safeDomain(url) {
   }
 }
 
+// ---------------------------------------------------- full-content reading ---
+// Deep-read a tab's real text. `cap` defaults to 100k chars so Bob can read
+// essentially the whole page, not just a teaser.
+async function extractTabText(tabId, cap = 100000) {
+  if (!tabId) return { ok: false, reason: 'no-tab' };
+  try {
+    const [injection] = await chrome.scripting.executeScript({
+      target: { tabId },
+      args: [cap],
+      func: (limit) => {
+        const root =
+          document.querySelector('article') ||
+          document.querySelector('main') ||
+          document.querySelector('[role="main"]') ||
+          document.body;
+        const text = (root.innerText || root.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+        return { title: document.title, url: location.href, text: text.slice(0, limit) };
+      },
+    });
+    const result = injection && injection.result;
+    return result ? { ok: true, ...result } : { ok: false, reason: 'no-content' };
+  } catch (err) {
+    return { ok: false, reason: (err && err.message) || 'injection-blocked' };
+  }
+}
+
+// ------------------------------------------------------- relevance scoring ---
+const STOPWORDS = new Set(
+  'the a an and or but of to in for on with as by is are was were be been this that these those it its from at into about over under their there they we you your our his her which who what when where why how can could should would will may might must not no do does did done have has had more most other some such than then also very just only own same https http www html php com org net'.split(
+    ' '
+  )
+);
+
+function focusKeywords(text) {
+  const counts = new Map();
+  String(text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, ' ')
+    .split(/\s+/)
+    .forEach((w) => {
+      if (w.length < 4 || STOPWORDS.has(w)) return;
+      counts.set(w, (counts.get(w) || 0) + 1);
+    });
+  return counts;
+}
+
+// Dynamic relevance: blends how much of the research focus the tab's title
+// covers, URL/domain matches, and — when a content sample is available — how
+// densely the focus keywords appear in the actual page text. Produces a wide,
+// content-driven 0..100 range instead of a fixed tier value.
+function scoreTabRelevance(tab, focus, bodyText) {
+  const total = focus.size;
+  if (!total) return { score: null, tier: 'unknown', why: 'no focus set' };
+
+  const title = String(tab.title || '').toLowerCase();
+  const url = String(tab.url || '').toLowerCase();
+  const body = String(bodyText || '').toLowerCase();
+  const titleTokens = title.replace(/[^a-z0-9\s-]/g, ' ').split(/\s+/).filter(Boolean);
+
+  const matched = [];
+  let weight = 0;
+  let bodyHits = 0;
+  focus.forEach((fw, kw) => {
+    const inTitle = titleTokens.some((t) => t === kw || t.startsWith(kw) || kw.startsWith(t)) || title.includes(kw);
+    const inUrl = url.includes(kw);
+    const inBody = body ? body.includes(kw) : false;
+    if (inTitle || inUrl || inBody) {
+      matched.push(kw);
+      if (inBody) bodyHits += 1;
+      weight += (inTitle ? 2.2 : 0) + (inUrl ? 1.1 : 0) + (inBody ? 1.7 : 0) + Math.min(fw, 4) * 0.15;
+    }
+  });
+
+  if (!matched.length) return { score: 6, tier: 'red', why: 'no keyword overlap' };
+
+  const coverage = matched.length / total;
+  const strength = Math.min(1, weight / (total * 1.7));
+  const raw = 100 * (0.55 * coverage + 0.45 * strength);
+  const score = Math.max(4, Math.min(99, Math.round(raw)));
+  const tier = score >= 80 ? 'green' : score >= 62 ? 'blue' : score >= 40 ? 'yellow' : 'red';
+  const why = matched.slice(0, 3).join(', ') + (bodyHits ? ' · in page text' : '');
+  return { score, tier, why };
+}
+
+// Merge stored tabs with the currently-open http(s) tabs, keyed by URL.
+async function collectAllTabs() {
+  const stored = await readList(KEYS.tabs);
+  const openTabs = await chrome.tabs.query({});
+  const live = openTabs.filter((t) => t.url && /^https?:/.test(t.url));
+  const byUrl = new Map(stored.map((t) => [t.url, { ...t }]));
+  for (const t of live) {
+    const ex = byUrl.get(t.url);
+    if (ex) {
+      ex.tabId = t.id ?? ex.tabId;
+      ex.title = t.title || ex.title;
+      ex.favIconUrl = t.favIconUrl || ex.favIconUrl;
+      ex.live = true;
+      ex.updatedAt = Date.now();
+    } else {
+      byUrl.set(t.url, {
+        id: nowId('tab'),
+        tabId: t.id ?? null,
+        title: t.title || t.url,
+        url: t.url,
+        domain: safeDomain(t.url),
+        favIconUrl: t.favIconUrl || null,
+        selected: false,
+        live: true,
+        addedAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    }
+  }
+  return { all: [...byUrl.values()], live };
+}
+
+// ------------------------------------------------------------- auto sync ---
+// By default Bob re-reads every open tab about once a minute: he registers the
+// tab, captures a short content sample for scoring, computes dynamic relevance,
+// and — unless the user hand-picked tabs — auto-selects the most relevant ones
+// and pushes them to Bob Desktop.
+const SAMPLE_TTL_MS = 5 * 60 * 1000;
+const MAX_SAMPLES_PER_CYCLE = 12;
+
+async function autoSyncTabs({ force = false } = {}) {
+  const settings = await getSettings();
+  if (!force && settings.autoSyncTabs === false) return readList(KEYS.tabs);
+
+  const { all, live } = await collectAllTabs();
+  const focus = focusKeywords(settings.researchFocus || '');
+
+  // Refresh content samples for readable open tabs (throttled + capped).
+  let sampled = 0;
+  for (const t of live) {
+    if (sampled >= MAX_SAMPLES_PER_CYCLE) break;
+    const entry = all.find((x) => x.url === t.url);
+    if (!entry || !t.id) continue;
+    if (entry.textSample && Date.now() - (entry.sampledAt || 0) < SAMPLE_TTL_MS) continue;
+    const read = await extractTabText(t.id, 4000);
+    if (read.ok && read.text) {
+      entry.textSample = String(read.text).slice(0, 4000);
+      entry.sampledAt = Date.now();
+      sampled += 1;
+    }
+  }
+
+  // Score every tab; auto-select the most relevant unless the user chose manually.
+  let pick = null;
+  if (!settings.manualTabSelection) {
+    const ranked = all
+      .map((t) => ({ t, s: scoreTabRelevance(t, focus, t.textSample || '') }))
+      .sort((a, b) => (b.s.score == null ? -1 : b.s.score) - (a.s.score == null ? -1 : a.s.score));
+    pick = new Set();
+    for (const { t, s } of ranked) {
+      if (pick.size >= 5) break;
+      if ((s.score == null ? 0 : s.score) >= 30) pick.add(t.url);
+    }
+  }
+
+  const next = all
+    .map((t) => {
+      const s = scoreTabRelevance(t, focus, t.textSample || '');
+      return {
+        ...t,
+        selected: pick ? pick.has(t.url) : Boolean(t.selected),
+        relevance: s.score,
+        relevanceWhy: s.why,
+      };
+    })
+    .slice(0, 300);
+
+  await writeList(KEYS.tabs, next);
+
+  if (settings.syncTabsToDesktop) {
+    for (const t of next.filter((x) => x.selected).slice(0, 8)) {
+      await sendToBridge('/events/tab', { tabId: t.tabId ?? t.id, title: t.title, url: t.url, favicon: t.favIconUrl });
+    }
+  }
+
+  broadcast({ type: 'BOB_TABS_CHANGED', tabs: next });
+  return next;
+}
+
 // ------------------------------------------------------------------- ask ---
 
 async function startAsk({ prompt, selection, tab }) {
@@ -466,20 +708,38 @@ async function buildContext({ page, includeNotes = true, maxNotes = 6 }) {
   if (goal) lines.push(`Research focus: ${goal}`);
   if (page && page.title) lines.push(`Active tab: ${page.title}`);
   if (page && page.url) lines.push(`URL: ${page.url}`);
-  if (page && page.excerpt) lines.push(`\nSource text (truncated):\n${String(page.excerpt).slice(0, 24000)}`);
-  if (page && page.selection) lines.push(`\nUser selection:\n"${String(page.selection).slice(0, 6000)}"`);
+  if (page && page.excerpt) lines.push(`\nActive page text:\n${String(page.excerpt).slice(0, 120000)}`);
+  if (page && page.selection) lines.push(`\nUser selection:\n"${String(page.selection).slice(0, 20000)}"`);
 
-  const [tabs, notes, tasks] = await Promise.all([
-    readList(KEYS.tabs),
+  const [notes, tasks] = await Promise.all([
     includeNotes ? readList(KEYS.notes) : Promise.resolve([]),
     readList(KEYS.tasks),
   ]);
 
-  const selectedTabs = tabs.filter((t) => t.selected).slice(0, 8);
-  if (selectedTabs.length) {
-    lines.push('\nResearch tabs the user selected:');
-    selectedTabs.forEach((t) => lines.push(`- ${t.title} (${t.domain || t.url})`));
+  // Pick the tabs Bob should actually read. In auto mode (the default) Bob
+  // chooses the most relevant open tabs himself; a manual hand-pick overrides.
+  const chosen = await chooseContextTabs(settings, goal, page);
+  if (chosen.length) {
+    lines.push(`\nResearch sources Bob is reading (${chosen.length}):`);
+    let budget = 120000;
+    for (const c of chosen) {
+      // The active tab's full text is already included above as page.excerpt.
+      if (page && page.excerpt && page.url && c.url === page.url) {
+        lines.push(`\n### ${c.title}\n${c.url}\n(active tab — full text included above)`);
+        continue;
+      }
+      let text = c.textSample || '';
+      if (!text && c.tabId) {
+        const read = await extractTabText(c.tabId);
+        if (read.ok) text = read.text || '';
+      }
+      const clip = String(text).slice(0, Math.max(2000, budget));
+      budget -= clip.length;
+      lines.push(`\n### ${c.title}\n${c.url}\n${clip || '(no readable text)'}`);
+      if (budget <= 0) break;
+    }
   }
+
   if (notes.length) {
     lines.push('\nSaved notes:');
     notes.slice(0, maxNotes).forEach((n) => lines.push(`- "${n.text.slice(0, 400)}" — ${n.domain || n.sourceUrl}`));
@@ -492,6 +752,42 @@ async function buildContext({ page, includeNotes = true, maxNotes = 6 }) {
     }
   }
   return lines.join('\n');
+}
+
+// Decide which tabs become primary context for a prompt.
+async function chooseContextTabs(settings, goal, page) {
+  const { all } = await collectAllTabs();
+  const activeUrl = page && page.url;
+
+  const manual = all.filter((t) => t.selected);
+  if (settings.manualTabSelection && manual.length) return manual.slice(0, 12);
+
+  const focusText = [goal || '', settings.researchFocus || '', (page && page.title) || ''].filter(Boolean).join(' ');
+  const focus = focusKeywords(focusText);
+  const scored = all
+    .map((t) => ({ t, s: scoreTabRelevance(t, focus, t.textSample || '') }))
+    .sort((a, b) => (b.s.score == null ? -1 : b.s.score) - (a.s.score == null ? -1 : a.s.score));
+
+  const chosen = [];
+  const push = (t, score) => {
+    if (!chosen.some((c) => c.url === t.url)) chosen.push({ ...t, score });
+  };
+
+  // The tab the user is looking at is always relevant.
+  const active = scored.find((x) => x.t.url === activeUrl);
+  if (active) push(active.t, active.s.score);
+
+  for (const { t, s } of scored) {
+    if (chosen.length >= 6) break;
+    if ((s.score == null ? 0 : s.score) < 25) continue;
+    push(t, s.score);
+  }
+
+  if (!chosen.length) {
+    const fallback = manual.length ? manual : all.filter((t) => t.url === activeUrl);
+    return fallback.slice(0, 6);
+  }
+  return chosen.slice(0, 6);
 }
 
 // -------------------------------------------------------------- messaging ---
@@ -521,26 +817,12 @@ async function handleMessage(message, sender) {
     }
 
     case 'EXTRACT_TAB_TEXT': {
-      // Deep-read a single tab, only when the user asks for it (spec: never
-      // download every open tab).
+      // Deep-read a single tab in full (up to 100k chars) when asked.
       const tabs = await chrome.tabs.query({});
       const tab = tabs.find((t) => (message.tabId ? t.id === message.tabId : t.url === message.url));
       if (!tab || !tab.id) return { ok: false, reason: 'tab-not-open' };
       if (!/^https?:/.test(tab.url || '')) return { ok: false, reason: 'unsupported-page' };
-      try {
-        const [injection] = await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          func: () => {
-            const root = document.querySelector('article') || document.querySelector('main') || document.querySelector('[role="main"]') || document.body;
-            const text = (root.innerText || root.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
-            return { title: document.title, url: location.href, text: text.slice(0, 12000) };
-          },
-        });
-        const result = injection && injection.result;
-        return result ? { ok: true, ...result } : { ok: false, reason: 'no-content' };
-      } catch (err) {
-        return { ok: false, reason: (err && err.message) || 'injection-blocked' };
-      }
+      return extractTabText(tab.id, 100000);
     }
 
     case 'GET_BRIDGE_STATUS':
@@ -660,13 +942,55 @@ async function handleMessage(message, sender) {
           await writeList(KEYS.tabs, after);
         }
       }
-      return { ok: true, tabs: await readList(KEYS.tabs) };
+      // A hand-pick switches Bob out of auto-selection until the user re-enables it.
+      await setSettings({ manualTabSelection: true });
+      return { ok: true, tabs: await readList(KEYS.tabs), manualTabSelection: true };
     }
 
     case 'DELETE_TAB': {
       const tabs = (await readList(KEYS.tabs)).filter((t) => t.url !== message.url);
       await writeList(KEYS.tabs, tabs);
       return { ok: true, tabs };
+    }
+
+    case 'SET_ALL_TABS_SELECTED': {
+      const selected = Boolean(message.selected);
+      // When selecting everything, persist any live (not-yet-saved) tabs first
+      // so the whole visible list can become primary context.
+      if (selected && Array.isArray(message.tabs)) {
+        const known = await readList(KEYS.tabs);
+        const knownUrls = new Set(known.map((t) => t.url));
+        for (const t of message.tabs) {
+          if (t && t.url && !knownUrls.has(t.url)) {
+            await saveTab({ id: t.tabId, title: t.title, url: t.url, favIconUrl: t.favIconUrl });
+          }
+        }
+      }
+      const tabs = (await readList(KEYS.tabs)).map((t) => ({ ...t, selected }));
+      await writeList(KEYS.tabs, tabs);
+      await setSettings({ manualTabSelection: true });
+      broadcast({ type: 'BOB_TABS_CHANGED', tabs });
+      return { ok: true, tabs, manualTabSelection: true };
+    }
+
+    case 'SET_AUTO_TABS': {
+      // Hand control back to Bob: he re-reads every open tab and re-picks the
+      // most relevant ones on the next sync.
+      await setSettings({ manualTabSelection: false });
+      const tabs = await autoSyncTabs({ force: true });
+      return { ok: true, tabs, manualTabSelection: false };
+    }
+
+    case 'SCORE_TABS': {
+      const settings = await getSettings();
+      const { all } = await collectAllTabs();
+      const focusText = [settings.researchFocus || '', message.pageTitle || ''].filter(Boolean).join(' ');
+      const focus = focusKeywords(focusText);
+      const scores = all.map((t) => {
+        const s = scoreTabRelevance(t, focus, t.textSample || '');
+        return { url: t.url, score: s.score, tier: s.tier, why: s.why };
+      });
+      return { ok: true, scores, manualTabSelection: Boolean(settings.manualTabSelection) };
     }
 
     case 'ADD_TASK': {
@@ -708,7 +1032,42 @@ async function handleMessage(message, sender) {
 
     case 'CHAT': {
       const contextText = await buildContext(message.context || {});
-      const result = await callGemini(String(message.prompt || ''), contextText);
+      const prompt = String(message.prompt || '');
+      const projectId = (message.context && message.context.project) || null;
+      const promptId = 'msg_user_' + Date.now();
+      const replyId = 'msg_asst_' + (Date.now() + 1);
+
+      // 1. Immediately mirror the user's prompt into Bob Desktop
+      sendToBridge('/events/chat', {
+        promptId,
+        prompt,
+        projectId,
+        url: (message.context && message.context.url) || '',
+        title: (message.context && message.context.title) || '',
+      }).catch(() => {});
+
+      // 2. Call Gemini
+      let result = await callGemini(prompt, contextText);
+
+      // If no key in extension settings, try fetching the key from Bob Desktop bridge
+      if (!result.ok && result.reason === 'no-key') {
+        const keyRes = await bridgeFetch('/events/key');
+        if (keyRes.ok && keyRes.data && keyRes.data.key) {
+          await setSettings({ geminiKey: keyRes.data.key });
+          result = await callGemini(prompt, contextText);
+        }
+      }
+
+      // 3. Mirror assistant reply into Bob Desktop
+      if (result && result.ok) {
+        sendToBridge('/events/chat', {
+          replyId,
+          reply: result.reply,
+          projectId,
+          url: (message.context && message.context.url) || '',
+          title: (message.context && message.context.title) || '',
+        }).catch(() => {});
+      }
       return result;
     }
 
@@ -767,6 +1126,22 @@ async function handleMessage(message, sender) {
       if (!status.connected) return { ok: false, reason: status.detail || 'desktop-not-running' };
       const res = await sendToBridge('/events/focus', { source: 'chrome-extension' });
       return res.delivered ? { ok: true } : { ok: false, reason: res.reason || 'desktop-rejected' };
+    }
+
+    case 'GET_PROJECTS': {
+      const res = await sendToBridge('/events/projects', null, { method: 'GET' });
+      if (res.delivered && res.body && Array.isArray(res.body.projects)) {
+        return { ok: true, projects: res.body.projects };
+      }
+      return { ok: false, projects: [] };
+    }
+
+    case 'CREATE_PROJECT': {
+      const res = await sendToBridge('/events/projects', message.project || { name: 'New Research' });
+      if (res.delivered && res.body) {
+        return { ok: true, project: res.body.project, projects: res.body.projects };
+      }
+      return { ok: false, reason: res.reason || 'bridge-error' };
     }
 
     case 'OPEN_SIDE_PANEL': {

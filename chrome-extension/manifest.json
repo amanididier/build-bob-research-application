@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Bob — Research Companion",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Bob's research companion for the web: highlights, notes, tab intelligence and chat in a native Chrome side panel, synced with Bob Desktop.",
   "permissions": [
     "sidePanel",
@@ -14,7 +14,9 @@
     "notifications",
     "alarms"
   ],
-  "host_permissions": ["<all_urls>"],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "action": {
     "default_title": "Open Bob Research Panel",
     "default_icon": {
@@ -24,28 +26,40 @@
       "128": "icons/bob-logo.png"
     }
   },
-  "background": { "service_worker": "background.js" },
-  "side_panel": { "default_path": "sidepanel.html" },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
   "commands": {
     "bob-highlight": {
-      "suggested_key": { "default": "Alt+Shift+H" },
+      "suggested_key": {
+        "default": "Alt+Shift+H"
+      },
       "description": "Highlight selection (cycles green → blue → yellow)"
     },
     "bob-save-note": {
-      "suggested_key": { "default": "Alt+Shift+S" },
+      "suggested_key": {
+        "default": "Alt+Shift+S"
+      },
       "description": "Save selection to Bob Notes"
     },
     "bob-ask": {
-      "suggested_key": { "default": "Alt+Shift+B" },
+      "suggested_key": {
+        "default": "Alt+Shift+B"
+      },
       "description": "Ask Bob about selection"
     }
   },
-  "content_scripts": [{
-    "matches": ["<all_urls>"],
-    "js": ["content.js"],
-    "css": ["content.css"],
-    "run_at": "document_idle"
-  }],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
   "icons": {
     "16": "icons/bob-logo.png",
     "48": "icons/bob-logo.png",

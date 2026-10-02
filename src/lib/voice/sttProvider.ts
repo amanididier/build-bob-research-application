@@ -1,232 +1,258 @@
 import { STTEvent } from './types';
+import { micManager } from './microphoneManager';
 import { bobAi } from '../aiEngine';
 
 export interface STTProvider {
-  start: (
-    onTranscript: (event: STTEvent) => void,
-    onError: (err: string) => void,
-    stream: MediaStream
-  ) => Promise<void>;
+  start: (onTranscript: (event: STTEvent) => void, onError: (err: string) => void) => Promise<void>;
   stop: () => void;
-  flush: () => Promise<void>;
   isListening: () => boolean;
 }
 
-const CHUNK_MS = 60_000;
-const STT_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest'];
-const STT_INSTRUCTION =
-  'Transcribe this audio exactly as spoken. Output only the transcribed words, with normal punctuation. No commentary.';
-
-function pickMimeType(): string {
-  // Gemini accepts audio/webm and audio/mp4. Prefer webm/opus (universally
-  // supported by Chromium's MediaRecorder and by Gemini); mp4/aac only as a
-  // fallback. Never record with a codecs-suffixed container we then reject.
-  const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4;codecs=mp4a.40.2', 'audio/mp4'];
-  if (typeof MediaRecorder === 'undefined') return '';
-  for (const c of candidates) {
-    if (MediaRecorder.isTypeSupported(c)) return c;
-  }
-  return '';
-}
-
-// Gemini wants a bare container MIME (audio/webm, audio/mp4), not the
-// MediaRecorder's full "audio/webm;codecs=opus" string.
-function geminiMime(recorderMime: string): string {
-  const base = (recorderMime || '').split(';')[0].trim().toLowerCase();
-  if (base === 'audio/webm' || base === 'audio/mp4' || base === 'audio/ogg' || base === 'audio/wav') return base;
-  return 'audio/webm';
-}
-
-async function blobToBase64(blob: Blob): Promise<string> {
-  const buf = await blob.arrayBuffer();
-  let binary = '';
-  const bytes = new Uint8Array(buf);
-  for (let i = 0; i < bytes.length; i += 0x8000) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  }
-  return btoa(binary);
-}
-
-/**
- * Dictation by sending recorded audio chunks to Gemini. Web Speech API is unusable
- * inside packaged Electron (no Google service keys), which is why the old provider
- * showed "Listening" forever and never produced text.
- */
-class GeminiChunkedSTTProvider implements STTProvider {
+export class DualEngineSTTProvider implements STTProvider {
+  private recognition: any = null;
   private active = false;
-  private stream: MediaStream | null = null;
-  private recorder: MediaRecorder | null = null;
-  private segmentChunks: Blob[] = [];
-  private segmentStartedAt = 0;
-  private chunkTimer: any = null;
-  private committed = '';
-  private pending = 0;
-  private failed = false;
-  private onTranscript?: (event: STTEvent) => void;
-  private onError?: (err: string) => void;
+  private lastFinalTranscript = '';
+  private fullTranscript = '';
+  private mediaRecorder: MediaRecorder | null = null;
+  private audioChunks: Blob[] = [];
+  private chunkIntervalId: any = null;
+  private onTranscriptCallback?: (event: STTEvent) => void;
+  private onErrorCallback?: (err: string) => void;
+  private isProcessingChunk = false;
+
+  constructor() {
+    this.initWebSpeech();
+  }
+
+  private initWebSpeech() {
+    if (typeof window !== 'undefined') {
+      const SpeechRecognition =
+        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        try {
+          this.recognition = new SpeechRecognition();
+          this.recognition.continuous = true;
+          this.recognition.interimResults = true;
+          this.recognition.maxAlternatives = 1;
+          this.recognition.lang = navigator.language || 'en-US';
+        } catch (e) {
+          console.warn('SpeechRecognition initialization error:', e);
+        }
+      }
+    }
+  }
 
   public async start(
     onTranscript: (event: STTEvent) => void,
-    onError: (err: string) => void,
-    stream: MediaStream
+    onError: (err: string) => void
   ): Promise<void> {
-    if (!bobAi.hasGeminiKey()) {
-      onError('Dictation needs your free Google Gemini key. Add it in Settings, then tap the mic again.');
-      return;
-    }
-    if (typeof MediaRecorder === 'undefined') {
-      onError('This environment cannot record audio.');
-      return;
-    }
+    if (this.active) return;
 
-    this.onTranscript = onTranscript;
-    this.onError = onError;
-    this.stream = stream;
-    this.committed = '';
-    this.failed = false;
     this.active = true;
-    this.beginSegment();
-  }
+    this.lastFinalTranscript = '';
+    this.fullTranscript = '';
+    this.audioChunks = [];
+    this.onTranscriptCallback = onTranscript;
+    this.onErrorCallback = onError;
 
-  private beginSegment(): void {
-    if (!this.active || !this.stream) return;
-    const mime = pickMimeType();
-    try {
-      this.recorder = new MediaRecorder(this.stream, mime ? { mimeType: mime } : undefined);
-    } catch {
-      this.onError?.('Microphone recorder could not start.');
-      this.active = false;
-      return;
-    }
-    this.segmentChunks = [];
-    this.segmentStartedAt = Date.now();
-    this.recorder.ondataavailable = (e) => {
-      if (e.data && e.data.size > 0) this.segmentChunks.push(e.data);
-    };
-    this.recorder.onstop = () => {
-      const blob = new Blob(this.segmentChunks, { type: this.recorder?.mimeType || mime || 'audio/webm' });
-      this.segmentChunks = [];
-      if (this.active) this.beginSegment();
-      if (blob.size > 1024) {
-        void this.transcribeSegment(blob).then((text) => {
-          if (!text) return;
-          this.committed = this.committed ? `${this.committed} ${text}` : text;
-          this.onTranscript?.({ transcript: this.committed, isFinal: false });
-        });
-      }
-    };
-    this.recorder.start(1000);
-    this.chunkTimer = setTimeout(() => this.detachSegment(), CHUNK_MS);
-  }
+    let webSpeechStarted = false;
 
-  private detachSegment(): void {
-    if (this.recorder && this.recorder.state !== 'inactive') {
+    // 1. Try browser SpeechRecognition if present
+    if (this.recognition) {
       try {
-        this.recorder.stop();
-      } catch {}
-    }
-  }
-
-  private async transcribeSegment(blob: Blob): Promise<string> {
-    this.pending += 1;
-    try {
-      const key = bobAi.getGeminiKey();
-      if (!key) return '';
-      const data = await blobToBase64(blob);
-      const mimeType = geminiMime(blob.type);
-
-      let lastError = '';
-      for (const model of STT_MODELS) {
-        const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`,
-          {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({
-              contents: [
-                {
-                  parts: [
-                    { text: STT_INSTRUCTION },
-                    { inlineData: { mimeType, data } }
-                  ]
-                }
-              ],
-              generationConfig: { temperature: 0 }
-            })
-          }
-        );
-
-        if (res.ok) {
-          const json = await res.json();
-          const text = String(json?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join('') || '').trim();
-          if (text) return text;
-          lastError = 'empty-response';
-          continue;
-        }
-
-        // Capture Gemini's own explanation so the pill shows the real reason.
-        let detail = '';
-        try {
-          const errJson = await res.json();
-          detail = String(errJson?.error?.message || '').split('\n')[0];
-        } catch {}
-
-        if (res.status === 404) {
-          lastError = detail || 'model-unavailable';
-          continue; // try the next model
-        }
-        if (res.status === 401 || res.status === 403) {
-          this.failOnce(`Gemini key refused dictation (${res.status}). Check the key in Settings.`);
-          return '';
-        }
-        if (res.status === 429) {
-          this.failOnce('Gemini rate-limited dictation (429). Pause a moment and tap the mic again.');
-          return '';
-        }
-        // 400 etc.: report Gemini's actual message (bad key, bad MIME, …).
-        this.failOnce(detail ? `Dictation: ${detail}` : `Dictation failed (HTTP ${res.status}).`);
-        return '';
+        this.setupRecognitionListeners();
+        this.recognition.start();
+        webSpeechStarted = true;
+      } catch (err: any) {
+        console.warn('WebSpeech start failed, using audio recorder engine:', err?.message);
+        webSpeechStarted = false;
       }
-      if (lastError) this.failOnce(`Dictation: ${lastError}`);
-      return '';
-    } catch {
-      return '';
-    } finally {
-      this.pending -= 1;
     }
+
+    // 2. Start MediaRecorder for 1-minute chunking and fallback transcription
+    this.startMediaRecorderChunking();
   }
 
-  private failOnce(message: string): void {
-    if (this.failed) return;
-    this.failed = true;
-    this.onError?.(message);
-  }
+  private setupRecognitionListeners() {
+    if (!this.recognition) return;
 
-  /** Transcribe everything spoken since the last commit, right now. */
-  public async flush(): Promise<void> {
-    if (!this.active) return;
-    this.detachSegment();
-    const wait = async () => {
-      for (let i = 0; i < 40 && this.pending > 0; i++) {
-        await new Promise((r) => setTimeout(r, 150));
+    this.recognition.onresult = (event: any) => {
+      let interim = '';
+      let final = '';
+
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        const item = event.results[i];
+        if (item.isFinal) {
+          final += item[0].transcript;
+        } else {
+          interim += item[0].transcript;
+        }
+      }
+
+      if (final.trim()) {
+        if (!this.fullTranscript.endsWith(final.trim())) {
+          this.fullTranscript += (this.fullTranscript ? ' ' : '') + final.trim();
+        }
+        this.onTranscriptCallback?.({ transcript: this.fullTranscript, isFinal: true });
+      } else if (interim.trim()) {
+        const live = this.fullTranscript ? `${this.fullTranscript} ${interim.trim()}` : interim.trim();
+        this.onTranscriptCallback?.({ transcript: live, isFinal: false });
       }
     };
-    await wait();
-    this.onTranscript?.({ transcript: this.committed, isFinal: true });
+
+    this.recognition.onerror = (e: any) => {
+      const error = e.error || '';
+      if (error === 'no-speech' || error === 'aborted') {
+        return; // Normal idle
+      }
+
+      console.warn('[bob] WebSpeech error encountered:', error);
+      // In Electron or offline, WebSpeech throws 'network'. We keep MediaRecorder running!
+      if (error === 'network' || error === 'not-allowed') {
+        // Fall back gracefully to background audio chunk transcription
+      } else {
+        this.onErrorCallback?.(error);
+      }
+    };
+
+    this.recognition.onend = () => {
+      if (this.active) {
+        try {
+          this.recognition.start();
+        } catch {}
+      }
+    };
+  }
+
+  private startMediaRecorderChunking() {
+    const stream = micManager.getStream();
+    if (!stream) return;
+
+    try {
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm')
+        ? 'audio/webm'
+        : 'audio/mp4';
+
+      this.mediaRecorder = new MediaRecorder(stream, { mimeType });
+      this.audioChunks = [];
+
+      this.mediaRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          this.audioChunks.push(e.data);
+        }
+      };
+
+      this.mediaRecorder.start(2000); // 2-second timeslices
+
+      // As requested: every 1 minute (60s) or upon pause, detach chunk and transcribe in background
+      this.chunkIntervalId = setInterval(() => {
+        if (this.active && this.audioChunks.length > 0) {
+          this.detachAndTranscribeChunk();
+        }
+      }, 55000); // ~1 minute chunk
+    } catch (err) {
+      console.warn('MediaRecorder chunking error:', err);
+    }
+  }
+
+  private async detachAndTranscribeChunk() {
+    if (this.isProcessingChunk || this.audioChunks.length === 0) return;
+    this.isProcessingChunk = true;
+
+    try {
+      const currentBlob = new Blob(this.audioChunks, { type: this.mediaRecorder?.mimeType || 'audio/webm' });
+      this.audioChunks = []; // detach current minute for next instance
+
+      const transcript = await this.transcribeAudioBlob(currentBlob);
+      if (transcript && transcript.trim()) {
+        const text = transcript.trim();
+        if (!this.fullTranscript.includes(text)) {
+          this.fullTranscript += (this.fullTranscript ? ' ' : '') + text;
+          this.onTranscriptCallback?.({ transcript: this.fullTranscript, isFinal: true });
+        }
+      }
+    } catch (e) {
+      console.warn('Background chunk transcription failed:', e);
+    } finally {
+      this.isProcessingChunk = false;
+    }
+  }
+
+  public async transcribeAudioBlob(blob: Blob): Promise<string> {
+    const geminiKey = bobAi.getGeminiKey();
+    if (!geminiKey || blob.size < 500) {
+      return '';
+    }
+
+    try {
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve, reject) => {
+        reader.onloadend = () => {
+          const res = (reader.result as string || '').split(',')[1] || '';
+          resolve(res);
+        };
+        reader.onerror = reject;
+      });
+      reader.readAsDataURL(blob);
+      const base64Data = await base64Promise;
+
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-transcribe:generateContent?key=${geminiKey}`;
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                { text: 'Transcribe this spoken audio exactly into plain text. Do not add commentary.' },
+                {
+                  inlineData: {
+                    mimeType: blob.type || 'audio/webm',
+                    data: base64Data,
+                  },
+                },
+              ],
+            },
+          ],
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        return text;
+      }
+    } catch (e) {
+      console.warn('Gemini audio transcription error:', e);
+    }
+    return '';
   }
 
   public stop(): void {
     this.active = false;
-    if (this.chunkTimer) clearTimeout(this.chunkTimer);
-    this.chunkTimer = null;
-    if (this.recorder && this.recorder.state !== 'inactive') {
+
+    if (this.chunkIntervalId) {
+      clearInterval(this.chunkIntervalId);
+      this.chunkIntervalId = null;
+    }
+
+    if (this.recognition) {
       try {
-        this.recorder.stop();
+        this.recognition.stop();
       } catch {}
     }
-    this.recorder = null;
-    this.stream = null;
-    this.committed = '';
+
+    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+      try {
+        this.mediaRecorder.stop();
+      } catch {}
+      this.mediaRecorder = null;
+    }
+
+    this.audioChunks = [];
+    this.isProcessingChunk = false;
   }
 
   public isListening(): boolean {
@@ -234,4 +260,4 @@ class GeminiChunkedSTTProvider implements STTProvider {
   }
 }
 
-export const stt = new GeminiChunkedSTTProvider();
+export const stt = new DualEngineSTTProvider();

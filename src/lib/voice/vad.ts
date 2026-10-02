@@ -17,9 +17,8 @@ export class VoiceActivityDetector {
   private silenceTimer: any = null;
   private isRunning = false;
 
-  public start(stream: MediaStream, callbacks: VADCallbacks, options?: { silenceMs?: number }): void {
+  public start(stream: MediaStream, callbacks: VADCallbacks): void {
     if (this.isRunning) return;
-    const silenceMs = options?.silenceMs ?? DEFAULT_VOICE_CONFIG.speechEndSilenceDurationMs;
 
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
@@ -69,7 +68,7 @@ export class VoiceActivityDetector {
                 callbacks.onSpeechEnd();
               }
               this.silenceTimer = null;
-            }, silenceMs);
+            }, DEFAULT_VOICE_CONFIG.speechEndSilenceDurationMs);
           }
         }
 

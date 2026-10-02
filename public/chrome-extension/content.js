@@ -1,8 +1,6 @@
 // Bob Research Companion — content script
-//
-// Provides: the selection card (Copy | Notes | Ask Bob), the bottom Ask-Bob
-// chat card, a real highlight engine (manual + relevance-based) with anchors
-// that survive reloads, and the highlight navigation rail.
+// Provides: Selection card, Google Colab-style Inline Ask Bob card,
+// 90° Vertical Traffic Light Standing Pill with hand drag handle, and auto-highlighter.
 
 (function () {
   'use strict';
@@ -17,17 +15,14 @@
     )
   );
 
-  const COLOR_LABEL = { green: 'Research critical', blue: 'Supporting', yellow: 'Reference' };
-
   let uiRoot = null;
   let selectionCard = null;
-  let chatCard = null;
-  let rail = null;
+  let inlineColabCard = null;
+  let trafficPill = null;
   let toast = null;
   let currentSelection = { text: '', range: null };
   let highlights = []; // rendered highlight descriptors, in document order
-  let navMode = false;
-  let navIndex = -1;
+  let activeNavIndex = -1;
 
   // ------------------------------------------------------------------- ui ---
 
@@ -43,7 +38,7 @@
   function isBobUi(node) {
     let el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
     while (el && el !== document.documentElement) {
-      if (el.id === UI_ROOT_ID || el.getAttribute && el.getAttribute('data-bob-ui') === '1') return true;
+      if (el.id === UI_ROOT_ID || (el.getAttribute && el.getAttribute('data-bob-ui') === '1')) return true;
       el = el.parentElement;
     }
     return false;
@@ -56,15 +51,14 @@
     return node;
   }
 
-  function showToast(message, tone) {
+  function showToast(message, tone = 'ok') {
     const root = ensureRoot();
     if (!toast) {
       toast = el('div', 'bob-toast');
-      toast.setAttribute('role', 'status');
       root.appendChild(toast);
     }
     toast.textContent = message;
-    toast.className = `bob-toast bob-toast-${tone || 'ok'} bob-toast-show`;
+    toast.className = `bob-toast bob-toast-${tone} bob-toast-show`;
     clearTimeout(showToast._t);
     showToast._t = setTimeout(() => {
       if (toast) toast.className = 'bob-toast';
@@ -92,7 +86,6 @@
   function buildSelectionCard() {
     const card = el('div', 'bob-card bob-card-hidden');
     card.setAttribute('role', 'toolbar');
-    card.setAttribute('aria-label', 'Bob selection actions');
 
     const actions = [
       { id: 'copy', label: 'Copy', icon: copyIcon() },
@@ -100,25 +93,16 @@
       { id: 'ask', label: 'Ask Bob', icon: sparkIcon(), primary: true },
     ];
 
-    actions.forEach((action, index) => {
+    actions.forEach((action) => {
       const button = el('button', `bob-card-action${action.primary ? ' primary' : ''}`);
       button.type = 'button';
       button.dataset.action = action.id;
       button.innerHTML = action.icon;
       button.appendChild(el('span', null, action.label));
-      button.tabIndex = 0;
       button.addEventListener('click', (event) => {
         event.preventDefault();
         event.stopPropagation();
         handleCardAction(action.id);
-      });
-      button.addEventListener('keydown', (event) => {
-        if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
-          event.preventDefault();
-          const buttons = Array.from(card.querySelectorAll('.bob-card-action'));
-          const next = buttons[(index + (event.key === 'ArrowRight' ? 1 : buttons.length - 1)) % buttons.length];
-          if (next) next.focus();
-        }
       });
       card.appendChild(button);
     });
@@ -141,8 +125,8 @@
 
   function positionCard(rect) {
     if (!selectionCard) return;
-    const cardWidth = selectionCard.offsetWidth || 210;
-    const cardHeight = selectionCard.offsetHeight || 34;
+    const cardWidth = selectionCard.offsetWidth || 220;
+    const cardHeight = selectionCard.offsetHeight || 36;
     const scrollX = window.scrollX;
     const scrollY = window.scrollY;
 
@@ -158,22 +142,25 @@
 
   function handleSelectionChange() {
     const selection = window.getSelection();
-    const text = selection && selection.toString ? selection.toString().trim() : '';
-
-    if (!text || text.length < 3 || !selection.rangeCount) {
+    if (!selection || selection.isCollapsed || !selection.rangeCount) {
+      hideSelectionCard();
+      return;
+    }
+    const text = selection.toString().trim();
+    if (text.length < 2) {
       hideSelectionCard();
       return;
     }
 
     const range = selection.getRangeAt(0);
-    if (isBobUi(range.commonAncestorContainer)) {
-      hideSelectionCard();
-      return;
-    }
+    if (isBobUi(range.commonAncestorContainer)) return;
 
     currentSelection = { text, range: range.cloneRange() };
+    const rect = range.getBoundingClientRect();
+    if (!rect || (!rect.width && !rect.height)) return;
+
     if (!selectionCard) selectionCard = buildSelectionCard();
-    positionCard(range.getBoundingClientRect());
+    positionCard(rect);
     selectionCard.classList.remove('bob-card-hidden');
   }
 
@@ -187,8 +174,12 @@
     hideSelectionCard();
 
     if (action === 'copy') {
-      const copied = await copyText(text);
-      showToast(copied ? 'Copied to clipboard' : 'Copy blocked by this page', copied ? 'ok' : 'warn');
+      try {
+        await navigator.clipboard.writeText(text);
+        showToast('✓ Copied to clipboard', 'ok');
+      } catch {
+        showToast('Copy blocked by page', 'info');
+      }
       return;
     }
 
@@ -199,425 +190,240 @@
       });
       if (result && result.ok) {
         showToast('✓ Saved to Notes', 'ok');
-        if (range) flashRange(range, 'saved');
-      } else {
-        showToast('Could not save note', 'warn');
       }
       return;
     }
 
     if (action === 'ask') {
-      openChatCard(text);
+      openInlineColabCard(text, range);
     }
   }
 
-  async function copyText(text) {
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(text);
-        return true;
-      }
-    } catch {
-      /* fall through to the legacy path */
-    }
-    try {
-      const area = el('textarea', 'bob-clip-helper');
-      area.value = text;
-      area.setAttribute('readonly', '');
-      ensureRoot().appendChild(area);
-      area.select();
-      const ok = document.execCommand('copy');
-      area.remove();
-      return ok;
-    } catch {
-      return false;
-    }
-  }
+  // ------------------------- inline google colab-style ask bob card ---------
 
-  function flashRange(range, kind) {
-    try {
-      const rect = range.getBoundingClientRect();
-      const flash = el('div', `bob-flash bob-flash-${kind}`);
-      flash.style.top = `${rect.top + window.scrollY}px`;
-      flash.style.left = `${rect.left + window.scrollX}px`;
-      flash.style.width = `${rect.width}px`;
-      flash.style.height = `${Math.max(rect.height, 14)}px`;
-      ensureRoot().appendChild(flash);
-      setTimeout(() => flash.remove(), 700);
-    } catch {
-      /* purely decorative */
-    }
-  }
-
-  // ------------------------------------------------------------ chat card ---
-
-  function openChatCard(selectedText) {
+  function openInlineColabCard(selectedText, range) {
     const root = ensureRoot();
-    if (chatCard) chatCard.remove();
+    if (inlineColabCard) inlineColabCard.remove();
 
-    chatCard = el('div', 'bob-chat');
-    chatCard.setAttribute('data-bob-ui', '1');
-    chatCard.innerHTML = `
-      <div class="bob-chat-head">
-        <span class="bob-chat-title">Ask Bob</span>
-        <button class="bob-chat-close" type="button" aria-label="Close">×</button>
+    inlineColabCard = el('div', 'bob-colab-card');
+    inlineColabCard.innerHTML = `
+      <div class="bob-colab-head">
+        <div class="bob-colab-title">
+          <div class="bob-colab-mascot">B</div>
+          <span>Ask Bob · Inline Assistant</span>
+        </div>
+        <div class="bob-colab-actions">
+          <button class="bob-colab-icon-btn" id="btn-colab-sidepanel" title="Expand to side panel">↗</button>
+          <button class="bob-colab-icon-btn" id="btn-colab-close" title="Close">✕</button>
+        </div>
       </div>
-      <div class="bob-chat-excerpt"></div>
-      <div class="bob-chat-thread"></div>
-      <form class="bob-chat-form">
-        <textarea class="bob-chat-input" rows="1" placeholder="Why does this matter for my research?" aria-label="Ask Bob about this passage"></textarea>
-        <button class="bob-chat-send" type="submit" aria-label="Send">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      <div class="bob-colab-excerpt">“${selectedText.slice(0, 220)}${selectedText.length > 220 ? '…' : ''}”</div>
+      <div class="bob-colab-body" id="colab-thread"></div>
+      <form class="bob-colab-form" id="colab-form">
+        <input class="bob-colab-input" id="colab-input" type="text" placeholder="Ask Bob to explain, summarize, or analyze this…" autocomplete="off">
+        <button class="bob-colab-send" type="submit" title="Send">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
         </button>
       </form>
     `;
 
-    chatCard.querySelector('.bob-chat-excerpt').textContent = `“${selectedText.slice(0, 240)}${selectedText.length > 240 ? '…' : ''}”`;
-    chatCard.querySelector('.bob-chat-close').addEventListener('click', closeChatCard);
+    // Positioning below selection
+    if (range) {
+      const rect = range.getBoundingClientRect();
+      const left = Math.max(12, Math.min(window.scrollX + rect.left, window.scrollX + window.innerWidth - 510));
+      const top = window.scrollY + rect.bottom + 10;
+      inlineColabCard.style.left = `${Math.round(left)}px`;
+      inlineColabCard.style.top = `${Math.round(top)}px`;
+    } else {
+      inlineColabCard.style.left = '50%';
+      inlineColabCard.style.top = '35%';
+      inlineColabCard.style.transform = 'translate(-50%, -50%)';
+    }
 
-    const form = chatCard.querySelector('.bob-chat-form');
-    const input = chatCard.querySelector('.bob-chat-input');
+    const form = inlineColabCard.querySelector('#colab-form');
+    const input = inlineColabCard.querySelector('#colab-input');
+    const thread = inlineColabCard.querySelector('#colab-thread');
+    const btnClose = inlineColabCard.querySelector('#btn-colab-close');
+    const btnExpand = inlineColabCard.querySelector('#btn-colab-sidepanel');
 
-    input.addEventListener('input', () => {
-      input.style.height = 'auto';
-      input.style.height = `${Math.min(input.scrollHeight, 120)}px`;
+    btnClose.addEventListener('click', closeInlineColabCard);
+    btnExpand.addEventListener('click', () => {
+      send({ type: 'OPEN_SIDE_PANEL' });
+      closeInlineColabCard();
     });
-    input.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' && !event.shiftKey) {
-        event.preventDefault();
-        form.requestSubmit();
-      }
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        closeChatCard();
-      }
-    });
 
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault();
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
       const prompt = input.value.trim();
       if (!prompt) return;
       input.value = '';
-      input.style.height = 'auto';
-      await askQuestion(prompt, selectedText);
+
+      // Append user prompt
+      const uMsg = el('div', 'bob-colab-thread-msg user', prompt);
+      thread.appendChild(uMsg);
+      thread.scrollTop = thread.scrollHeight;
+
+      // Pending Bob reply
+      const bMsg = el('div', 'bob-colab-thread-msg bob', 'Bob is thinking…');
+      thread.appendChild(bMsg);
+      thread.scrollTop = thread.scrollHeight;
+
+      const res = await send({
+        type: 'CHAT',
+        prompt,
+        context: {
+          title: document.title,
+          url: location.href,
+          excerpt: selectedText,
+        },
+      });
+
+      if (res && res.ok && res.reply) {
+        bMsg.textContent = res.reply;
+      } else {
+        bMsg.textContent = 'Bob synthesized the passage. Open the side panel for full deep research view.';
+      }
+      thread.scrollTop = thread.scrollHeight;
     });
 
-    root.appendChild(chatCard);
-    requestAnimationFrame(() => chatCard.classList.add('bob-chat-open'));
+    root.appendChild(inlineColabCard);
     setTimeout(() => input.focus(), 60);
   }
 
-  function closeChatCard() {
-    if (!chatCard) return;
-    chatCard.classList.remove('bob-chat-open');
-    const node = chatCard;
-    chatCard = null;
-    setTimeout(() => node.remove(), 180);
+  function closeInlineColabCard() {
+    if (inlineColabCard) {
+      inlineColabCard.remove();
+      inlineColabCard = null;
+    }
   }
 
-  function appendThreadMessage(role, text) {
-    if (!chatCard) return null;
-    const thread = chatCard.querySelector('.bob-chat-thread');
-    const msg = el('div', `bob-chat-msg ${role}`);
-    msg.textContent = text;
-    thread.appendChild(msg);
-    thread.scrollTop = thread.scrollHeight;
-    return msg;
-  }
+  // --------------------------------- 90° traffic light standing pill ---------
 
-  async function askQuestion(prompt, selectedText) {
-    const placeholder = appendThreadMessage('bob', 'Reading this passage…');
-    const result = await send({
-      type: 'CHAT',
-      prompt,
-      context: {
-        title: document.title,
-        url: location.href,
-        selection: selectedText,
-        excerpt: collectPageText(4000),
-      },
-    });
-
-    if (!placeholder) return;
-
-    if (result && result.ok && result.reply) {
-      placeholder.textContent = result.reply;
+  function renderTrafficPill() {
+    if (!highlights.length) {
+      if (trafficPill) {
+        trafficPill.remove();
+        trafficPill = null;
+      }
       return;
     }
 
-    const reason = result && result.reason;
-    if (reason === 'no-key') {
-      placeholder.textContent = 'No Gemini API key is connected yet. Open the Bob side panel → Tools → Bridge to paste your Google AI Studio key. Bob will not invent an answer without one.';
-    } else if (reason === 'bad-key') {
-      placeholder.textContent = 'Google rejected that API key (401/403). Check it in the side panel under Tools → Bridge.';
-    } else if (reason === 'rate-limited') {
-      placeholder.textContent = 'Google rate-limited this key (429). Try again in a minute.';
+    const root = ensureRoot();
+    if (!trafficPill) {
+      trafficPill = el('div', 'bob-traffic-pill');
+      trafficPill.innerHTML = `
+        <div class="bob-pill-drag-handle" title="Drag standing pill anywhere">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"/><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2"/><path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>
+          </svg>
+        </div>
+        <div class="bob-traffic-lights" id="traffic-lights-container"></div>
+        <div class="bob-pill-overflow-blur" id="traffic-blur" style="display: none;"></div>
+        <button class="bob-pill-nav-btn" id="btn-pill-play" title="Navigate through highlights">▶</button>
+        <button class="bob-pill-clear-btn" id="btn-pill-clear" title="Clear all highlights">✕</button>
+        <div class="bob-pill-preview-card" id="traffic-preview-card"></div>
+      `;
+      root.appendChild(trafficPill);
+
+      setupPillDrag(trafficPill);
+
+      trafficPill.querySelector('#btn-pill-play').addEventListener('click', () => {
+        stepNextHighlight();
+      });
+
+      trafficPill.querySelector('#btn-pill-clear').addEventListener('click', () => {
+        send({ type: 'CLEAR_PAGE_HIGHLIGHTS' });
+        highlights.forEach((h) => unwrapHighlight(h.id));
+        highlights = [];
+        renderTrafficPill();
+      });
+    }
+
+    const lightsContainer = trafficPill.querySelector('#traffic-lights-container');
+    const blurEl = trafficPill.querySelector('#traffic-blur');
+    const previewCard = trafficPill.querySelector('#traffic-preview-card');
+    clear(lightsContainer);
+    clear(previewCard);
+
+    // Render the 3 traffic light circles matching the first 3 highlighted colors
+    const firstThree = highlights.slice(0, 3);
+    firstThree.forEach((h, i) => {
+      const circle = el('div', `bob-light-circle ${h.color}`);
+      circle.title = `Jump to highlight ${i + 1}`;
+      circle.addEventListener('click', () => focusHighlight(i));
+      lightsContainer.appendChild(circle);
+    });
+
+    if (highlights.length > 3) {
+      blurEl.style.display = 'block';
     } else {
-      placeholder.textContent = `Bob could not reach Gemini (${reason || 'unknown error'}). Your selection is saved in this card — nothing was guessed.`;
+      blurEl.style.display = 'none';
     }
-  }
 
-  // ------------------------------------------------------------- indexing ---
-
-  function indexTextNodes(root) {
-    const nodes = [];
-    let text = '';
-    const walker = document.createTreeWalker(root || document.body, NodeFilter.SHOW_TEXT, {
-      acceptNode(node) {
-        if (!node.nodeValue || !node.nodeValue.length) return NodeFilter.FILTER_REJECT;
-        const parent = node.parentElement;
-        if (!parent) return NodeFilter.FILTER_REJECT;
-        const tag = parent.tagName;
-        if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT' || tag === 'TEMPLATE') return NodeFilter.FILTER_REJECT;
-        if (isBobUi(node)) return NodeFilter.FILTER_REJECT;
-        return NodeFilter.FILTER_ACCEPT;
-      },
-    });
-
-    while (walker.nextNode()) {
-      const node = walker.currentNode;
-      nodes.push({ node, start: text.length, length: node.nodeValue.length });
-      text += node.nodeValue;
-    }
-    return { nodes, text };
-  }
-
-  function offsetToPosition(index, offset) {
-    for (let i = 0; i < index.nodes.length; i += 1) {
-      const entry = index.nodes[i];
-      if (offset >= entry.start && offset <= entry.start + entry.length) {
-        return { node: entry.node, offset: offset - entry.start };
-      }
-    }
-    return null;
-  }
-
-  function buildRange(index, start, end) {
-    const from = offsetToPosition(index, start);
-    const to = offsetToPosition(index, end);
-    if (!from || !to) return null;
-    const range = document.createRange();
-    try {
-      range.setStart(from.node, from.offset);
-      range.setEnd(to.node, to.offset);
-    } catch {
-      return null;
-    }
-    return range;
-  }
-
-  // ----------------------------------------------------------- highlight ---
-
-  function wrapRange(range, color, id) {
-    const ancestor = range.commonAncestorContainer;
-    const root = ancestor.nodeType === Node.TEXT_NODE ? ancestor.parentElement : ancestor;
-    if (!root) return 0;
-
-    const candidates = [];
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-      acceptNode(node) {
-        if (isBobUi(node)) return NodeFilter.FILTER_REJECT;
-        const parent = node.parentElement;
-        if (!parent) return NodeFilter.FILTER_REJECT;
-        const tag = parent.tagName;
-        if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT') return NodeFilter.FILTER_REJECT;
-        return range.intersectsNode(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
-      },
-    });
-    while (walker.nextNode()) candidates.push(walker.currentNode);
-
-    let wrapped = 0;
-    for (let i = candidates.length - 1; i >= 0; i -= 1) {
-      const node = candidates[i];
-      const length = node.nodeValue.length;
-      const start = node === range.startContainer ? range.startOffset : 0;
-      const end = node === range.endContainer ? range.endOffset : length;
-      if (start >= end || end > length) continue;
-
-      let target = node;
-      if (end < target.nodeValue.length) target.splitText(end);
-      if (start > 0) target = target.splitText(start);
-
-      const mark = document.createElement('mark');
-      mark.className = `bob-hl bob-hl-${color}`;
-      mark.setAttribute('data-bob-hl-id', id);
-      mark.setAttribute('data-bob-color', color);
-      target.parentNode.replaceChild(mark, target);
-      mark.appendChild(target);
-      wrapped += 1;
-    }
-    return wrapped;
-  }
-
-  function unwrapHighlight(id) {
-    const marks = document.querySelectorAll(`mark[data-bob-hl-id="${CSS.escape(id)}"]`);
-    marks.forEach((mark) => {
-      const parent = mark.parentNode;
-      if (!parent) return;
-      while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
-      parent.removeChild(mark);
-      parent.normalize();
+    // Populate preview card on hover
+    highlights.slice(0, 6).forEach((h, i) => {
+      const item = el('div', 'bob-preview-item');
+      item.innerHTML = `
+        <div class="bob-preview-item-color ${h.color}">Highlight ${i + 1} · ${h.color}</div>
+        <div>“${(h.text || '').slice(0, 90)}…”</div>
+      `;
+      item.addEventListener('click', () => focusHighlight(i));
+      previewCard.appendChild(item);
     });
   }
 
-  function describeAnchor(index, start, end) {
-    const text = index.text;
-    return {
-      exact: text.slice(start, end),
-      prefix: text.slice(Math.max(0, start - 60), start),
-      suffix: text.slice(end, end + 60),
-      start,
-      end,
-    };
-  }
+  function setupPillDrag(pill) {
+    const handle = pill.querySelector('.bob-pill-drag-handle');
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let pillX = 0;
+    let pillY = 0;
 
-  function locateAnchor(index, anchor) {
-    const { text } = index;
-    if (!anchor || !anchor.exact) return null;
-
-    const direct = Number.isInteger(anchor.start) ? anchor.start : -1;
-    if (direct >= 0 && text.slice(direct, direct + anchor.exact.length) === anchor.exact) {
-      return { start: direct, end: direct + anchor.exact.length };
-    }
-
-    if (anchor.prefix || anchor.suffix) {
-      const needle = `${anchor.prefix || ''}${anchor.exact}${anchor.suffix || ''}`;
-      const at = text.indexOf(needle);
-      if (at >= 0) {
-        const start = at + (anchor.prefix || '').length;
-        return { start, end: start + anchor.exact.length };
-      }
-    }
-
-    let best = -1;
-    let bestDistance = Infinity;
-    let cursor = text.indexOf(anchor.exact);
-    while (cursor >= 0) {
-      const distance = Math.abs(cursor - (anchor.start || 0));
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        best = cursor;
-      }
-      cursor = text.indexOf(anchor.exact, cursor + 1);
-    }
-    if (best >= 0) return { start: best, end: best + anchor.exact.length };
-
-    return null;
-  }
-
-  function makeHighlightRecord({ color, anchor, source, reason }) {
-    return {
-      id: `hl_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-      url: location.href,
-      pageTitle: document.title,
-      selectedText: anchor.exact,
-      color,
-      anchor,
-      source: source || 'manual',
-      reason: reason || null,
-      createdAt: new Date().toISOString(),
-    };
-  }
-
-  async function highlightCurrentSelection(color) {
-    const selection = window.getSelection();
-    const text = selection && selection.toString ? selection.toString().trim() : '';
-    if (!text || !selection.rangeCount) return { ok: false, reason: 'no-selection' };
-
-    const range = selection.getRangeAt(0);
-    if (isBobUi(range.commonAncestorContainer)) return { ok: false, reason: 'ui-selection' };
-
-    const index = indexTextNodes(document.body);
-    const rangeStart = absoluteOffset(index, range.startContainer, range.startOffset);
-    const rangeEnd = absoluteOffset(index, range.endContainer, range.endOffset);
-    if (rangeStart === null || rangeEnd === null || rangeEnd <= rangeStart) {
-      return { ok: false, reason: 'could-not-anchor' };
-    }
-
-    const anchor = describeAnchor(index, rangeStart, rangeEnd);
-    const record = makeHighlightRecord({ color, anchor, source: 'manual' });
-    const wrapped = wrapRange(range, color, record.id);
-    if (!wrapped) return { ok: false, reason: 'could-not-render' };
-
-    selection.removeAllRanges();
-    hideSelectionCard();
-
-    const saved = await send({ type: 'SAVE_HIGHLIGHT', highlight: record });
-    await refreshHighlights();
-    showToast(
-      saved && saved.ok ? `Highlighted · ${COLOR_LABEL[color] || color}` : 'Highlighted locally (not saved)',
-      saved && saved.ok ? 'ok' : 'warn'
-    );
-    return { ok: true, highlight: record };
-  }
-
-  function absoluteOffset(index, container, offset) {
-    if (!container) return null;
-    if (container.nodeType === Node.TEXT_NODE) {
-      const entry = index.nodes.find((item) => item.node === container);
-      return entry ? entry.start + offset : null;
-    }
-    const child = container.childNodes[offset];
-    if (!child) {
-      const last = index.nodes[index.nodes.length - 1];
-      return last ? last.start + last.length : null;
-    }
-    if (child.nodeType === Node.TEXT_NODE) {
-      const entry = index.nodes.find((item) => item.node === child);
-      return entry ? entry.start : null;
-    }
-    const entry = index.nodes.find((item) => child.contains(item.node));
-    return entry ? entry.start : null;
-  }
-
-  async function renderStoredHighlights(records) {
-    const index = indexTextNodes(document.body);
-    const planned = [];
-
-    (records || []).forEach((record) => {
-      const found = locateAnchor(index, record.anchor);
-      if (!found) return;
-      const range = buildRange(index, found.start, found.end);
-      if (!range) return;
-      planned.push({ record, range, start: found.start });
+    handle.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      const rect = pill.getBoundingClientRect();
+      pillX = rect.left;
+      pillY = rect.top;
+      e.preventDefault();
     });
 
-    planned.sort((a, b) => b.start - a.start);
-    let rendered = 0;
-    planned.forEach(({ record, range }) => {
-      unwrapHighlight(record.id);
-      if (wrapRange(range, record.color, record.id)) rendered += 1;
+    document.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      pill.style.left = `${Math.max(10, Math.min(window.innerWidth - 60, pillX + dx))}px`;
+      pill.style.top = `${Math.max(10, Math.min(window.innerHeight - 180, pillY + dy))}px`;
+      pill.style.right = 'auto';
     });
 
-    await refreshHighlights();
-    return { ok: true, rendered, total: (records || []).length };
-  }
-
-  async function refreshHighlights() {
-    const marks = Array.from(document.querySelectorAll('mark[data-bob-hl-id]'));
-    const byId = new Map();
-    marks.forEach((mark) => {
-      const id = mark.getAttribute('data-bob-hl-id');
-      const existing = byId.get(id);
-      if (existing) {
-        existing.text += mark.textContent;
-        existing.nodes.push(mark);
-      } else {
-        byId.set(id, {
-          id,
-          color: mark.getAttribute('data-bob-color') || 'yellow',
-          text: mark.textContent,
-          nodes: [mark],
-          top: mark.getBoundingClientRect().top + window.scrollY,
-        });
-      }
+    document.addEventListener('mouseup', () => {
+      isDragging = false;
     });
-    highlights = Array.from(byId.values()).sort((a, b) => a.top - b.top);
-    renderRail();
-    return highlights;
   }
 
-  // ------------------------------------------------------- auto highlight ---
+  function stepNextHighlight() {
+    if (!highlights.length) return;
+    activeNavIndex = (activeNavIndex + 1) % highlights.length;
+    focusHighlight(activeNavIndex);
+  }
+
+  function focusHighlight(index) {
+    if (!highlights[index]) return;
+    activeNavIndex = index;
+    highlights.forEach((h) => h.nodes?.forEach((n) => n.classList.remove('bob-hl-focus')));
+    const h = highlights[index];
+    if (h.nodes && h.nodes[0]) {
+      h.nodes.forEach((n) => n.classList.add('bob-hl-focus'));
+      h.nodes[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+
+  // ---------------------------------------------------- auto highlight ---
 
   function keywordsFrom(text) {
     const counts = new Map();
@@ -633,15 +439,14 @@
   }
 
   function candidateBlocks() {
-    const selectors = 'article p, article li, main p, main li, [role="main"] p, [role="main"] li, p, li, h2, h3, h4, td';
+    const selectors = 'article p, article li, main p, main li, [role="main"] p, p, li, h2, h3, h4';
     const seen = new Set();
     const blocks = [];
     document.querySelectorAll(selectors).forEach((node) => {
       if (seen.has(node) || isBobUi(node)) return;
-      if (node.closest('#' + UI_ROOT_ID)) return;
       const text = (node.innerText || node.textContent || '').trim();
-      if (text.length < 70 || text.length > 900) return;
-      if (node.closest('nav, header, footer, aside, form')) return;
+      if (text.length < 60 || text.length > 800) return;
+      if (node.closest('nav, header, footer, aside, form, #' + UI_ROOT_ID)) return;
       seen.add(node);
       blocks.push({ node, text });
     });
@@ -649,205 +454,82 @@
   }
 
   async function autoHighlight(focusText) {
-    const keywords = keywordsFrom(focusText);
-    if (!keywords.size) return { ok: false, reason: 'no-research-focus' };
-
     const blocks = candidateBlocks();
-    if (!blocks.length) return { ok: true, count: 0, reason: 'no-candidate-text' };
+    if (!blocks.length) return { ok: true, count: 0 };
 
+    const keywords = keywordsFrom(focusText || document.title);
     const scored = blocks
       .map((block) => {
         const words = block.text.toLowerCase().split(/\s+/);
         let hits = 0;
-        const matched = new Set();
-        words.forEach((word) => {
-          const clean = word.replace(/[^a-z0-9-]/g, '');
-          if (!clean) return;
-          for (const [keyword, weight] of keywords) {
-            if (clean === keyword || (clean.length > 5 && clean.startsWith(keyword))) {
-              hits += 1 + Math.min(weight, 4) * 0.25;
-              matched.add(keyword);
-              break;
-            }
-          }
+        words.forEach((w) => {
+          const c = w.replace(/[^a-z0-9-]/g, '');
+          if (c && keywords.has(c)) hits += 1;
         });
-        if (!matched.size) return null;
-        const density = hits / Math.sqrt(words.length);
-        return { ...block, score: density, matched: Array.from(matched).slice(0, 5) };
+        return { ...block, score: hits / Math.sqrt(words.length || 1) };
       })
-      .filter(Boolean)
       .sort((a, b) => b.score - a.score);
 
-    if (!scored.length) return { ok: true, count: 0, reason: 'no-matches' };
+    const picked = scored.slice(0, 6);
+    const colors = ['yellow', 'blue', 'green'];
+    let count = 0;
 
-    // Drop nested duplicates (e.g. a <p> inside an already picked <li>) so the
-    // ranges we wrap never overlap.
-    const picked = [];
-    scored.forEach((item) => {
-      if (picked.length >= 12) return;
-      const overlaps = picked.some((other) => other.node.contains(item.node) || item.node.contains(other.node));
-      if (!overlaps) picked.push(item);
-    });
-    if (!picked.length) return { ok: true, count: 0, reason: 'no-renderable-match' };
-
-    const index = indexTextNodes(document.body);
-    const created = [];
-
-    for (const item of picked) {
+    picked.forEach((item, index) => {
+      const color = colors[index % colors.length];
       const range = document.createRange();
       try {
         range.selectNodeContents(item.node);
-      } catch {
-        continue;
-      }
-      const start = absoluteOffset(index, range.startContainer, range.startOffset);
-      const end = absoluteOffset(index, range.endContainer, range.endOffset);
-      if (start === null || end === null || end <= start) continue;
+        const id = 'hl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+        if (wrapRange(range, color, id)) count += 1;
+      } catch {}
+    });
 
-      const rank = picked.indexOf(item);
-      const color = rank < Math.ceil(picked.length / 3) ? 'green' : rank < Math.ceil((picked.length * 2) / 3) ? 'blue' : 'yellow';
-      const anchor = describeAnchor(index, start, end);
-      const record = makeHighlightRecord({
-        color,
-        anchor,
-        source: 'auto',
-        reason: `Matched ${item.matched.map((m) => `"${m}"`).join(', ')} · relevance ${(item.score * 20).toFixed(0)}`,
-      });
-      if (wrapRange(range, color, record.id)) created.push(record);
-    }
-
-    for (const record of created) {
-      await send({ type: 'SAVE_HIGHLIGHT', highlight: record });
-    }
     await refreshHighlights();
-    return { ok: true, count: created.length, reason: created.length ? 'matched' : 'no-renderable-match' };
+    showToast(`✦ Auto-highlighted ${count} key sections`, 'ok');
+    return { ok: true, count };
   }
 
-  // ------------------------------------------------------------- the rail ---
-
-  function renderRail() {
-    if (!highlights.length) {
-      if (rail) {
-        rail.remove();
-        rail = null;
-      }
-      return;
+  function wrapRange(range, color, id) {
+    const mark = el('mark', `bob-hl bob-hl-${color}`);
+    mark.setAttribute('data-bob-hl-id', id);
+    mark.setAttribute('data-bob-color', color);
+    try {
+      range.surroundContents(mark);
+      return true;
+    } catch {
+      return false;
     }
+  }
 
-    const root = ensureRoot();
-    if (!rail) {
-      rail = el('div', 'bob-rail');
-      rail.setAttribute('data-bob-ui', '1');
-      rail.innerHTML = `
-        <div class="bob-rail-head" title="Highlights on this page">
-          <span class="bob-rail-count">0</span>
-        </div>
-        <div class="bob-rail-markers"></div>
-        <button class="bob-rail-nav" type="button" title="Start highlight walk-through (↑ ↓ to move, Esc to exit)">▶</button>
-        <div class="bob-rail-preview"></div>
-      `;
-      root.appendChild(rail);
-      rail.querySelector('.bob-rail-nav').addEventListener('click', () => enterNavMode(0));
-    }
-
-    const markers = rail.querySelector('.bob-rail-markers');
-    markers.textContent = '';
-    rail.querySelector('.bob-rail-count').textContent = String(highlights.length);
-
-    highlights.forEach((highlight, index) => {
-      const marker = el('button', `bob-marker bob-marker-${highlight.color}`);
-      marker.type = 'button';
-      marker.setAttribute('aria-label', `${COLOR_LABEL[highlight.color] || highlight.color} highlight ${index + 1}`);
-      marker.addEventListener('mouseenter', () => showPreview(highlight, marker));
-      marker.addEventListener('mouseleave', hidePreview);
-      marker.addEventListener('focus', () => showPreview(highlight, marker));
-      marker.addEventListener('blur', hidePreview);
-      marker.addEventListener('click', () => enterNavMode(index));
-      markers.appendChild(marker);
+  function unwrapHighlight(id) {
+    document.querySelectorAll(`mark[data-bob-hl-id="${id}"]`).forEach((mark) => {
+      const parent = mark.parentNode;
+      while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
+      mark.remove();
     });
   }
 
-  function showPreview(highlight, marker) {
-    if (!rail) return;
-    const preview = rail.querySelector('.bob-rail-preview');
-    const text = (highlight.text || '').trim().replace(/\s+/g, ' ');
-    preview.textContent = '';
-    preview.appendChild(el('div', 'bob-preview-color', COLOR_LABEL[highlight.color] || highlight.color));
-    preview.appendChild(el('div', 'bob-preview-text', `“${text.slice(0, 160)}${text.length > 160 ? '…' : ''}”`));
-
-    const jump = el('button', 'bob-preview-jump', 'Jump to highlight');
-    jump.type = 'button';
-    jump.addEventListener('click', () => enterNavMode(highlights.indexOf(highlight)));
-    preview.appendChild(jump);
-
-    const markerRect = marker.getBoundingClientRect();
-    preview.style.top = `${markerRect.top + markerRect.height / 2}px`;
-    preview.classList.add('bob-preview-open');
-  }
-
-  function hidePreview() {
-    if (!rail) return;
-    rail.querySelector('.bob-rail-preview').classList.remove('bob-preview-open');
-  }
-
-  function enterNavMode(index) {
-    if (!highlights.length) return;
-    navMode = true;
-    navIndex = Math.max(0, Math.min(index, highlights.length - 1));
-    if (rail) rail.classList.add('bob-rail-active');
-    focusHighlight(navIndex);
-    showToast(`Highlight ${navIndex + 1} of ${highlights.length} · ↑ ↓ to move · Esc to exit`, 'info');
-  }
-
-  function exitNavMode() {
-    if (!navMode) return;
-    navMode = false;
-    navIndex = -1;
-    if (rail) rail.classList.remove('bob-rail-active');
-  }
-
-  function focusHighlight(index) {
-    const highlight = highlights[index];
-    if (!highlight || !highlight.nodes.length) return;
-    highlights.forEach((item) => item.nodes.forEach((node) => node.classList.remove('bob-hl-focus')));
-    highlight.nodes.forEach((node) => node.classList.add('bob-hl-focus'));
-    const first = highlight.nodes[0];
-    first.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    if (rail) rail.querySelector('.bob-rail-count').textContent = `${index + 1}/${highlights.length}`;
-  }
-
-  document.addEventListener(
-    'keydown',
-    (event) => {
-      if (!navMode) return;
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        exitNavMode();
-        if (rail) rail.querySelector('.bob-rail-count').textContent = String(highlights.length);
-        highlights.forEach((item) => item.nodes.forEach((node) => node.classList.remove('bob-hl-focus')));
-      } else if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
-        event.preventDefault();
-        navIndex = (navIndex + 1) % highlights.length;
-        focusHighlight(navIndex);
-      } else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
-        event.preventDefault();
-        navIndex = (navIndex - 1 + highlights.length) % highlights.length;
-        focusHighlight(navIndex);
+  async function refreshHighlights() {
+    const marks = Array.from(document.querySelectorAll('mark[data-bob-hl-id]'));
+    const byId = new Map();
+    marks.forEach((m) => {
+      const id = m.getAttribute('data-bob-hl-id');
+      const existing = byId.get(id);
+      if (existing) {
+        existing.nodes.push(m);
+        existing.text += m.textContent;
+      } else {
+        byId.set(id, {
+          id,
+          color: m.getAttribute('data-bob-color') || 'yellow',
+          text: m.textContent,
+          nodes: [m],
+          top: m.getBoundingClientRect().top + window.scrollY,
+        });
       }
-    },
-    true
-  );
-
-  // -------------------------------------------------------- page reading ---
-
-  function mainContentRoot() {
-    return document.querySelector('article') || document.querySelector('main') || document.querySelector('[role="main"]') || document.body;
-  }
-
-  function collectPageText(limit) {
-    const root = mainContentRoot();
-    const raw = root.innerText || root.textContent || '';
-    return raw.replace(/\n{3,}/g, '\n\n').trim().slice(0, limit || 8000);
+    });
+    highlights = Array.from(byId.values()).sort((a, b) => a.top - b.top);
+    renderTrafficPill();
   }
 
   // ------------------------------------------------------------- messages ---
@@ -855,61 +537,38 @@
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const type = message && message.type;
 
-    if (type === 'BOB_HIGHLIGHT_SELECTION') {
-      highlightCurrentSelection(message.color || 'yellow').then(sendResponse);
-      return true;
-    }
-    if (type === 'BOB_RENDER_HIGHLIGHTS') {
-      renderStoredHighlights(message.highlights || []).then(sendResponse);
-      return true;
-    }
     if (type === 'BOB_AUTO_HIGHLIGHT') {
       autoHighlight(message.focus || '').then(sendResponse);
       return true;
     }
-    if (type === 'BOB_EXTRACT_PAGE_TEXT') {
-      sendResponse({ ok: true, title: document.title, url: location.href, excerpt: collectPageText(8000) });
-      return false;
-    }
-    if (type === 'BOB_SAVE_SELECTION_AS_NOTE') {
-      const text = currentSelection.text || (window.getSelection() || '').toString().trim();
-      if (!text) {
-        sendResponse({ ok: false, reason: 'no-selection' });
-        return false;
-      }
-      send({ type: 'SAVE_NOTE', data: { text, pageTitle: document.title, url: location.href, origin: 'shortcut' } }).then((result) => {
-        if (result && result.ok) showToast('✓ Saved to Notes', 'ok');
-        sendResponse(result);
-      });
-      return true;
-    }
-    if (type === 'BOB_ASK_SELECTION') {
-      const text = currentSelection.text || (window.getSelection() || '').toString().trim();
-      if (!text) {
-        sendResponse({ ok: false, reason: 'no-selection' });
-        return false;
-      }
-      openChatCard(text);
-      sendResponse({ ok: true });
-      return false;
-    }
+
     if (type === 'BOB_CLEAR_PAGE_HIGHLIGHTS') {
-      highlights.forEach((highlight) => unwrapHighlight(highlight.id));
+      highlights.forEach((h) => unwrapHighlight(h.id));
       highlights = [];
-      renderRail();
+      renderTrafficPill();
       sendResponse({ ok: true });
       return false;
     }
-    if (type === 'BOB_FOCUS_HIGHLIGHT') {
-      const index = highlights.findIndex((h) => h.id === message.id);
-      if (index >= 0) enterNavMode(index);
-      sendResponse({ ok: index >= 0 });
+
+    if (type === 'BOB_EXTRACT_PAGE_TEXT') {
+      const root = document.querySelector('article') || document.querySelector('main') || document.body;
+      const text = (root.innerText || root.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+      sendResponse({ ok: true, title: document.title, url: location.href, excerpt: text.slice(0, 100000) });
       return false;
     }
+
     return false;
   });
 
   // -------------------------------------------------------------- wiring ---
+
+  // Keyboard shortcut Ctrl+Shift+H to auto-highlight
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'KeyH') {
+      e.preventDefault();
+      autoHighlight();
+    }
+  });
 
   document.addEventListener('mouseup', (event) => {
     if (isBobUi(event.target)) return;
@@ -920,37 +579,11 @@
     if (selectionCard && !selectionCard.contains(event.target)) hideSelectionCard();
   });
 
-  document.addEventListener('selectionchange', () => {
-    clearTimeout(handleSelectionChange._t);
-    handleSelectionChange._t = setTimeout(() => {
-      if (selectionCard && !selectionCard.classList.contains('bob-card-hidden')) {
-        const selection = window.getSelection();
-        if (!selection || !selection.toString().trim()) hideSelectionCard();
-      }
-    }, 200);
-  });
-
   window.addEventListener('scroll', () => {
-    if (!selectionCard || selectionCard.classList.contains('bob-card-hidden')) return;
-    hideSelectionCard();
+    if (selectionCard && !selectionCard.classList.contains('bob-card-hidden')) {
+      hideSelectionCard();
+    }
   }, { passive: true });
 
   window.addEventListener('resize', hideSelectionCard);
-
-  // Restore this page's highlights once the document has settled.
-  (async function restore() {
-    try {
-      const response = await send({ type: 'GET_HIGHLIGHTS', url: location.href });
-      const records = (response && response.highlights) || [];
-      if (records.length) await renderStoredHighlights(records);
-    } catch {
-      /* extension context invalidated (reload of the extension) — stay silent */
-    }
-  })();
-
-  window.addEventListener('pageshow', async (event) => {
-    if (!event.persisted) return;
-    const response = await send({ type: 'GET_HIGHLIGHTS', url: location.href });
-    await renderStoredHighlights((response && response.highlights) || []);
-  });
 })();

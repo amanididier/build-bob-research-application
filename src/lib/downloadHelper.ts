@@ -21,6 +21,35 @@ function triggerAnchor(href: string) {
   document.body.removeChild(link);
 }
 
+export async function getLatestInstallerDownloadUrl(version?: string): Promise<string> {
+  const repo = 'amanididier/build-bob-research-application';
+  try {
+    const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
+      headers: { Accept: 'application/vnd.github.v3+json' },
+      signal: AbortSignal.timeout(3000),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const assets: Array<{ name: string; browser_download_url: string }> = data.assets || [];
+      // Prefer exact versioned setup exe if available, otherwise canonical setup.exe
+      const versionedExe = assets.find((a) => a.name.startsWith('Bob-Research-Companion-Setup-') && a.name.endsWith('.exe'));
+      if (versionedExe) return versionedExe.browser_download_url;
+      const canonicalExe = assets.find((a) => a.name === 'Bob-Research-Companion-Setup.exe');
+      if (canonicalExe) return canonicalExe.browser_download_url;
+      const anyExe = assets.find((a) => a.name.endsWith('.exe'));
+      if (anyExe) return anyExe.browser_download_url;
+    }
+  } catch {
+    // network fallback
+  }
+
+  if (version) {
+    const cleanVer = version.replace(/^v/, '');
+    return `https://github.com/${repo}/releases/download/v${cleanVer}/Bob-Research-Companion-Setup-${cleanVer}.exe`;
+  }
+  return `https://github.com/${repo}/releases/latest/download/Bob-Research-Companion-Setup.exe`;
+}
+
 export async function downloadExtensionZip(): Promise<ExtensionDownloadResult> {
   const bridge = typeof window !== 'undefined' ? (window as any).bob : null;
 

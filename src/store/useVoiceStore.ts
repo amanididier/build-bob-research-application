@@ -1,18 +1,18 @@
 import { create } from 'zustand';
-import { VoiceState } from '../lib/voice/types';
-import { voiceController, VoiceMode } from '../lib/voice/voiceController';
+import { VoiceMode, VoiceState } from '../lib/voice/types';
+import { voiceController } from '../lib/voice/voiceController';
 
 interface VoiceStoreState {
   voiceState: VoiceState;
+  voiceMode: VoiceMode;
   currentTranscript: string;
+  lastUserSpeech: string;
+  lastBobReply: string;
   errorMessage: string | null;
-  mode: VoiceMode;
-  startVoiceMode: () => Promise<boolean>;
+  setVoiceMode: (mode: VoiceMode) => void;
+  startVoiceMode: (mode?: VoiceMode) => Promise<boolean>;
   stopVoiceMode: () => void;
   interrupt: () => void;
-  setMode: (mode: VoiceMode) => void;
-  feedAIChunk: (chunk: string) => void;
-  finalizeAIResponse: (fullText?: string) => void;
 }
 
 export const useVoiceStore = create<VoiceStoreState>((set) => {
@@ -20,19 +20,30 @@ export const useVoiceStore = create<VoiceStoreState>((set) => {
   voiceController.subscribe((state, data) => {
     set({
       voiceState: state,
+      voiceMode: data?.mode || voiceController.getMode(),
       currentTranscript: data?.transcript || '',
+      lastBobReply: data?.aiReply || '',
       errorMessage: data?.error || null,
     });
   });
 
   return {
     voiceState: 'IDLE',
+    voiceMode: 'prompt',
     currentTranscript: '',
+    lastUserSpeech: '',
+    lastBobReply: '',
     errorMessage: null,
-    mode: voiceController.getMode(),
 
-    startVoiceMode: async () => {
-      return voiceController.startVoiceMode();
+    setVoiceMode: (mode: VoiceMode) => {
+      voiceController.setMode(mode);
+      set({ voiceMode: mode });
+    },
+
+    startVoiceMode: async (mode?: VoiceMode) => {
+      const targetMode = mode || voiceController.getMode();
+      set({ voiceMode: targetMode });
+      return voiceController.startVoiceMode(targetMode);
     },
 
     stopVoiceMode: () => {
@@ -41,19 +52,6 @@ export const useVoiceStore = create<VoiceStoreState>((set) => {
 
     interrupt: () => {
       voiceController.interrupt();
-    },
-
-    setMode: (mode: VoiceMode) => {
-      voiceController.setMode(mode);
-      set({ mode });
-    },
-
-    feedAIChunk: (chunk: string) => {
-      voiceController.feedAIStreamChunk(chunk);
-    },
-
-    finalizeAIResponse: (fullText?: string) => {
-      voiceController.finalizeAIResponse(fullText);
     },
   };
 });

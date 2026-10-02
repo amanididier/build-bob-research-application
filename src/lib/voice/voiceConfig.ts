@@ -2,12 +2,14 @@ import { VoiceConfig } from './types';
 
 export const DEFAULT_VOICE_CONFIG: VoiceConfig = {
   enabled: true,
-  defaultVoice: 'Microsoft Jenny Online (Natural)',
-  speechStartThreshold: 18, // Audio energy threshold
-  speechEndSilenceDurationMs: 1200, // Natural pause allowance (1.2s of silence ends the turn)
-  minimumSpeechDurationMs: 300, // Ignore brief noises/clicks
-  maximumTurnDurationMs: 30000, // Max 30 seconds per continuous speech utterance
-  ttsRate: 1.02,
+  defaultVoice: 'Microsoft Christopher Online (Natural)',
+  speechStartThreshold: 14, // Sensitive audio energy threshold
+  speechEndSilenceDurationMs: 3000, // Default 3s
+  promptSilenceDurationMs: 10000, // 10s silence in dictation mode before auto-completing
+  callSilenceDurationMs: 3000, // 3s silence in conversational call mode before Bob answers
+  minimumSpeechDurationMs: 250, // Ignore tiny clicks
+  maximumTurnDurationMs: 60000, // 1 minute per speech chunk (as requested)
+  ttsRate: 1.0,
   ttsPitch: 1.0,
   ttsVolume: 1.0,
   maxQueueLength: 20,

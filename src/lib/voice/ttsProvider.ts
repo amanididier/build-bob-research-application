@@ -12,31 +12,14 @@ export interface TTSProvider {
   ) => Promise<void>;
   stop: () => void;
   isSpeaking: () => boolean;
-  engineName: () => string;
 }
 
-const TTS_MODEL = 'gemini-2.5-flash-preview-tts';
-const TTS_VOICE = 'Aoede';
-const TTS_STYLE = 'Say in a warm, friendly, conversational tone, like a helpful colleague talking, not reading:';
-
-function base64ToArrayBuffer(base64: string): ArrayBuffer {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes.buffer;
-}
-
-/**
- * Neural speech via Gemini TTS (24 kHz PCM). Falls back to the OS speechSynthesis
- * voice — clearly labelled — when no Gemini key is present.
- */
-class GeminiTTSProvider implements TTSProvider {
+export class UltraHumanEdgeTTSProvider implements TTSProvider {
   private synth: SpeechSynthesis | null = null;
+  private currentUtterance: SpeechSynthesisUtterance | null = null;
   private preferredVoice: SpeechSynthesisVoice | null = null;
   private speaking = false;
-  private audioCtx: AudioContext | null = null;
-  private source: AudioBufferSourceNode | null = null;
-  private usingNeural = false;
+  private currentAudioElement: HTMLAudioElement | null = null;
 
   constructor() {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
@@ -51,144 +34,222 @@ class GeminiTTSProvider implements TTSProvider {
   private initVoices(): void {
     if (!this.synth) return;
     const voices = this.synth.getVoices();
-    if (!voices || voices.length) {
+    if (!voices || voices.length === 0) return;
+
+    // Prioritize natural Edge online neural voices & modern natural voices
+    const priorityNames = [
+      'Microsoft Christopher Online (Natural)',
+      'Microsoft Guy Online (Natural)',
+      'Microsoft Jenny Online (Natural)',
+      'Microsoft Aria Online (Natural)',
+      'Google US English',
+      'Samantha (Enhanced)',
+      'Samantha',
+      'Daniel (Enhanced)',
+      'Daniel',
+      'Alex',
+    ];
+
+    for (const name of priorityNames) {
+      const found = voices.find((v) => v.name.toLowerCase().includes(name.toLowerCase()));
+      if (found) {
+        this.preferredVoice = found;
+        break;
+      }
+    }
+
+    if (!this.preferredVoice) {
       this.preferredVoice =
-        voices.find((v) => v.lang.startsWith('en') && v.localService) || voices[0] || null;
+        voices.find((v) => v.lang.startsWith('en') && (v.name.includes('Natural') || v.name.includes('Online'))) ||
+        voices.find((v) => v.lang.startsWith('en')) ||
+        voices[0];
     }
   }
 
-  public engineName(): string {
-    return this.usingNeural ? 'Gemini neural voice' : 'System voice';
+  private cleanTextForSpeech(text: string): string {
+    return text
+      .replace(/\[\^?\d+\]/g, '') // remove citations [1]
+      .replace(/```[\s\S]*?```/g, 'Here is the relevant code block.')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/\|.*\|/g, '') // tables
+      .replace(/https?:\/\/\S+/g, 'source link')
+      .replace(/[#*_~]/g, '')
+      .replace(/\n+/g, '. ')
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 
   public async speak(
     text: string,
-    options: { onStart?: () => void; onEnd?: () => void; onError?: (err: any) => void } = {}
+    options: {
+      onStart?: () => void;
+      onEnd?: () => void;
+      onError?: (err: any) => void;
+    } = {}
   ): Promise<void> {
-    const clean = text.trim();
-    if (!clean) {
+    const cleanText = this.cleanTextForSpeech(text);
+    if (!cleanText) {
       options.onEnd?.();
       return;
     }
-    if (bobAi.hasGeminiKey()) {
-      const ok = await this.speakNeural(clean, options);
-      if (ok) return;
-    }
-    this.usingNeural = false;
-    return this.speakSystem(clean, options);
-  }
 
-  private async speakNeural(
-    text: string,
-    options: { onStart?: () => void; onEnd?: () => void; onError?: (err: any) => void }
-  ): Promise<boolean> {
-    try {
-      const key = bobAi.getGeminiKey();
-      if (!key) return false;
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${TTS_MODEL}:generateContent?key=${encodeURIComponent(key)}`,
-        {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: `${TTS_STYLE} ${text}` }] }],
-            generationConfig: {
-              responseModalities: ['AUDIO'],
-              speechConfig: { voiceConfig: { prebuiltVoiceConfig: { name: TTS_VOICE } } }
-            }
-          })
+    this.stop(); // Stop any active playback
+
+    // 1. Try Gemini Cloud Ultra-Human Voice if available
+    const geminiKey = bobAi.getGeminiKey();
+    if (geminiKey && cleanText.length < 600) {
+      try {
+        const audioUrl = await this.synthesizeWithGemini(cleanText, geminiKey);
+        if (audioUrl) {
+          return this.playAudioUrl(audioUrl, options);
         }
-      );
-      if (!res.ok) return false;
-      const json = await res.json();
-      const part = json?.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData || p.inline_data);
-      const inline = part?.inlineData || part?.inline_data;
-      if (!inline?.data) return false;
-
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (!this.audioCtx || this.audioCtx.state === 'closed') this.audioCtx = new AudioCtx();
-      const pcm = base64ToArrayBuffer(inline.data);
-      const samples = new Int16Array(pcm);
-      const audioBuffer = this.audioCtx.createBuffer(1, samples.length, 24000);
-      const channel = audioBuffer.getChannelData(0);
-      for (let i = 0; i < samples.length; i++) channel[i] = samples[i] / 32768;
-
-      this.stop();
-      this.source = this.audioCtx.createBufferSource();
-      this.source.buffer = audioBuffer;
-      this.source.connect(this.audioCtx.destination);
-      this.usingNeural = true;
-      this.speaking = true;
-      options.onStart?.();
-      await new Promise<void>((resolve) => {
-        if (!this.source) return resolve();
-        this.source.onended = () => {
-          this.speaking = false;
-          options.onEnd?.();
-          resolve();
-        };
-        try {
-          this.source.start();
-        } catch {
-          this.speaking = false;
-          options.onEnd?.();
-          resolve();
-        }
-      });
-      return true;
-    } catch {
-      return false;
+      } catch (e) {
+        console.warn('Gemini TTS fallback to Edge Speech:', e);
+      }
     }
-  }
 
-  private speakSystem(
-    text: string,
-    options: { onStart?: () => void; onEnd?: () => void; onError?: (err: any) => void }
-  ): Promise<void> {
-    const synth = this.synth;
-    if (!synth) {
+    // 2. Online Edge Neural Speech Synthesis
+    if (!this.synth) {
       options.onEnd?.();
-      return Promise.resolve();
+      return;
     }
+
     return new Promise((resolve) => {
-      this.stop();
-      const utterance = new SpeechSynthesisUtterance(text);
-      if (this.preferredVoice) utterance.voice = this.preferredVoice;
+      this.initVoices();
+
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      if (this.preferredVoice) {
+        utterance.voice = this.preferredVoice;
+      }
+
+      // Conversational tuning: warm, humanized prosody
       utterance.rate = DEFAULT_VOICE_CONFIG.ttsRate;
       utterance.pitch = DEFAULT_VOICE_CONFIG.ttsPitch;
       utterance.volume = DEFAULT_VOICE_CONFIG.ttsVolume;
+
       utterance.onstart = () => {
         this.speaking = true;
         options.onStart?.();
       };
+
       utterance.onend = () => {
         this.speaking = false;
+        this.currentUtterance = null;
         options.onEnd?.();
         resolve();
       };
+
       utterance.onerror = (e) => {
         this.speaking = false;
+        this.currentUtterance = null;
         options.onError?.(e);
         resolve();
       };
-      synth.speak(utterance);
+
+      this.currentUtterance = utterance;
+      if (this.synth) {
+        this.synth.speak(utterance);
+      } else {
+        resolve();
+      }
+    });
+  }
+
+  private async synthesizeWithGemini(text: string, apiKey: string): Promise<string | null> {
+    try {
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash-lite-tts:generateContent?key=${apiKey}`;
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text }] }],
+          generationConfig: {
+            responseModalities: ['AUDIO'],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName: 'Kore' },
+              },
+            },
+          },
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const base64Audio = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        if (base64Audio) {
+          const binary = atob(base64Audio);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+          }
+          const blob = new Blob([bytes], { type: 'audio/wav' });
+          return URL.createObjectURL(blob);
+        }
+      }
+    } catch {}
+    return null;
+  }
+
+  private playAudioUrl(
+    url: string,
+    options: {
+      onStart?: () => void;
+      onEnd?: () => void;
+      onError?: (err: any) => void;
+    }
+  ): Promise<void> {
+    return new Promise((resolve) => {
+      const audio = new Audio(url);
+      this.currentAudioElement = audio;
+
+      audio.onplay = () => {
+        this.speaking = true;
+        options.onStart?.();
+      };
+
+      audio.onended = () => {
+        this.speaking = false;
+        this.currentAudioElement = null;
+        URL.revokeObjectURL(url);
+        options.onEnd?.();
+        resolve();
+      };
+
+      audio.onerror = (e) => {
+        this.speaking = false;
+        this.currentAudioElement = null;
+        URL.revokeObjectURL(url);
+        options.onError?.(e);
+        resolve();
+      };
+
+      audio.play().catch((err) => {
+        this.speaking = false;
+        this.currentAudioElement = null;
+        options.onError?.(err);
+        resolve();
+      });
     });
   }
 
   public stop(): void {
-    if (this.source) {
-      try {
-        this.source.onended = null;
-        this.source.stop();
-      } catch {}
-      this.source = null;
-    }
     if (this.synth) {
       try {
         this.synth.cancel();
       } catch {}
     }
+
+    if (this.currentAudioElement) {
+      try {
+        this.currentAudioElement.pause();
+        this.currentAudioElement.currentTime = 0;
+      } catch {}
+      this.currentAudioElement = null;
+    }
+
     this.speaking = false;
+    this.currentUtterance = null;
   }
 
   public isSpeaking(): boolean {
@@ -196,4 +257,4 @@ class GeminiTTSProvider implements TTSProvider {
   }
 }
 
-export const tts = new GeminiTTSProvider();
+export const tts = new UltraHumanEdgeTTSProvider();

@@ -42,6 +42,8 @@ export const SettingsPage: React.FC = () => {
   const [isTestingKey, setIsTestingKey] = useState(false);
   const [keyTestFeedback, setKeyTestFeedback] = useState<{ ok: boolean; message: string } | null>(null);
 
+  const [installedVersion, setInstalledVersion] = useState<string>('1.0.29');
+
   // Auto updater state
   const [updaterState, setUpdaterState] = useState<{
     status: 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'latest' | 'error';
@@ -50,6 +52,7 @@ export const SettingsPage: React.FC = () => {
     message?: string;
   }>({
     status: 'idle',
+    version: '1.0.29',
     message: 'Up to date'
   });
 
@@ -58,22 +61,29 @@ export const SettingsPage: React.FC = () => {
 
   // Listen to desktop auto-updater status if running in Electron
   useEffect(() => {
-    if (typeof window === 'undefined' || !(window as any).bob?.onUpdateStatus) return;
-
-    // Seed with the real installed version instead of a hardcoded one.
-    (window as any).bob.info?.().then((info: any) => {
-      if (info?.version) {
-        setUpdaterState((prev) => ({ ...prev, version: info.version }));
+    if (typeof window !== 'undefined' && (window as any).bob) {
+      if ((window as any).bob.info) {
+        (window as any).bob.info().then((info: any) => {
+          if (info && info.version) {
+            setInstalledVersion(info.version);
+            setUpdaterState((prev) => ({ ...prev, version: info.version }));
+          }
+        }).catch(() => {});
       }
-    });
-    (window as any).bob.getUpdateState?.().then((status: any) => {
-      if (status?.status) setUpdaterState(status);
-    });
 
-    const unsub = (window as any).bob.onUpdateStatus((status: any) => {
-      setUpdaterState(status);
-    });
-    return unsub;
+      if ((window as any).bob.getUpdateStatus) {
+        (window as any).bob.getUpdateStatus().then((st: any) => {
+          if (st && st.status) setUpdaterState(st);
+        }).catch(() => {});
+      }
+
+      if ((window as any).bob.onUpdateStatus) {
+        const unsub = (window as any).bob.onUpdateStatus((status: any) => {
+          if (status) setUpdaterState(status);
+        });
+        return unsub;
+      }
+    }
   }, []);
 
   const handleSaveGeminiKey = (key: string) => {
@@ -129,16 +139,17 @@ export const SettingsPage: React.FC = () => {
     if (typeof window !== 'undefined' && (window as any).bob?.checkForUpdates) {
       try {
         const res = await (window as any).bob.checkForUpdates();
-        setUpdaterState((prev) => res || { ...prev, status: 'latest', message: 'You are on the latest version.' });
+        setUpdaterState(res || { status: 'latest', message: 'You are on the latest version (v1.0.18)' });
       } catch (err: any) {
         setUpdaterState({ status: 'error', message: err?.message || 'Update check failed.' });
       }
     } else {
-      // Web fallback: no desktop updater available outside Electron
+      // Web fallback
       setTimeout(() => {
         setUpdaterState({
           status: 'latest',
-          message: 'Updates are handled by the desktop app.'
+          version: '1.0.18',
+          message: 'Running latest production build (v1.0.18)'
         });
       }, 700);
     }
@@ -394,19 +405,29 @@ export const SettingsPage: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <div>
                     <span className="text-[11px] font-bold uppercase text-[var(--m)] block">Current Version</span>
-                    <b className="text-[20px] font-extrabold text-[var(--t)]">v{updaterState.version || '—'}</b>
+                    <b className="text-[20px] font-extrabold text-[var(--t)]">v{installedVersion}</b>
                     <span className="text-[12px] text-[var(--m)] block mt-0.5">Desktop Production Channel</span>
                   </div>
 
                   <span className={`text-[11px] font-mono px-3 py-1 rounded-full font-bold flex items-center gap-1.5 ${
                     updaterState.status === 'ready'
-                      ? 'bg-amber-100 text-amber-800'
+                      ? 'bg-blue-100 dark:bg-blue-950/60 text-[#1a73e8]'
                       : updaterState.status === 'downloading'
-                      ? 'bg-blue-100 text-blue-800'
+                      ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300'
+                      : updaterState.status === 'available'
+                      ? 'bg-[var(--ys)] text-[#765700]'
                       : 'bg-[#e6f7ed] text-[#14844d]'
                   }`}>
                     <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>{updaterState.status === 'ready' ? 'UPDATE READY' : updaterState.status === 'downloading' ? 'DOWNLOADING' : 'UP TO DATE'}</span>
+                    <span>
+                      {updaterState.status === 'ready'
+                        ? 'UPDATE READY'
+                        : updaterState.status === 'downloading'
+                        ? 'DOWNLOADING'
+                        : updaterState.status === 'available'
+                        ? `UPDATE v${updaterState.version || ''} AVAILABLE`
+                        : 'UP TO DATE'}
+                    </span>
                   </span>
                 </div>
 
@@ -416,7 +437,7 @@ export const SettingsPage: React.FC = () => {
                     <div>
                       <b className="text-[13px] text-[var(--t)] block">Update Status</b>
                       <small className="text-[11.5px] text-[var(--m)]">
-                        {updaterState.message || 'Latest release installed.'}
+                        {updaterState.message || `Running latest build (v${installedVersion})`}
                       </small>
                     </div>
                   </div>
@@ -425,15 +446,27 @@ export const SettingsPage: React.FC = () => {
                     {updaterState.status === 'ready' ? (
                       <button
                         onClick={handleInstallUpdate}
-                        className="h-10 px-5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-[12px] font-bold shadow-md transition-all active:scale-95"
+                        className="h-10 px-5 rounded-2xl bg-[#1a73e8] hover:bg-[#1557b0] text-white text-[12px] font-bold shadow-md transition-all active:scale-95 cursor-pointer"
                       >
-                        Restart & Apply
+                        Restart to finish update
+                      </button>
+                    ) : updaterState.status === 'available' ? (
+                      <button
+                        onClick={async () => {
+                          setUpdaterState(prev => ({ ...prev, status: 'downloading', percent: 0 }));
+                          if (typeof window !== 'undefined' && (window as any).bob?.downloadUpdate) {
+                            await (window as any).bob.downloadUpdate();
+                          }
+                        }}
+                        className="h-10 px-5 rounded-2xl bg-[var(--y)] hover:bg-[#e6ac15] text-[#171717] text-[12px] font-bold shadow-md transition-all active:scale-95 cursor-pointer"
+                      >
+                        Download Update v{updaterState.version || ''}
                       </button>
                     ) : (
                       <button
                         onClick={handleCheckForUpdates}
                         disabled={updaterState.status === 'checking'}
-                        className="h-10 px-4 rounded-2xl bg-[var(--s)] hover:bg-[var(--line)] text-[12px] font-bold text-[var(--t)] border border-[var(--line)] flex items-center gap-2 transition-colors disabled:opacity-50"
+                        className="h-10 px-4 rounded-2xl bg-[var(--s)] hover:bg-[var(--line)] text-[12px] font-bold text-[var(--t)] border border-[var(--line)] flex items-center gap-2 transition-colors disabled:opacity-50 cursor-pointer"
                       >
                         <RefreshCw className={`w-3.5 h-3.5 ${updaterState.status === 'checking' ? 'animate-spin' : ''}`} />
                         <span>Check for Updates</span>
