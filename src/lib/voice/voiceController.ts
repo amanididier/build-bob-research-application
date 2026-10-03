@@ -1,11 +1,9 @@
-import { VoiceState, VoiceStateListener } from './types';
+import { VoiceState, VoiceStateListener, VoiceMode } from './types';
 import { micManager } from './microphoneManager';
 import { vad } from './vad';
 import { stt } from './sttProvider';
 import { audioQueue } from './audioQueue';
 import { ResponseTextChunker } from './textChunker';
-
-export type VoiceMode = 'prompt' | 'call';
 
 const SILENCE_MS: Record<VoiceMode, number> = {
   // Prompt mode: the draft settles into the composer after a long pause; the user sends it.
@@ -93,12 +91,14 @@ export class VoiceController {
         onSpeechStart: () => this.handleSpeechStart(),
         onSpeechEnd: () => this.handleSpeechEnd(),
         onEnergyChange: (energy) => this.energyListeners.forEach((fn) => fn(energy))
-      },
-      { silenceMs: SILENCE_MS[this.mode] }
+      }
     );
   }
 
-  public async startVoiceMode(): Promise<boolean> {
+  public async startVoiceMode(targetMode?: VoiceMode): Promise<boolean> {
+    if (targetMode) {
+      this.mode = targetMode;
+    }
     if (this.isVoiceModeActive) return true;
 
     try {
@@ -129,8 +129,7 @@ export class VoiceController {
         },
         (errMsg) => {
           this.setState('ERROR', errMsg);
-        },
-        stream
+        }
       );
 
       return true;
@@ -172,7 +171,9 @@ export class VoiceController {
     if (!this.isVoiceModeActive) return;
     // Transcribe everything said in this turn now, instead of waiting for the
     // next 60-second chunk boundary.
-    void stt.flush();
+    if (typeof (stt as any).flush === 'function') {
+      void (stt as any).flush();
+    }
   }
 
   private async handleFinalTranscript(transcript: string): Promise<void> {

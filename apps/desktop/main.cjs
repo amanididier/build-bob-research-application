@@ -68,6 +68,9 @@ function loadStore() {
       const data = JSON.parse(fs.readFileSync(storePath, 'utf8'))
       store = { ...store, ...data }
     }
+    if (!store.geminiKey && (process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY)) {
+      store.geminiKey = (process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '').trim()
+    }
   } catch (err) {
     log('Load store failed:', err.message)
   }
@@ -168,8 +171,31 @@ function startBridge() {
         ok: true,
         connected: true,
         timestamp: Date.now(),
-        version: app.getVersion()
+        version: app.getVersion(),
+        geminiKey: store.geminiKey || process.env.GEMINI_API_KEY || '',
+        updateState,
+        updateStatus: updateState.status,
+        updateVersion: updateState.version || null,
+        readyToRestart: updateState.status === 'ready',
+        isDownloading: updateState.status === 'downloading',
+        isAvailable: updateState.status === 'available',
+        updatePercent: updateState.percent || 0
       })
+    }
+
+    // Extension auto-sync folder
+    if (pathname === '/events/extension-folder') {
+      const extDir = path.join(app.getPath('userData'), 'chrome-extension')
+      if (req.method === 'POST') {
+        try {
+          if (!fs.existsSync(extDir)) syncExtensionFilesToUserData()
+          shell.openPath(extDir)
+          return send(200, { ok: true, opened: true, path: extDir })
+        } catch (e) {
+          return send(500, { ok: false, error: e.message })
+        }
+      }
+      return send(200, { ok: true, path: extDir })
     }
 
     // Extension Handshake
@@ -186,7 +212,27 @@ function startBridge() {
         token: pairingToken || TOKEN,
         extensionConnected: true,
         lastExtensionContact: store.lastExtensionContact,
+        updateStatus: updateState.status,
+        updateVersion: updateState.version || null,
+        readyToRestart: updateState.status === 'ready',
+        isDownloading: updateState.status === 'downloading',
+        isAvailable: updateState.status === 'available',
+        updatePercent: updateState.percent || 0,
         at: Date.now()
+      })
+    }
+
+    // Update status for extension & web app
+    if (req.method === 'GET' && pathname === '/events/update-status') {
+      return send(200, {
+        ok: true,
+        desktopVersion: app.getVersion(),
+        extensionVersion: '1.2.5',
+        updateState,
+        readyToRestart: updateState.status === 'ready',
+        isDownloading: updateState.status === 'downloading',
+        isAvailable: updateState.status === 'available',
+        percent: updateState.percent || 0
       })
     }
 
@@ -319,6 +365,22 @@ function startBridge() {
         saveStore()
       }
       return send(200, { ok: true, key: store.geminiKey || process.env.GEMINI_API_KEY || '' })
+    }
+
+    if (pathname === '/events/desktop-update') {
+      if (body && body.action === 'install') {
+        if (autoUpdater) {
+          setTimeout(() => autoUpdater.quitAndInstall(false, true), 300)
+          return send(200, { ok: true, restarting: true })
+        }
+      }
+      if (body && body.action === 'download') {
+        if (autoUpdater && app.isPackaged) {
+          autoUpdater.downloadUpdate().catch(() => {})
+          return send(200, { ok: true, downloading: true })
+        }
+      }
+      return send(200, { ok: true, updateState })
     }
 
     if (pathname === '/events/chat') {
@@ -478,6 +540,11 @@ function setupAutoUpdater() {
   })
 
   autoUpdater.on('update-downloaded', (info) => {
+    try {
+      syncExtensionFilesToUserData()
+    } catch (e) {
+      log('Extension auto-sync on update failed:', e.message)
+    }
     sendStatus({
       status: 'ready',
       version: info.version,
@@ -748,6 +815,22 @@ function registerIpc() {
     }
   })
 
+  ipcMain.handle('bob:openExtensionFolder', () => {
+    const extDir = path.join(app.getPath('userData'), 'chrome-extension')
+    try {
+      if (!fs.existsSync(extDir)) syncExtensionFilesToUserData()
+      shell.openPath(extDir)
+      return { ok: true, path: extDir }
+    } catch (e) {
+      log('openExtensionFolder failed:', e.message)
+      return { ok: false, error: e.message }
+    }
+  })
+
+  ipcMain.handle('bob:getExtensionPath', () => {
+    return path.join(app.getPath('userData'), 'chrome-extension')
+  })
+
   // Window Controls
   ipcMain.handle('bob:minimize', () => {
     if (win) win.minimize()
@@ -863,11 +946,68 @@ if (!app.requestSingleInstanceLock()) {
     }
   })
 
+function syncExtensionFilesToUserData() {
+  try {
+    const targetDir = path.join(app.getPath('userData'), 'chrome-extension')
+    const candidates = [
+      path.join(__dirname, '../../chrome-extension'),
+      path.join(app.getAppPath(), 'chrome-extension'),
+      path.join(__dirname, '../../public/chrome-extension'),
+      path.join(app.getAppPath(), 'public', 'chrome-extension'),
+      path.join(__dirname, 'chrome-extension')
+    ]
+    const sourceDir = candidates.find((dir) => {
+      try {
+        return fs.existsSync(dir) && fs.existsSync(path.join(dir, 'manifest.json'))
+      } catch {
+        return false
+      }
+    })
+    if (!sourceDir) {
+      log('No source chrome-extension directory found to sync')
+      return false
+    }
+
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true })
+    }
+
+    function copyDirRecursive(src, dest) {
+      if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true })
+      const entries = fs.readdirSync(src, { withFileTypes: true })
+      for (const entry of entries) {
+        const srcPath = path.join(src, entry.name)
+        const destPath = path.join(dest, entry.name)
+        if (entry.isDirectory()) {
+          copyDirRecursive(srcPath, destPath)
+        } else {
+          try {
+            const srcBuf = fs.readFileSync(srcPath)
+            if (!fs.existsSync(destPath) || !fs.readFileSync(destPath).equals(srcBuf)) {
+              fs.writeFileSync(destPath, srcBuf)
+            }
+          } catch (e) {
+            fs.copyFileSync(srcPath, destPath)
+          }
+        }
+      }
+    }
+
+    copyDirRecursive(sourceDir, targetDir)
+    log('Synced extension files to userData:', targetDir)
+    return true
+  } catch (err) {
+    log('syncExtensionFilesToUserData error:', err.message)
+    return false
+  }
+}
+
   app.whenReady().then(() => {
     loadStore()
     loadPairingToken()
     registerIpc()
     startBridge()
+    syncExtensionFilesToUserData()
     createWindow()
     setupAutoUpdater()
 

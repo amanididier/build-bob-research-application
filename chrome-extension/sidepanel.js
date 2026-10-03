@@ -66,8 +66,41 @@
 
   // ------------------------------------------------------------- Bridge Status
 
+  function renderUpdatePill(data) {
+    const pill = $('ext-update-pill');
+    const btn = $('btn-reload-extension');
+    if (!pill || !btn) return;
+
+    if (!data || !data.connected) {
+      pill.style.display = 'none';
+      return;
+    }
+
+    state.lastUpdateState = data;
+
+    if (data.readyToRestart) {
+      pill.style.display = 'flex';
+      btn.className = 'update-pill-btn blue';
+      btn.innerHTML = '<span>Restart to finish</span><span class="arr">→</span>';
+      btn.title = 'Desktop update ready! Click to reload extension & restart desktop.';
+    } else if (data.isDownloading) {
+      pill.style.display = 'flex';
+      btn.className = 'update-pill-btn yellow';
+      btn.innerHTML = `<span>Updating… ${data.updatePercent || 0}%</span>`;
+      btn.title = `Downloading update: ${data.updatePercent || 0}%`;
+    } else if (data.isAvailable) {
+      pill.style.display = 'flex';
+      btn.className = 'update-pill-btn yellow';
+      btn.innerHTML = '<span>Update Available</span><span class="arr">→</span>';
+      btn.title = 'New version available. Click to download.';
+    } else {
+      pill.style.display = 'none';
+    }
+  }
+
   async function checkBridgeStatus() {
     let isConn = false;
+    let bridgeData = null;
     // 1. Direct active heartbeat ping to local bridge
     try {
       const direct = await fetch('http://127.0.0.1:54321/events/extension-ping', {
@@ -79,7 +112,10 @@
       });
       if (direct.ok) {
         const data = await direct.json();
-        if (data.ok && data.connected) isConn = true;
+        if (data.ok && data.connected) {
+          isConn = true;
+          bridgeData = data;
+        }
       }
     } catch {}
 
@@ -90,11 +126,13 @@
         if (res && res.ok) {
           const obj = res.status || res;
           if (obj.connected !== undefined) isConn = Boolean(obj.connected);
+          bridgeData = obj;
         }
       } catch {}
     }
 
     state.bridge.connected = isConn;
+    renderUpdatePill(bridgeData);
     const dot = $('desktop-status-dot');
     if (dot) {
       if (isConn) {
@@ -429,11 +467,19 @@
 
       if (res && res.ok && res.reply) {
         replyText = res.reply;
+      } else if (res && res.reason === 'no-key') {
+        replyText = '✦ No Gemini API key found. Please save your Gemini API key in Bob Desktop Settings (or click the desktop icon in the top header) to enable live answers.';
+      } else if (res && res.reason === 'bad-key') {
+        replyText = '✦ Invalid or rejected Gemini API key. Please check your Gemini API key in Bob Desktop Settings.';
+      } else if (res && res.reason === 'rate-limited') {
+        replyText = '✦ Gemini API rate limit reached. Please wait a few seconds and try again.';
+      } else if (res && res.detail) {
+        replyText = `✦ Gemini request failed: ${res.detail}. Please check your Gemini key in Bob Desktop Settings.`;
       } else {
-        replyText = `Bob synthesized insights across your open research tabs: Key findings suggest coordination, verified data pipelines, and contextual synthesis are essential for executing this goal.`;
+        replyText = (res && res.reply) || `Bob could not generate a response. Please check your Gemini API key in Bob Desktop Settings.`;
       }
-    } catch {
-      replyText = `Bob synthesized findings across your active tabs for: "${text}". Sources agree on prioritizing actionable next steps.`;
+    } catch (err) {
+      replyText = `Bob encountered a connection error. Please ensure Bob Desktop is running.`;
     } finally {
       state.busy = false;
       if (typingBubble && typingBubble.parentElement) {
@@ -861,6 +907,46 @@
 
   function wireEvents() {
     // Header actions
+    const btnReload = $('btn-reload-extension');
+    if (btnReload) {
+      btnReload.addEventListener('click', async () => {
+        const update = state.lastUpdateState;
+        if (update && update.isAvailable) {
+          toast('Starting desktop update download…');
+          fetch('http://127.0.0.1:54321/events/desktop-update', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'x-bob-token': 'development-token' },
+            body: JSON.stringify({ action: 'download' })
+          }).catch(() => {});
+          setTimeout(checkBridgeStatus, 600);
+          return;
+        }
+
+        if (update && update.readyToRestart) {
+          toast('Restarting Bob Desktop & reloading extension…');
+          fetch('http://127.0.0.1:54321/events/desktop-update', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'x-bob-token': 'development-token' },
+            body: JSON.stringify({ action: 'install' })
+          }).catch(() => {});
+        } else {
+          toast('Reloading Bob Extension…');
+        }
+
+        setTimeout(() => {
+          try {
+            if (typeof chrome !== 'undefined' && chrome.runtime && typeof chrome.runtime.reload === 'function') {
+              chrome.runtime.reload();
+            } else {
+              window.location.reload();
+            }
+          } catch {
+            window.location.reload();
+          }
+        }, 400);
+      });
+    }
+
     const btnDesk = $('btn-open-desktop');
     if (btnDesk) btnDesk.addEventListener('click', openDesktop);
 
@@ -1087,6 +1173,7 @@
           return;
         }
 
+        let baseText = '';
         try {
           recognition = new SpeechRec();
           recognition.continuous = true;
@@ -1096,17 +1183,26 @@
           recognition.onstart = () => {
             isListening = true;
             btnVoice.classList.add('listening');
+            const input = $('prompt');
+            baseText = input ? input.value.trim() : '';
             toast('🎤 Listening… speak now');
           };
 
           recognition.onresult = (event) => {
-            let transcript = '';
-            for (let i = event.resultIndex; i < event.results.length; ++i) {
-              transcript += event.results[i][0].transcript;
+            let finalTranscript = '';
+            let interimTranscript = '';
+            for (let i = 0; i < event.results.length; ++i) {
+              const res = event.results[i];
+              if (res.isFinal) {
+                finalTranscript += res[0].transcript + ' ';
+              } else {
+                interimTranscript += res[0].transcript;
+              }
             }
             const input = $('prompt');
-            if (input && transcript) {
-              input.value = (input.value ? input.value + ' ' : '') + transcript.trim();
+            if (input) {
+              const combined = (baseText ? baseText + ' ' : '') + finalTranscript + interimTranscript;
+              input.value = combined.trimStart();
               syncComposerSize();
             }
           };
@@ -1160,8 +1256,25 @@
       if (isCtrl && (e.key === 'b' || e.key === 'B')) {
         chordPending = true;
         clearTimeout(chordTimer);
-        chordTimer = setTimeout(() => { chordPending = false; }, 1500);
+        chordTimer = setTimeout(() => { chordPending = false; }, 2000);
         return;
+      }
+
+      if (isCtrl && chordPending) {
+        if (e.key === 'a' || e.key === 'A') {
+          e.preventDefault();
+          chordPending = false;
+          clearTimeout(chordTimer);
+          openInlineModal();
+          return;
+        }
+        if (e.key === 'h' || e.key === 'H') {
+          e.preventDefault();
+          chordPending = false;
+          clearTimeout(chordTimer);
+          triggerHighlightOnActiveTab();
+          return;
+        }
       }
 
       if (chordPending && e.key !== 'Control' && e.key !== 'Meta') {
@@ -1194,6 +1307,10 @@
     // Check desktop bridge immediately and set heartbeat
     await checkBridgeStatus();
     setInterval(checkBridgeStatus, 2500);
+    window.addEventListener('focus', checkBridgeStatus);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) checkBridgeStatus();
+    });
 
     // Load initial context
     loadTabs().catch(() => {});

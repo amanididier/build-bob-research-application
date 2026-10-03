@@ -623,8 +623,29 @@ export const SettingsPage: React.FC = () => {
 
                 <div className="p-5 flex items-center justify-between">
                   <div>
-                    <b className="text-[13px] text-[var(--t)] block">Chrome Extension Setup</b>
-                    <small className="text-[11px] text-[var(--m)]">Download or test the unpacked extension.</small>
+                    <b className="text-[13px] text-[var(--t)] block">Auto-Sync Extension Folder</b>
+                    <small className="text-[11px] text-[var(--m)]">
+                      Load unpacked once from this folder in Chrome. Bob auto-updates these files whenever desktop updates arrive.
+                    </small>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      if (typeof window !== 'undefined' && (window as any).bob?.openExtensionFolder) {
+                        await (window as any).bob.openExtensionFolder();
+                      } else {
+                        await fetch('http://127.0.0.1:54321/events/extension-folder', { method: 'POST' }).catch(() => {});
+                      }
+                    }}
+                    className="h-9 px-4 rounded-2xl bg-[var(--y)] hover:opacity-95 text-[#17181c] text-[12px] font-bold transition-all shadow-xs shrink-0 cursor-pointer"
+                  >
+                    Open Auto-Sync Folder
+                  </button>
+                </div>
+
+                <div className="p-5 flex items-center justify-between">
+                  <div>
+                    <b className="text-[13px] text-[var(--t)] block">Chrome Extension Setup & Zip</b>
+                    <small className="text-[11px] text-[var(--m)]">Download zip or configure connection.</small>
                   </div>
                   <button
                     onClick={openChromeBridge}

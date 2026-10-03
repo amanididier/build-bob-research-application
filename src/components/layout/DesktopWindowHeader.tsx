@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BobLogo } from '../BobLogo';
-import { RotateCw } from 'lucide-react';
+import { RotateCw, MoreVertical } from 'lucide-react';
 
 interface UpdateState {
   status: 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'latest' | 'error';
@@ -62,6 +62,7 @@ export const DesktopWindowHeader: React.FC = () => {
 
   const handleRestartToUpdate = () => {
     if (typeof window !== 'undefined' && (window as any).bob?.installUpdate) {
+      setUpdateInfo((prev) => ({ ...prev, message: 'Restarting Bob to finish update…' }));
       (window as any).bob.installUpdate();
     }
   };
@@ -70,6 +71,14 @@ export const DesktopWindowHeader: React.FC = () => {
     if (typeof window !== 'undefined' && (window as any).bob?.downloadUpdate) {
       setUpdateInfo((prev) => ({ ...prev, status: 'downloading', percent: 0 }));
       await (window as any).bob.downloadUpdate();
+    }
+  };
+
+  const handleCheckAgain = async () => {
+    if (typeof window !== 'undefined' && (window as any).bob?.checkUpdates) {
+      setUpdateInfo((prev) => ({ ...prev, status: 'checking', message: 'Checking for updates...' }));
+      const res = await (window as any).bob.checkUpdates();
+      if (res && res.status) setUpdateInfo(res);
     }
   };
 
@@ -103,18 +112,18 @@ export const DesktopWindowHeader: React.FC = () => {
       <div className="flex items-center h-full" style={{ WebkitAppRegion: 'no-drag' } as any}>
         {/* Real Update Pill (NO mock - only rendered when electron-updater emits real update events) */}
         {hasRealUpdate && (
-          <div className="mr-3 animate-in fade-in zoom-in-95 duration-200">
+          <div className="mr-3 flex items-center gap-1.5 animate-in fade-in zoom-in-95 duration-200">
             {/* 1. Downloading state: Yellow download circle with progress */}
             {updateInfo.status === 'downloading' && (
               <div
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 text-amber-800 dark:text-amber-200 text-[11px] font-semibold"
+                className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#fffc00] text-[#171717] text-[11.5px] font-bold shadow-xs select-none"
                 title={`Downloading update: ${updateInfo.percent || 0}%`}
               >
                 {/* Yellow Download Circle */}
                 <div className="relative w-3.5 h-3.5 flex items-center justify-center">
                   <svg className="w-3.5 h-3.5 -rotate-90" viewBox="0 0 36 36">
                     <circle
-                      className="text-amber-200 dark:text-amber-900"
+                      className="text-neutral-400/40"
                       strokeWidth="4"
                       stroke="currentColor"
                       fill="none"
@@ -123,7 +132,7 @@ export const DesktopWindowHeader: React.FC = () => {
                       cy="18"
                     />
                     <circle
-                      className="text-amber-500"
+                      className="text-[#171717]"
                       strokeWidth="4"
                       strokeDasharray={88}
                       strokeDashoffset={88 - (88 * (updateInfo.percent || 0)) / 100}
@@ -140,28 +149,38 @@ export const DesktopWindowHeader: React.FC = () => {
               </div>
             )}
 
-            {/* 2. Update Ready state: Blue pill with Restart button */}
+            {/* 2. Update Ready state: Blue pill with Restart button matching user screenshot */}
             {updateInfo.status === 'ready' && (
               <button
                 onClick={handleRestartToUpdate}
-                className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#1a73e8] hover:bg-[#1557b0] text-white text-[11px] font-bold shadow-sm transition-all active:scale-95 cursor-pointer"
+                className="flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-[#0080f5] hover:bg-[#006dd4] text-white text-[12px] font-semibold tracking-tight shadow-sm transition-all active:scale-95 cursor-pointer"
                 title="Update downloaded! Click to restart Bob and apply update."
               >
-                <RotateCw className="w-3 h-3" />
-                <span>Restart to finish update</span>
+                <span>Restart to finish</span>
+                <span className="text-[12px] leading-none">→</span>
               </button>
             )}
 
-            {/* 3. Update Available state: Bob yellow pill labeled "Update to vX.X.X". Clicking starts download */}
+            {/* 3. Update Available state: Bob yellow pill labeled "Update Available →" */}
             {updateInfo.status === 'available' && (
               <button
                 onClick={handleStartDownload}
-                className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--y)] hover:bg-[#e6ac15] text-[#1a1715] text-[11px] font-bold shadow-xs transition-all active:scale-95 cursor-pointer"
+                className="flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-[#fffc00] hover:bg-[#ebd200] text-[#171717] text-[12px] font-bold tracking-tight shadow-xs transition-all active:scale-95 cursor-pointer"
                 title={`Click to download and install Update v${updateInfo.version || ''}`}
               >
-                <span>Update to v{updateInfo.version || ''}</span>
+                <span>Update Available</span>
+                <span className="text-[12px] leading-none">→</span>
               </button>
             )}
+
+            {/* Three-dots menu icon matching screenshot */}
+            <div
+              className="text-neutral-400 hover:text-[var(--t)] p-1 rounded hover:bg-[var(--s2)] transition-colors cursor-pointer"
+              title="Update options"
+              onClick={handleCheckAgain}
+            >
+              <MoreVertical className="w-3.5 h-3.5" />
+            </div>
           </div>
         )}
 

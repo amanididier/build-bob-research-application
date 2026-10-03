@@ -123,8 +123,56 @@ button {
   font-weight: 760;
   font-size: 15px;
   letter-spacing: -0.01em;
-  flex: 1;
   color: var(--text);
+}
+
+.head-update-pill {
+  display: flex;
+  align-items: center;
+  margin-left: 6px;
+  flex: 1;
+}
+
+.update-pill-btn {
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.update-pill-btn .arr {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.update-pill-btn.blue {
+  background: #0080f5;
+  color: #ffffff;
+}
+
+.update-pill-btn.blue:hover {
+  background: #006dd4;
+}
+
+.update-pill-btn.yellow {
+  background: var(--yellow);
+  color: #171717;
+}
+
+.update-pill-btn.yellow:hover {
+  background: #ebd200;
+}
+
+.update-pill-btn:active {
+  transform: scale(0.95);
 }
 
 .head-actions {

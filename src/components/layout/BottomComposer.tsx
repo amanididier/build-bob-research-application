@@ -28,8 +28,8 @@ export const BottomComposer: React.FC = () => {
     startVoiceMode,
     stopVoiceMode,
     interrupt,
-    mode,
-    setMode,
+    voiceMode,
+    setVoiceMode,
     errorMessage,
   } = useVoiceStore();
 
@@ -121,9 +121,9 @@ export const BottomComposer: React.FC = () => {
   };
 
   const startMode = async (m: 'prompt' | 'call') => {
-    setMode(m);
+    setVoiceMode(m);
     setMicMenuOpen(false);
-    await startVoiceMode();
+    await startVoiceMode(m);
   };
 
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -140,9 +140,10 @@ export const BottomComposer: React.FC = () => {
   };
 
   const isVoiceActive = voiceState !== 'IDLE' && voiceState !== 'ERROR' && voiceState !== 'STOPPING';
+  const isExpanded = Boolean(prompt.trim()) || isVoiceActive;
 
-  if (isVoiceActive && mode === 'call') {
-    return <VoiceCallOverlay />;
+  if (isVoiceActive && voiceMode === 'call') {
+    return <VoiceCallOverlay onClose={() => stopVoiceMode()} />;
   }
 
   return (
@@ -151,10 +152,10 @@ export const BottomComposer: React.FC = () => {
       <button
         onClick={handleChromeLaunch}
         title="Open Bob in Chrome"
-        className={`fixed z-30 bottom-5 w-11 h-11 rounded-full bg-[var(--s)] border border-[var(--line)] shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all grid place-items-center ${
+        className={`fixed z-30 bottom-5 w-11 h-11 rounded-full bg-[var(--s)] border border-[var(--line)] shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 grid place-items-center ${
           isSidebarClosed
-            ? 'left-[calc(50%+430px)]'
-            : 'left-[calc(275px+(100vw-275px)/2+430px)]'
+            ? isExpanded ? 'left-[calc(50%+430px)]' : 'left-[calc(50%+270px)]'
+            : isExpanded ? 'left-[calc(275px+(100vw-275px)/2+430px)]' : 'left-[calc(275px+(100vw-275px)/2+290px)]'
         } hidden xl:grid`}
       >
         <Chrome className="w-5 h-5 text-[#4285f4]" strokeWidth={1.8} />
@@ -168,13 +169,13 @@ export const BottomComposer: React.FC = () => {
 
       {/* Main Bottom Floating Composer */}
       <div
-        className={`fixed z-20 bottom-5 transform -translate-x-1/2 bg-[var(--s)] border border-[#d8d8d1] dark:border-[#3b3129] rounded-[23px] shadow-[0_20px_55px_rgba(0,0,0,0.12)] p-2.5 transition-all ${
+        className={`fixed z-20 bottom-5 transform -translate-x-1/2 bg-[var(--s)] border border-[#d8d8d1] dark:border-[#3b3129] rounded-[23px] shadow-[0_20px_55px_rgba(0,0,0,0.12)] p-2.5 transition-all duration-300 ease-out ${
           isSidebarClosed
-            ? 'left-1/2 w-[min(800px,calc(100vw-70px))]'
-            : 'left-[calc(275px+(100vw-275px)/2)] w-[min(800px,calc(100vw-275px-70px))]'
+            ? isExpanded ? 'left-1/2 w-[min(800px,calc(100vw-70px))]' : 'left-1/2 w-[min(480px,calc(100vw-60px))]'
+            : isExpanded ? 'left-[calc(275px+(100vw-275px)/2)] w-[min(800px,calc(100vw-275px-70px))]' : 'left-[calc(275px+(100vw-275px)/2)] w-[min(500px,calc(100vw-275px-60px))]'
         }`}
       >
-        {isVoiceActive && mode === 'prompt' && (
+        {isVoiceActive && voiceMode === 'prompt' && (
           <VoiceWaveform height={22} className="px-2 pb-1 opacity-80" />
         )}
 
@@ -229,7 +230,7 @@ export const BottomComposer: React.FC = () => {
             <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--ys)] dark:bg-[#382c0b] border border-[var(--y)]/50 animate-in fade-in duration-150 mr-1 shadow-xs">
               <span className="w-1.5 h-1.5 bg-[var(--y)] rounded-full animate-ping" />
               <span className="text-[11.5px] font-semibold text-[var(--y)] select-none">
-                {mode === 'call' ? 'Call connected' : 'Listening...'}
+                {voiceMode === 'call' ? 'Call connected' : 'Listening...'}
               </span>
             </div>
           )}

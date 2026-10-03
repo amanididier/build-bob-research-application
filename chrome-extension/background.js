@@ -7,7 +7,7 @@
 const BRIDGE_ORIGIN = 'http://127.0.0.1:54321';
 const DEFAULT_BRIDGE_TOKEN = 'development-token';
 const BRIDGE_TIMEOUT_MS = 1500;
-const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite', 'gemini-2.5-flash'];
+const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-pro'];
 
 const KEYS = {
   notes: 'bob_notes',
@@ -657,8 +657,22 @@ async function startAsk({ prompt, selection, tab }) {
 // ------------------------------------------------------------------ chat ---
 
 async function callGemini(prompt, contextText) {
-  const settings = await getSettings();
-  const key = (settings.geminiKey || '').trim();
+  let settings = await getSettings();
+  let key = (settings.geminiKey || '').trim();
+
+  // If no key in extension settings, pull from Bob Desktop bridge
+  if (!key) {
+    try {
+      const keyRes = await bridgeFetch('/events/key');
+      if (keyRes.ok && keyRes.data && keyRes.data.key) {
+        key = String(keyRes.data.key).trim();
+        if (key) {
+          await setSettings({ geminiKey: key });
+        }
+      }
+    } catch {}
+  }
+
   if (!key) return { ok: false, reason: 'no-key' };
 
   const systemInstruction = {
@@ -711,10 +725,13 @@ async function callGemini(prompt, contextText) {
   return { ok: false, reason: 'request-failed', detail: lastError };
 }
 
-async function buildContext({ page, includeNotes = true, maxNotes = 6 }) {
+async function buildContext(opts = {}) {
+  const page = opts.page || opts;
+  const includeNotes = opts.includeNotes !== false;
+  const maxNotes = opts.maxNotes || 6;
   const lines = [];
   const settings = await getSettings();
-  const goal = (page && page.goal) || settings.researchFocus;
+  const goal = (page && page.goal) || (page && page.projectName) || settings.researchFocus;
   if (goal) lines.push(`Research focus: ${goal}`);
   if (page && page.title) lines.push(`Active tab: ${page.title}`);
   if (page && page.url) lines.push(`URL: ${page.url}`);

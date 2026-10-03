@@ -26,6 +26,8 @@ contextBridge.exposeInMainWorld('bob', {
   getOnboardingCompleted: () => ipcRenderer.invoke('bob:getOnboardingCompleted'),
   downloadUpdate: () => ipcRenderer.invoke('bob:downloadUpdate'),
   installUpdate: () => ipcRenderer.invoke('bob:installUpdate'),
+  openExtensionFolder: () => ipcRenderer.invoke('bob:openExtensionFolder'),
+  getExtensionPath: () => ipcRenderer.invoke('bob:getExtensionPath'),
   onUpdateStatus: (fn) => {
     const handler = (_event, status) => fn(status)
     ipcRenderer.on('bob:updateStatus', handler)

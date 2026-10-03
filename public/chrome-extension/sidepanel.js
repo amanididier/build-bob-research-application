@@ -66,8 +66,41 @@
 
   // ------------------------------------------------------------- Bridge Status
 
+  function renderUpdatePill(data) {
+    const pill = $('ext-update-pill');
+    const btn = $('btn-reload-extension');
+    if (!pill || !btn) return;
+
+    if (!data || !data.connected) {
+      pill.style.display = 'none';
+      return;
+    }
+
+    state.lastUpdateState = data;
+
+    if (data.readyToRestart) {
+      pill.style.display = 'flex';
+      btn.className = 'update-pill-btn blue';
+      btn.innerHTML = '<span>Restart to finish</span><span class="arr">→</span>';
+      btn.title = 'Desktop update ready! Click to reload extension & restart desktop.';
+    } else if (data.isDownloading) {
+      pill.style.display = 'flex';
+      btn.className = 'update-pill-btn yellow';
+      btn.innerHTML = `<span>Updating… ${data.updatePercent || 0}%</span>`;
+      btn.title = `Downloading update: ${data.updatePercent || 0}%`;
+    } else if (data.isAvailable) {
+      pill.style.display = 'flex';
+      btn.className = 'update-pill-btn yellow';
+      btn.innerHTML = '<span>Update Available</span><span class="arr">→</span>';
+      btn.title = 'New version available. Click to download.';
+    } else {
+      pill.style.display = 'none';
+    }
+  }
+
   async function checkBridgeStatus() {
     let isConn = false;
+    let bridgeData = null;
     // 1. Direct active heartbeat ping to local bridge
     try {
       const direct = await fetch('http://127.0.0.1:54321/events/extension-ping', {
@@ -79,7 +112,10 @@
       });
       if (direct.ok) {
         const data = await direct.json();
-        if (data.ok && data.connected) isConn = true;
+        if (data.ok && data.connected) {
+          isConn = true;
+          bridgeData = data;
+        }
       }
     } catch {}
 
@@ -90,11 +126,13 @@
         if (res && res.ok) {
           const obj = res.status || res;
           if (obj.connected !== undefined) isConn = Boolean(obj.connected);
+          bridgeData = obj;
         }
       } catch {}
     }
 
     state.bridge.connected = isConn;
+    renderUpdatePill(bridgeData);
     const dot = $('desktop-status-dot');
     if (dot) {
       if (isConn) {
@@ -429,11 +467,19 @@
 
       if (res && res.ok && res.reply) {
         replyText = res.reply;
+      } else if (res && res.reason === 'no-key') {
+        replyText = '✦ No Gemini API key found. Please save your Gemini API key in Bob Desktop Settings (or click the desktop icon in the top header) to enable live answers.';
+      } else if (res && res.reason === 'bad-key') {
+        replyText = '✦ Invalid or rejected Gemini API key. Please check your Gemini API key in Bob Desktop Settings.';
+      } else if (res && res.reason === 'rate-limited') {
+        replyText = '✦ Gemini API rate limit reached. Please wait a few seconds and try again.';
+      } else if (res && res.detail) {
+        replyText = `✦ Gemini request failed: ${res.detail}. Please check your Gemini key in Bob Desktop Settings.`;
       } else {
-        replyText = `Bob synthesized insights across your open research tabs: Key findings suggest coordination, verified data pipelines, and contextual synthesis are essential for executing this goal.`;
+        replyText = (res && res.reply) || `Bob could not generate a response. Please check your Gemini API key in Bob Desktop Settings.`;
       }
-    } catch {
-      replyText = `Bob synthesized findings across your active tabs for: "${text}". Sources agree on prioritizing actionable next steps.`;
+    } catch (err) {
+      replyText = `Bob encountered a connection error. Please ensure Bob Desktop is running.`;
     } finally {
       state.busy = false;
       if (typingBubble && typingBubble.parentElement) {
@@ -776,6 +822,11 @@
     });
   }
 
+  async function triggerHighlightOnActiveTab() {
+    await send({ type: 'AUTO_HIGHLIGHT' });
+    toast('✦ Auto-highlighted page · Highlighting peel active');
+  }
+
   // ------------------------------------------------------------- Quick Ask Inline
 
   function openInlineModal() {
@@ -821,12 +872,26 @@
     const ta = $('prompt');
     if (!ta) return;
     const bar = ta.closest('.composer-bar');
-    ta.style.height = '26px';
-    const h = Math.min(120, Math.max(26, ta.scrollHeight));
+    const val = (ta.value || '').trim();
+
+    // When empty (before user types), keep strictly as a sleek 42px single-line pill!
+    if (!val) {
+      ta.style.height = '22px';
+      if (bar) bar.classList.add('single-line');
+      return;
+    }
+
+    // Only grow vertically when multi-line content or long text is typed
+    ta.style.height = '22px';
+    const h = Math.min(100, Math.max(22, ta.scrollHeight));
     ta.style.height = h + 'px';
+
     if (bar) {
-      if (h <= 34) bar.classList.add('single-line');
-      else bar.classList.remove('single-line');
+      if (h <= 26 && !val.includes('\n')) {
+        bar.classList.add('single-line');
+      } else {
+        bar.classList.remove('single-line');
+      }
     }
   }
 
@@ -842,6 +907,46 @@
 
   function wireEvents() {
     // Header actions
+    const btnReload = $('btn-reload-extension');
+    if (btnReload) {
+      btnReload.addEventListener('click', async () => {
+        const update = state.lastUpdateState;
+        if (update && update.isAvailable) {
+          toast('Starting desktop update download…');
+          fetch('http://127.0.0.1:54321/events/desktop-update', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'x-bob-token': 'development-token' },
+            body: JSON.stringify({ action: 'download' })
+          }).catch(() => {});
+          setTimeout(checkBridgeStatus, 600);
+          return;
+        }
+
+        if (update && update.readyToRestart) {
+          toast('Restarting Bob Desktop & reloading extension…');
+          fetch('http://127.0.0.1:54321/events/desktop-update', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'x-bob-token': 'development-token' },
+            body: JSON.stringify({ action: 'install' })
+          }).catch(() => {});
+        } else {
+          toast('Reloading Bob Extension…');
+        }
+
+        setTimeout(() => {
+          try {
+            if (typeof chrome !== 'undefined' && chrome.runtime && typeof chrome.runtime.reload === 'function') {
+              chrome.runtime.reload();
+            } else {
+              window.location.reload();
+            }
+          } catch {
+            window.location.reload();
+          }
+        }, 400);
+      });
+    }
+
     const btnDesk = $('btn-open-desktop');
     if (btnDesk) btnDesk.addEventListener('click', openDesktop);
 
@@ -1049,11 +1154,133 @@
     if (btnSend) btnSend.addEventListener('click', sendPrompt);
 
     const btnVoice = $('btn-voice');
+    let recognition = null;
+    let isListening = false;
+
     if (btnVoice) {
       btnVoice.addEventListener('click', () => {
-        toast('Voice dictation active: speak now…');
+        const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRec) {
+          toast('Speech dictation not supported in this browser.');
+          return;
+        }
+
+        if (isListening && recognition) {
+          try { recognition.stop(); } catch {}
+          isListening = false;
+          btnVoice.classList.remove('listening');
+          toast('Dictation stopped');
+          return;
+        }
+
+        let baseText = '';
+        try {
+          recognition = new SpeechRec();
+          recognition.continuous = true;
+          recognition.interimResults = true;
+          recognition.lang = navigator.language || 'en-US';
+
+          recognition.onstart = () => {
+            isListening = true;
+            btnVoice.classList.add('listening');
+            const input = $('prompt');
+            baseText = input ? input.value.trim() : '';
+            toast('🎤 Listening… speak now');
+          };
+
+          recognition.onresult = (event) => {
+            let finalTranscript = '';
+            let interimTranscript = '';
+            for (let i = 0; i < event.results.length; ++i) {
+              const res = event.results[i];
+              if (res.isFinal) {
+                finalTranscript += res[0].transcript + ' ';
+              } else {
+                interimTranscript += res[0].transcript;
+              }
+            }
+            const input = $('prompt');
+            if (input) {
+              const combined = (baseText ? baseText + ' ' : '') + finalTranscript + interimTranscript;
+              input.value = combined.trimStart();
+              syncComposerSize();
+            }
+          };
+
+          recognition.onerror = (event) => {
+            console.warn('[bob] speech error:', event.error);
+            isListening = false;
+            btnVoice.classList.remove('listening');
+            if (event.error !== 'no-speech') {
+              toast('Dictation: ' + event.error);
+            }
+          };
+
+          recognition.onend = () => {
+            isListening = false;
+            btnVoice.classList.remove('listening');
+          };
+
+          recognition.start();
+        } catch (err) {
+          console.warn('[bob] recognition start error:', err);
+          toast('Could not start microphone');
+        }
       });
     }
+
+    // Keyboard Shortcuts: Ctrl+B then A (Quick Ask), Ctrl+B then H (Auto-highlight)
+    let chordPending = false;
+    let chordTimer = null;
+
+    document.addEventListener('keydown', (e) => {
+      const isCtrl = e.ctrlKey || e.metaKey;
+
+      if (chordPending) {
+        if (e.key === 'a' || e.key === 'A') {
+          e.preventDefault();
+          chordPending = false;
+          clearTimeout(chordTimer);
+          openInlineModal();
+          return;
+        }
+        if (e.key === 'h' || e.key === 'H') {
+          e.preventDefault();
+          chordPending = false;
+          clearTimeout(chordTimer);
+          triggerHighlightOnActiveTab();
+          return;
+        }
+      }
+
+      if (isCtrl && (e.key === 'b' || e.key === 'B')) {
+        chordPending = true;
+        clearTimeout(chordTimer);
+        chordTimer = setTimeout(() => { chordPending = false; }, 2000);
+        return;
+      }
+
+      if (isCtrl && chordPending) {
+        if (e.key === 'a' || e.key === 'A') {
+          e.preventDefault();
+          chordPending = false;
+          clearTimeout(chordTimer);
+          openInlineModal();
+          return;
+        }
+        if (e.key === 'h' || e.key === 'H') {
+          e.preventDefault();
+          chordPending = false;
+          clearTimeout(chordTimer);
+          triggerHighlightOnActiveTab();
+          return;
+        }
+      }
+
+      if (chordPending && e.key !== 'Control' && e.key !== 'Meta') {
+        chordPending = false;
+      }
+    });
 
     // Outside clicks to dismiss menus
     document.addEventListener('click', (e) => {
@@ -1080,6 +1307,10 @@
     // Check desktop bridge immediately and set heartbeat
     await checkBridgeStatus();
     setInterval(checkBridgeStatus, 2500);
+    window.addEventListener('focus', checkBridgeStatus);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) checkBridgeStatus();
+    });
 
     // Load initial context
     loadTabs().catch(() => {});
