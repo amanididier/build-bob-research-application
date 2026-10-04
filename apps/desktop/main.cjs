@@ -71,6 +71,10 @@ function loadStore() {
     if (!store.geminiKey && (process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY)) {
       store.geminiKey = (process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '').trim()
     }
+    if (!store.verifiedModel) store.verifiedModel = 'gemini-3.1-flash-lite'
+    if (!store.settingsVersion) store.settingsVersion = 1
+    if (typeof store.activeGoal !== 'string') store.activeGoal = ''
+    if (!store.theme) store.theme = 'light'
   } catch (err) {
     log('Load store failed:', err.message)
   }
@@ -173,6 +177,10 @@ function startBridge() {
         timestamp: Date.now(),
         version: app.getVersion(),
         geminiKey: store.geminiKey || process.env.GEMINI_API_KEY || '',
+        verifiedModel: store.verifiedModel || 'gemini-3.1-flash-lite',
+        settingsVersion: store.settingsVersion || 1,
+        activeGoal: store.activeGoal || '',
+        theme: store.theme || 'light',
         updateState,
         updateStatus: updateState.status,
         updateVersion: updateState.version || null,
@@ -198,6 +206,194 @@ function startBridge() {
       return send(200, { ok: true, path: extDir })
     }
 
+    // Settings sync (Extension <-> Desktop)
+    if (pathname === '/events/settings') {
+      if (req.method === 'POST') {
+        if (body.geminiKey !== undefined) store.geminiKey = String(body.geminiKey || '').trim()
+        if (body.verifiedModel) store.verifiedModel = String(body.verifiedModel).trim()
+        if (body.activeGoal !== undefined) store.activeGoal = String(body.activeGoal || '').trim()
+        if (body.theme) store.theme = String(body.theme).trim()
+        store.settingsVersion = (store.settingsVersion || 1) + 1
+        saveStore()
+        notify()
+      }
+      return send(200, {
+        ok: true,
+        geminiKey: store.geminiKey || process.env.GEMINI_API_KEY || '',
+        verifiedModel: store.verifiedModel || 'gemini-3.1-flash-lite',
+        settingsVersion: store.settingsVersion || 1,
+        activeGoal: store.activeGoal || '',
+        theme: store.theme || 'light',
+        desktopVersion: app.getVersion()
+      })
+    }
+
+    // Remote Gemini Execution for Extension (Desktop is single source of truth for Key & Model)
+    if (pathname === '/events/generate') {
+      const key = (store.geminiKey || process.env.GEMINI_API_KEY || '').trim()
+      if (!key) {
+        return send(200, {
+          ok: false,
+          reason: 'no-key',
+          message: 'No Gemini API key saved in Bob Desktop Settings.'
+        })
+      }
+
+      const prompt = body.prompt || ''
+      const systemInstruction = body.systemInstruction || ''
+      const jsonMode = Boolean(body.jsonMode)
+      const requestedModel = body.model || store.verifiedModel || 'gemini-3.1-flash-lite'
+
+      let candidateModels = [
+        requestedModel,
+        store.verifiedModel,
+        'gemini-2.5-flash',
+        'gemini-3.1-flash-lite',
+        'gemini-flash-latest',
+        'gemini-3.8-flash'
+      ].filter(Boolean)
+      let uniqueModels = [...new Set(candidateModels)]
+
+      let lastError = null
+      let lastStatus = 500
+      let lastErrorBody = ''
+      let isNetworkError = false
+
+      // Helper function to attempt generation with a given model
+      const tryModel = async (model) => {
+        try {
+          const payload = {
+            contents: [{ role: 'user', parts: [{ text: prompt }] }]
+          }
+          if (systemInstruction) {
+            payload.systemInstruction = {
+              parts: [{ text: typeof systemInstruction === 'string' ? systemInstruction : JSON.stringify(systemInstruction) }]
+            }
+          }
+          if (jsonMode) {
+            payload.generationConfig = { responseMimeType: 'application/json' }
+          }
+
+          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              'x-goog-api-key': key
+            },
+            body: JSON.stringify(payload)
+          })
+
+          lastStatus = res.status
+          if (!res.ok) {
+            const errRaw = await res.text().catch(() => '')
+            lastErrorBody = errRaw.slice(0, 300)
+            // Log raw HTTP status and error body safely without exposing API key
+            console.log(`[Bob Gemini Request] Model: ${model} | HTTP Status: ${res.status} | Body: ${lastErrorBody}`)
+            
+            if (res.status === 404) {
+              lastError = `model-${model}-not-found`
+              return { success: false, notFound: true }
+            }
+            if (res.status === 400 || res.status === 401 || res.status === 403) {
+              return {
+                fatal: true,
+                response: {
+                  ok: false,
+                  reason: 'bad-key',
+                  status: res.status,
+                  message: 'Gemini API key rejected or invalid. Please check your Gemini key in Bob Desktop Settings.'
+                }
+              }
+            }
+            if (res.status === 429) {
+              return {
+                fatal: true,
+                response: {
+                  ok: false,
+                  reason: 'rate-limited',
+                  status: 429,
+                  retryAfter: 30,
+                  message: 'Gemini API rate limit reached. Please wait a few seconds and try again.'
+                }
+              }
+            }
+            lastError = `http-${res.status}`
+            return { success: false }
+          }
+
+          const data = await res.json()
+          const parts = (((data.candidates || [])[0] || {}).content || {}).parts || []
+          const reply = parts.map((p) => p.text || '').join('').trim()
+          if (reply) {
+            if (store.verifiedModel !== model) {
+              store.verifiedModel = model
+              store.settingsVersion = (store.settingsVersion || 1) + 1
+              saveStore()
+              notify()
+            }
+            return { success: true, reply, model }
+          }
+          lastError = 'empty-response'
+          return { success: false }
+        } catch (err) {
+          isNetworkError = true
+          lastError = (err && err.message) || 'network-error'
+          console.log(`[Bob Gemini Request Network Error] Model: ${model} | Error: ${lastError}`)
+          return { success: false, network: true }
+        }
+      }
+
+      // Step 1: Try candidate models
+      for (const model of uniqueModels) {
+        const result = await tryModel(model)
+        if (result.fatal) return send(200, result.response)
+        if (result.success) return send(200, { ok: true, reply: result.reply, model: result.model, status: 200 })
+      }
+
+      // Step 2: If all models returned 404 (model not found) and not network error, query ListModels endpoint
+      if (!isNetworkError) {
+        try {
+          const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`)
+          if (listRes.ok) {
+            const listData = await listRes.json()
+            const availableModels = (listData.models || [])
+              .filter((m) => (m.supportedGenerationMethods || []).includes('generateContent'))
+              .map((m) => m.name.replace(/^models\//, ''))
+              .filter((name) => name.toLowerCase().includes('flash'))
+
+            const discoveredModels = availableModels.filter((m) => !uniqueModels.includes(m))
+            for (const model of discoveredModels) {
+              const result = await tryModel(model)
+              if (result.fatal) return send(200, result.response)
+              if (result.success) return send(200, { ok: true, reply: result.reply, model: result.model, status: 200 })
+            }
+            if (discoveredModels.length > 0) {
+              uniqueModels = [...uniqueModels, ...discoveredModels]
+            }
+          }
+        } catch {}
+      }
+
+      // If network error occurred
+      if (isNetworkError) {
+        return send(200, {
+          ok: false,
+          reason: 'network-error',
+          status: 0,
+          message: 'Network error connecting to Gemini API. Please check your internet connection.'
+        })
+      }
+
+      return send(200, {
+        ok: false,
+        reason: 'model-unavailable',
+        status: lastStatus,
+        triedModels: uniqueModels,
+        message: `Model unavailable – tried ${uniqueModels.join(', ')}. Please verify model access in Bob Desktop Settings.`,
+        detail: `All candidate models failed (${uniqueModels.join(', ')}). HTTP status: ${lastStatus}`
+      })
+    }
+
     // Extension Handshake
     if (pathname === '/events/handshake') {
       store.extensionConnected = true
@@ -212,6 +408,11 @@ function startBridge() {
         token: pairingToken || TOKEN,
         extensionConnected: true,
         lastExtensionContact: store.lastExtensionContact,
+        geminiKey: store.geminiKey || process.env.GEMINI_API_KEY || '',
+        verifiedModel: store.verifiedModel || 'gemini-3.1-flash-lite',
+        settingsVersion: store.settingsVersion || 1,
+        activeGoal: store.activeGoal || '',
+        theme: store.theme || 'light',
         updateStatus: updateState.status,
         updateVersion: updateState.version || null,
         readyToRestart: updateState.status === 'ready',
@@ -603,9 +804,36 @@ function registerIpc() {
   // persisted store so the local bridge can hand it to the Chrome extension.
   ipcMain.handle('bob:setGeminiKey', (_e, key) => {
     store.geminiKey = String(key || '').trim()
+    store.settingsVersion = (store.settingsVersion || 1) + 1
     saveStore()
-    return { ok: true, hasKey: Boolean(store.geminiKey) }
+    notify()
+    return { ok: true, hasKey: Boolean(store.geminiKey), settingsVersion: store.settingsVersion }
   })
+
+  ipcMain.handle('bob:setVerifiedModel', (_e, model) => {
+    store.verifiedModel = String(model || 'gemini-3.1-flash-lite').trim()
+    store.settingsVersion = (store.settingsVersion || 1) + 1
+    saveStore()
+    notify()
+    return { ok: true, verifiedModel: store.verifiedModel, settingsVersion: store.settingsVersion }
+  })
+
+  ipcMain.handle('bob:setActiveGoal', (_e, goal) => {
+    store.activeGoal = String(goal || '').trim()
+    store.settingsVersion = (store.settingsVersion || 1) + 1
+    saveStore()
+    notify()
+    return { ok: true, activeGoal: store.activeGoal, settingsVersion: store.settingsVersion }
+  })
+
+  ipcMain.handle('bob:getSettings', () => ({
+    geminiKey: store.geminiKey || '',
+    verifiedModel: store.verifiedModel || 'gemini-3.1-flash-lite',
+    settingsVersion: store.settingsVersion || 1,
+    activeGoal: store.activeGoal || '',
+    theme: store.theme || 'light',
+    desktopVersion: app.getVersion()
+  }))
 
   ipcMain.handle('bob:add', (_e, kind, item) => {
     if (!['notes', 'sources', 'projects', 'messages'].includes(kind)) return store

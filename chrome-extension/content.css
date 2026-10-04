@@ -18,33 +18,84 @@
 
 /* ------------------------------------------------------------ highlights */
 
+/* CSS Custom Highlight API styling */
+::highlight(bob-hl-claim) {
+  background-color: rgba(56, 189, 248, 0.35);
+  color: inherit;
+}
+::highlight(bob-hl-data) {
+  background-color: rgba(52, 211, 153, 0.35);
+  color: inherit;
+}
+::highlight(bob-hl-definition) {
+  background-color: rgba(192, 132, 252, 0.35);
+  color: inherit;
+}
+::highlight(bob-hl-conclusion) {
+  background-color: rgba(250, 204, 21, 0.42);
+  color: inherit;
+}
+::highlight(bob-hl-caveat) {
+  background-color: rgba(251, 146, 60, 0.35);
+  color: inherit;
+}
+::highlight(bob-hl-action) {
+  background-color: rgba(244, 114, 182, 0.35);
+  color: inherit;
+}
+::highlight(bob-hl-top) {
+  outline: 1.5px solid #fffc00;
+  border-radius: 3px;
+}
+
+/* Fallback <mark> element highlights */
 mark.bob-hl {
   color: inherit;
   border-radius: 4px;
-  padding: 0.14em 0.22em;
+  padding: 0.12em 0.2em;
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
   transition: box-shadow 0.18s ease, background-color 0.18s ease;
   line-height: 1.4;
 }
 
-/* Sky Blue (bright and clear) */
-mark.bob-hl-blue {
-  background-color: rgba(56, 189, 248, 0.42);
+mark.bob-hl-claim, mark.bob-hl-blue {
+  background-color: rgba(56, 189, 248, 0.35);
 }
-
-/* Duolingo Green (fresh and legible) */
-mark.bob-hl-green {
-  background-color: rgba(74, 222, 128, 0.45);
+mark.bob-hl-data, mark.bob-hl-green {
+  background-color: rgba(52, 211, 153, 0.35);
 }
-
-/* Snapchat Yellow (clean bright yellow, not orange) */
-mark.bob-hl-yellow {
-  background-color: rgba(255, 252, 0, 0.52);
+mark.bob-hl-definition, mark.bob-hl-purple {
+  background-color: rgba(192, 132, 252, 0.35);
+}
+mark.bob-hl-conclusion, mark.bob-hl-yellow {
+  background-color: rgba(250, 204, 21, 0.42);
+}
+mark.bob-hl-caveat, mark.bob-hl-amber {
+  background-color: rgba(251, 146, 60, 0.35);
+}
+mark.bob-hl-action, mark.bob-hl-pink {
+  background-color: rgba(244, 114, 182, 0.35);
+}
+mark.bob-hl-top {
+  outline: 1.5px solid #fffc00;
 }
 
 mark.bob-hl.bob-hl-focus {
   box-shadow: 0 0 0 2.5px #171717, 0 3px 12px rgba(0, 0, 0, 0.18);
+}
+
+@keyframes bobPulseHighlight {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 252, 0, 0.7); }
+  50% { transform: scale(1.02); box-shadow: 0 0 0 8px rgba(255, 252, 0, 0.3); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 252, 0, 0); }
+}
+
+.bob-highlight-pulse {
+  animation: bobPulseHighlight 0.8s ease-in-out 2;
+  outline: 2px solid #fffc00 !important;
+  outline-offset: 3px;
+  border-radius: 4px;
 }
 
 /* -------------------------------------------------------- selection card */

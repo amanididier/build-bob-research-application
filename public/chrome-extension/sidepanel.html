@@ -45,9 +45,10 @@
       </div>
     </header>
 
-    <!-- Top Navigation Bar: Research | Summary | Tabs | Tasks -->
+    <!-- Top Navigation Bar: Research | Important | Summary | Tabs | Tasks -->
     <nav class="nav" role="tablist">
       <button class="active" data-view="research" role="tab" aria-selected="true">Research</button>
+      <button data-view="important" role="tab" aria-selected="false">Important</button>
       <button data-view="summary" role="tab" aria-selected="false">Summary</button>
       <button data-view="tabs" role="tab" aria-selected="false">Tabs</button>
       <button data-view="tasks" role="tab" aria-selected="false">Tasks</button>
@@ -94,6 +95,62 @@
             <button class="pill bluepill" id="btn-chat-new">＋ New</button>
           </div>
           <div class="chat-list" id="chatList"></div>
+        </div>
+      </section>
+
+      <!-- 2. IMPORTANT ON THIS PAGE VIEW -->
+      <section class="view" id="view-important">
+        <div class="section-head">
+          <h2>Important on this page</h2>
+          <div class="head-btn-group">
+            <button class="pill yellow-sm" id="btn-rerun-highlights" title="Re-run highlights with Gemini">↻ Re-run</button>
+            <button class="pill plain-sm" id="btn-clear-side-highlights" title="Clear highlights from page">✕ Clear</button>
+          </div>
+        </div>
+
+        <!-- Active Goal Display Chip -->
+        <div class="goal-chip-bar" id="activeGoalBar" style="display:none">
+          <div class="goal-chip">
+            <span class="goal-chip-icon">🎯</span>
+            <span class="goal-chip-label">Goal:</span>
+            <span class="goal-chip-text" id="activeGoalText">Key findings</span>
+          </div>
+          <button class="icon-xs" id="btn-change-goal" title="Change goal">✏️</button>
+        </div>
+
+        <!-- Goal Question Card (Shown before highlighting when no goal exists) -->
+        <div class="goal-ask-card" id="goalAskCard">
+          <div class="goal-ask-header">
+            <span class="goal-sparkle">✦</span>
+            <h3>What are you trying to find out from this page?</h3>
+          </div>
+          <p class="goal-ask-sub">Bob uses your goal to filter and highlight only high-signal evidence.</p>
+          <div class="goal-suggestions" id="goalSuggestions">
+            <button class="goal-suggest-btn" data-goal="Key findings & main conclusions">💡 Key findings & conclusions</button>
+            <button class="goal-suggest-btn" data-goal="Data, metrics, numbers & evidence">📊 Data, metrics & evidence</button>
+            <button class="goal-suggest-btn" data-goal="Core definitions, terms & concepts">🔍 Definitions & core concepts</button>
+          </div>
+          <div class="goal-custom-row">
+            <input class="goal-input" id="customGoalInput" placeholder="Or type your specific research question…" autocomplete="off" />
+            <button class="pill yellow" id="btn-set-custom-goal">Set Goal</button>
+          </div>
+          <div class="goal-skip-row">
+            <button class="btn-text-subtle" id="btn-just-key-points">Just show me the key points</button>
+          </div>
+        </div>
+
+        <!-- Highlights Loading State -->
+        <div class="highlights-loading" id="highlightsLoading" style="display:none">
+          <div class="loading-spinner"></div>
+          <p id="highlightsLoadingText">Analyzing page text with Gemini…</p>
+        </div>
+
+        <!-- Highlights List -->
+        <div class="highlights-list" id="highlightsList">
+          <div class="card empty-highlights" id="highlightsEmpty">
+            <b>No highlights yet.</b>
+            <p class="muted">Set your research goal above or click "Just show me the key points" to extract and highlight key passages on this page.</p>
+          </div>
         </div>
       </section>
 

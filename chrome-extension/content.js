@@ -449,53 +449,67 @@
     focusHighlight(activeNavIndex);
   }
 
-  function focusHighlight(index) {
-    if (!highlights[index]) return;
+  function focusHighlight(indexOrId) {
+    let index = -1;
+    if (typeof indexOrId === 'number') {
+      index = indexOrId;
+    } else {
+      index = highlights.findIndex((h) => h.id === indexOrId);
+    }
+    if (index < 0 || !highlights[index]) return;
     activeNavIndex = index;
-    highlights.forEach((h) => h.nodes?.forEach((n) => n.classList.remove('bob-hl-focus')));
     const h = highlights[index];
-    if (h.nodes && h.nodes[0]) {
-      h.nodes.forEach((n) => n.classList.add('bob-hl-focus'));
-      h.nodes[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    // Remove previous active outline / pulse
+    document.querySelectorAll('.bob-highlight-pulse, .bob-hl-focus').forEach((el) => {
+      el.classList.remove('bob-highlight-pulse', 'bob-hl-focus');
+    });
+
+    let targetEl = h.element || (h.nodes && h.nodes[0]) || (h.range && h.range.startContainer && (h.range.startContainer.nodeType === Node.TEXT_NODE ? h.range.startContainer.parentElement : h.range.startContainer));
+    if (targetEl) {
+      targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      targetEl.classList.add('bob-highlight-pulse');
+      setTimeout(() => {
+        if (targetEl) targetEl.classList.remove('bob-highlight-pulse');
+      }, 1900);
     }
   }
 
   // ---------------------------------------------------- auto highlight ---
 
-  function keywordsFrom(text) {
-    const counts = new Map();
-    String(text || '')
-      .toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, ' ')
-      .split(/\s+/)
-      .forEach((word) => {
-        if (word.length < 4 || STOPWORDS.has(word)) return;
-        counts.set(word, (counts.get(word) || 0) + 1);
-      });
-    return counts;
-  }
-
   function candidateBlocks() {
-    const selectors = 'article p, article li, main p, main li, [role="main"] p, p, li, h1, h2, h3, h4, blockquote';
+    const selectors = 'article p, article li, main p, main li, [role="main"] p, [role="main"] li, p, li, h1, h2, h3, h4, blockquote';
     const seen = new Set();
     const blocks = [];
+    let idx = 0;
+
     document.querySelectorAll(selectors).forEach((node) => {
       if (seen.has(node) || isBobUi(node)) return;
-      const text = (node.innerText || node.textContent || '').trim();
-      if (text.length < 30 || text.length > 1500) return;
-      if (node.closest('nav, header, footer, aside, form, #' + UI_ROOT_ID)) return;
+      // Skip hidden or zero-size elements
+      if (node.offsetParent === null && node.tagName !== 'BODY') return;
+      if (node.closest('nav, header, footer, aside, form, button, svg, script, style, dialog, input, textarea, select, #' + UI_ROOT_ID)) return;
+      
+      const text = (node.innerText || node.textContent || '').replace(/\s+/g, ' ').trim();
+      if (text.length < 35 || text.length > 2500) return;
+      
       seen.add(node);
-      blocks.push({ node, text });
+      const id = `b_${idx++}`;
+      node.setAttribute('data-bob-block-id', id);
+      blocks.push({ id, node, text });
     });
 
     // Fallback: if strict selectors found nothing, grab any paragraph or body text block
     if (!blocks.length) {
       document.querySelectorAll('p, div').forEach((node) => {
         if (seen.has(node) || isBobUi(node)) return;
-        const text = (node.innerText || node.textContent || '').trim();
-        if (text.length >= 40 && text.length <= 1500 && !node.querySelector('p, div')) {
+        if (node.offsetParent === null) return;
+        if (node.closest('nav, header, footer, aside, form, button, svg, script, style, dialog, #' + UI_ROOT_ID)) return;
+        const text = (node.innerText || node.textContent || '').replace(/\s+/g, ' ').trim();
+        if (text.length >= 40 && text.length <= 2500 && !node.querySelector('p, div, article, main')) {
           seen.add(node);
-          blocks.push({ node, text });
+          const id = `b_${idx++}`;
+          node.setAttribute('data-bob-block-id', id);
+          blocks.push({ id, node, text });
         }
       });
     }
@@ -503,94 +517,227 @@
     return blocks;
   }
 
-  async function autoHighlight(focusText) {
-    if (highlights.length > 0 && !focusText) {
-      // If highlights already exist, cycle/focus them and show peel
-      stepNextHighlight();
-      renderTrafficPill();
-      showToast('✦ Highlighting peel active · Cycling highlights', 'ok');
-      return { ok: true, count: highlights.length };
-    }
+  // Helper: locate Range of exact quote inside a DOM container
+  function findQuoteRange(containerNode, quote) {
+    if (!containerNode || !quote) return null;
+    const cleanQuote = quote.replace(/\s+/g, ' ').trim().toLowerCase();
+    if (!cleanQuote) return null;
 
-    const blocks = candidateBlocks();
-    if (!blocks.length) {
-      showToast('✦ No text found on page to highlight', 'info');
-      return { ok: true, count: 0 };
-    }
-
-    const keywords = keywordsFrom(focusText || document.title);
-    const scored = blocks
-      .map((block) => {
-        const words = block.text.toLowerCase().split(/\s+/);
-        let hits = 0;
-        words.forEach((w) => {
-          const c = w.replace(/[^a-z0-9-]/g, '');
-          if (c && keywords.has(c)) hits += 1;
-        });
-        return { ...block, score: hits / Math.sqrt(words.length || 1) };
-      })
-      .sort((a, b) => b.score - a.score);
-
-    const picked = scored.slice(0, 6);
-    const colors = ['yellow', 'blue', 'green'];
-    let count = 0;
-
-    picked.forEach((item, index) => {
-      const color = colors[index % colors.length];
-      const range = document.createRange();
-      try {
-        range.selectNodeContents(item.node);
-        const id = 'hl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
-        if (wrapRange(range, color, id)) count += 1;
-      } catch {}
+    // Collect all text nodes and their character offsets
+    const walker = document.createTreeWalker(containerNode, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        if (!node.textContent || !node.textContent.trim()) return NodeFilter.FILTER_SKIP;
+        if (isBobUi(node)) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
     });
 
-    await refreshHighlights();
-    showToast(`✦ Auto-highlighted ${count} key sections · Highlighting peel active`, 'ok');
-    return { ok: true, count };
-  }
+    const textNodes = [];
+    let fullText = '';
+    let current;
+    while ((current = walker.nextNode())) {
+      textNodes.push({
+        node: current,
+        start: fullText.length,
+        end: fullText.length + current.textContent.length
+      });
+      fullText += current.textContent;
+    }
 
-  function wrapRange(range, color, id) {
-    const mark = el('mark', `bob-hl bob-hl-${color}`);
-    mark.setAttribute('data-bob-hl-id', id);
-    mark.setAttribute('data-bob-color', color);
+    // Try finding exact quote in fullText
+    let matchIndex = fullText.toLowerCase().indexOf(cleanQuote);
+    let matchLen = cleanQuote.length;
+
+    // Fallback: try normalized whitespace search
+    if (matchIndex === -1) {
+      const normText = fullText.replace(/\s+/g, ' ').toLowerCase();
+      const normIdx = normText.indexOf(cleanQuote);
+      if (normIdx !== -1) {
+        // Approximate character position in original text
+        matchIndex = normIdx;
+        matchLen = cleanQuote.length;
+      }
+    }
+
+    if (matchIndex === -1) return null;
+
+    // Find start text node and end text node
+    let startNode = null;
+    let startOffset = 0;
+    let endNode = null;
+    let endOffset = 0;
+
+    for (const item of textNodes) {
+      if (!startNode && matchIndex >= item.start && matchIndex < item.end) {
+        startNode = item.node;
+        startOffset = matchIndex - item.start;
+      }
+      const matchEnd = matchIndex + matchLen;
+      if (matchEnd > item.start && matchEnd <= item.end) {
+        endNode = item.node;
+        endOffset = matchEnd - item.start;
+        break;
+      }
+    }
+
+    if (!startNode) return null;
+    if (!endNode) {
+      endNode = textNodes[textNodes.length - 1].node;
+      endOffset = endNode.textContent.length;
+    }
+
     try {
-      range.surroundContents(mark);
-      return true;
+      const range = document.createRange();
+      range.setStart(startNode, Math.min(startOffset, startNode.textContent.length));
+      range.setEnd(endNode, Math.min(endOffset, endNode.textContent.length));
+      return range;
     } catch {
-      return false;
+      return null;
     }
   }
 
-  function unwrapHighlight(id) {
-    document.querySelectorAll(`mark[data-bob-hl-id="${id}"]`).forEach((mark) => {
+  function clearAllHighlights() {
+    // 1. Clear CSS Custom Highlights
+    if (typeof CSS !== 'undefined' && 'highlights' in CSS) {
+      ['bob-hl-claim', 'bob-hl-data', 'bob-hl-definition', 'bob-hl-conclusion', 'bob-hl-caveat', 'bob-hl-action', 'bob-hl-top'].forEach((k) => {
+        try { CSS.highlights.delete(k); } catch {}
+      });
+    }
+
+    // 2. Clear Fallback DOM <mark> elements
+    document.querySelectorAll('mark.bob-hl').forEach((mark) => {
       const parent = mark.parentNode;
       while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
       mark.remove();
     });
+
+    highlights = [];
+    renderTrafficPill();
   }
 
-  async function refreshHighlights() {
-    const marks = Array.from(document.querySelectorAll('mark[data-bob-hl-id]'));
-    const byId = new Map();
-    marks.forEach((m) => {
-      const id = m.getAttribute('data-bob-hl-id');
-      const existing = byId.get(id);
-      if (existing) {
-        existing.nodes.push(m);
-        existing.text += m.textContent;
-      } else {
-        byId.set(id, {
-          id,
-          color: m.getAttribute('data-bob-color') || 'yellow',
-          text: m.textContent,
-          nodes: [m],
-          top: m.getBoundingClientRect().top + window.scrollY,
-        });
+  function applyHighlights(items = [], goal = '') {
+    clearAllHighlights();
+    if (!Array.isArray(items) || !items.length) return;
+
+    const hasCssHighlight = typeof CSS !== 'undefined' && 'highlights' in CSS && typeof Highlight !== 'undefined';
+    const categoryRanges = {
+      claim: [],
+      data: [],
+      definition: [],
+      conclusion: [],
+      caveat: [],
+      action: [],
+    };
+    const topRanges = [];
+    const validHighlights = [];
+
+    items.forEach((item, index) => {
+      if (!item || !item.quote) return;
+      const quote = String(item.quote).trim();
+      const blockId = String(item.blockId || '');
+
+      let blockEl = blockId ? document.querySelector(`[data-bob-block-id="${blockId}"]`) : null;
+      let range = findQuoteRange(blockEl, quote);
+
+      // If not found in assigned block, search whole article or body
+      if (!range) {
+        const root = document.querySelector('article') || document.querySelector('main') || document.body;
+        range = findQuoteRange(root, quote);
       }
+
+      if (!range) {
+        // Quote could not be verified on the live DOM, skip it to prevent fake highlights!
+        return;
+      }
+
+      const cat = (item.category || 'conclusion').toLowerCase();
+      if (categoryRanges[cat]) {
+        categoryRanges[cat].push(range);
+      } else {
+        categoryRanges.conclusion.push(range);
+      }
+
+      if (index === 0) {
+        topRanges.push(range);
+      }
+
+      const startEl = range.startContainer.nodeType === Node.TEXT_NODE ? range.startContainer.parentElement : range.startContainer;
+
+      // Fallback wrapping if CSS Custom Highlight API is unsupported
+      if (!hasCssHighlight) {
+        try {
+          const mark = el('mark', `bob-hl bob-hl-${cat}${index === 0 ? ' bob-hl-top' : ''}`);
+          mark.setAttribute('data-bob-hl-id', item.id);
+          mark.setAttribute('data-bob-category', cat);
+          range.surroundContents(mark);
+        } catch {
+          // surroundContents can fail if crossing boundaries; ignore and rely on element positioning
+        }
+      }
+
+      validHighlights.push({
+        id: item.id || 'hl_' + index,
+        quote,
+        reason: item.reason || 'Key passage',
+        category: cat,
+        score: item.score || 0.8,
+        color: cat,
+        range,
+        element: startEl,
+        top: (startEl && startEl.getBoundingClientRect().top + window.scrollY) || 0,
+        text: quote
+      });
     });
-    highlights = Array.from(byId.values()).sort((a, b) => a.top - b.top);
+
+    // Register CSS Custom Highlights
+    if (hasCssHighlight) {
+      Object.keys(categoryRanges).forEach((cat) => {
+        const ranges = categoryRanges[cat];
+        if (ranges.length > 0) {
+          try {
+            CSS.highlights.set(`bob-hl-${cat}`, new Highlight(...ranges));
+          } catch (e) {
+            console.warn('[Bob Highlight] CSS highlight registration failed:', e);
+          }
+        }
+      });
+      if (topRanges.length > 0) {
+        try {
+          CSS.highlights.set('bob-hl-top', new Highlight(...topRanges));
+        } catch {}
+      }
+    }
+
+    highlights = validHighlights.sort((a, b) => a.top - b.top);
     renderTrafficPill();
+  }
+
+  async function autoHighlight(goal = '') {
+    const blocks = candidateBlocks();
+    if (!blocks.length) {
+      showToast('✦ No readable text found on page', 'info');
+      return { ok: false, reason: 'no-text' };
+    }
+
+    showToast('✦ Asking Gemini to highlight key passages…', 'ok');
+
+    const blocksPayload = blocks.map((b) => ({ id: b.id, text: b.text }));
+    const res = await send({
+      type: 'ANALYZE_PAGE_FOR_HIGHLIGHTS',
+      blocks: blocksPayload,
+      goal: goal || '',
+      title: document.title,
+      url: location.href
+    });
+
+    if (res && res.ok && Array.isArray(res.highlights)) {
+      applyHighlights(res.highlights, goal);
+      showToast(`✦ Highlighted ${res.highlights.length} key sections · Peel active`, 'ok');
+      return { ok: true, count: res.highlights.length };
+    } else {
+      showToast(`✦ Highlighting failed: ${res.message || res.detail || 'Could not verify passages'}`, 'info');
+      return res;
+    }
   }
 
   // ------------------------------------------------------------- messages ---
@@ -599,15 +746,31 @@
     const type = message && message.type;
 
     if (type === 'BOB_AUTO_HIGHLIGHT') {
-      autoHighlight(message.focus || '').then(sendResponse);
+      autoHighlight(message.goal || message.focus || '').then(sendResponse);
       return true;
     }
 
-    if (type === 'BOB_CLEAR_PAGE_HIGHLIGHTS') {
-      highlights.forEach((h) => unwrapHighlight(h.id));
-      highlights = [];
-      renderTrafficPill();
+    if (type === 'BOB_RENDER_HIGHLIGHTS') {
+      applyHighlights(message.highlights || [], message.goal || '');
       sendResponse({ ok: true });
+      return false;
+    }
+
+    if (type === 'BOB_FOCUS_HIGHLIGHT') {
+      focusHighlight(message.id);
+      sendResponse({ ok: true });
+      return false;
+    }
+
+    if (type === 'BOB_CLEAR_PAGE_HIGHLIGHTS') {
+      clearAllHighlights();
+      sendResponse({ ok: true });
+      return false;
+    }
+
+    if (type === 'BOB_EXTRACT_PAGE_BLOCKS') {
+      const blocks = candidateBlocks().map((b) => ({ id: b.id, text: b.text }));
+      sendResponse({ ok: true, blocks, title: document.title, url: location.href });
       return false;
     }
 
@@ -619,6 +782,38 @@
     }
 
     return false;
+  });
+
+  // -------------------------------------------------- SPA & Mutation Observer ---
+  let mutationTimer = null;
+  let lastHref = location.href;
+
+  const observer = new MutationObserver(() => {
+    clearTimeout(mutationTimer);
+    mutationTimer = setTimeout(() => {
+      // Check if URL changed in SPA navigation
+      if (location.href !== lastHref) {
+        lastHref = location.href;
+        clearAllHighlights();
+        // Restore highlights for new URL if stored
+        send({ type: 'GET_HIGHLIGHTS', url: location.href }).then((res) => {
+          if (res && res.ok && Array.isArray(res.highlights) && res.highlights.length) {
+            applyHighlights(res.highlights);
+          }
+        });
+      }
+    }, 750);
+  });
+
+  if (document.body) {
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+
+  // Restore existing highlights on initial load
+  send({ type: 'GET_HIGHLIGHTS', url: location.href }).then((res) => {
+    if (res && res.ok && Array.isArray(res.highlights) && res.highlights.length) {
+      applyHighlights(res.highlights);
+    }
   });
 
   // -------------------------------------------------------------- wiring ---

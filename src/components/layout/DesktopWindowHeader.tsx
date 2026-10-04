@@ -106,10 +106,10 @@ export const DesktopWindowHeader: React.FC = () => {
       </div>
 
       {/* Center: Draggable Spacer */}
-      <div className="flex-1 h-full cursor-default" />
+      <div className="flex-1 min-w-0 h-full cursor-default" />
 
-      {/* Right: Real Auto-Update Pill & Native Chrome Window Controls */}
-      <div className="flex items-center h-full" style={{ WebkitAppRegion: 'no-drag' } as any}>
+      {/* Right: Real Auto-Update Pill & Native Chrome Window Controls (Pinned to far right) */}
+      <div className="flex items-center h-full ml-auto flex-shrink-0" style={{ WebkitAppRegion: 'no-drag' } as any}>
         {/* Real Update Pill (NO mock - only rendered when electron-updater emits real update events) */}
         {hasRealUpdate && (
           <div className="mr-3 flex items-center gap-1.5 animate-in fade-in zoom-in-95 duration-200">

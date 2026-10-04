@@ -3,6 +3,9 @@ const { contextBridge, ipcRenderer } = require('electron')
 contextBridge.exposeInMainWorld('bob', {
   get: () => ipcRenderer.invoke('bob:get'),
   setGeminiKey: (key) => ipcRenderer.invoke('bob:setGeminiKey', key),
+  setVerifiedModel: (model) => ipcRenderer.invoke('bob:setVerifiedModel', model),
+  setActiveGoal: (goal) => ipcRenderer.invoke('bob:setActiveGoal', goal),
+  getSettings: () => ipcRenderer.invoke('bob:getSettings'),
   add: (kind, item) => ipcRenderer.invoke('bob:add', kind, item),
   remove: (kind, id) => ipcRenderer.invoke('bob:remove', kind, id),
   openWeb: (sub) => ipcRenderer.invoke('bob:openWeb', sub),

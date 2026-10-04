@@ -7,7 +7,12 @@
 const BRIDGE_ORIGIN = 'http://127.0.0.1:54321';
 const DEFAULT_BRIDGE_TOKEN = 'development-token';
 const BRIDGE_TIMEOUT_MS = 1500;
-const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-pro'];
+const GEMINI_MODELS = [
+  'gemini-3.1-flash-lite',
+  'gemini-flash-latest',
+  'gemini-2.5-flash',
+  'gemini-3.8-flash'
+];
 
 const KEYS = {
   notes: 'bob_notes',
@@ -105,7 +110,32 @@ async function getBridgeStatus({ force = false } = {}) {
   const res = await bridgeFetch('/events/handshake', { token: settings.bridgeToken });
 
   if (res.ok && res.data && res.data.ok) {
-    bridgeCache = { connected: true, version: res.data.version || null, checkedAt: Date.now(), detail: 'ok' };
+    const prevVer = settings.settingsVersion || 0;
+    const newVer = res.data.settingsVersion || 1;
+    bridgeCache = {
+      connected: true,
+      version: res.data.version || null,
+      checkedAt: Date.now(),
+      detail: 'ok',
+      settingsVersion: newVer,
+      verifiedModel: res.data.verifiedModel || 'gemini-3.1-flash-lite',
+      activeGoal: res.data.activeGoal || '',
+      theme: res.data.theme || 'light',
+      updateStatus: res.data.updateStatus || 'idle',
+      readyToRestart: Boolean(res.data.readyToRestart),
+      isAvailable: Boolean(res.data.isAvailable),
+      isDownloading: Boolean(res.data.isDownloading)
+    };
+    const patch = {};
+    if (res.data.geminiKey) patch.geminiKey = res.data.geminiKey;
+    if (res.data.verifiedModel) patch.verifiedModel = res.data.verifiedModel;
+    if (res.data.activeGoal !== undefined) patch.activeGoal = res.data.activeGoal;
+    if (res.data.theme) patch.theme = res.data.theme;
+    if (res.data.settingsVersion) patch.settingsVersion = res.data.settingsVersion;
+    if (Object.keys(patch).length > 0) {
+      await setSettings(patch);
+      broadcast({ type: 'BOB_SETTINGS_SYNCED', settings: patch, bridge: bridgeCache });
+    }
   } else if (res.status === 401) {
     bridgeCache = { connected: false, version: null, checkedAt: Date.now(), detail: 'bad-token' };
   } else if (res.status) {
@@ -656,26 +686,9 @@ async function startAsk({ prompt, selection, tab }) {
 
 // ------------------------------------------------------------------ chat ---
 
-async function callGemini(prompt, contextText) {
-  let settings = await getSettings();
-  let key = (settings.geminiKey || '').trim();
-
-  // If no key in extension settings, pull from Bob Desktop bridge
-  if (!key) {
-    try {
-      const keyRes = await bridgeFetch('/events/key');
-      if (keyRes.ok && keyRes.data && keyRes.data.key) {
-        key = String(keyRes.data.key).trim();
-        if (key) {
-          await setSettings({ geminiKey: key });
-        }
-      }
-    } catch {}
-  }
-
-  if (!key) return { ok: false, reason: 'no-key' };
-
-  const systemInstruction = {
+async function callGemini(prompt, contextText, opts = {}) {
+  const jsonMode = Boolean(opts.jsonMode);
+  const systemInstruction = opts.systemInstruction || {
     parts: [
       {
         text:
@@ -688,24 +701,112 @@ async function callGemini(prompt, contextText) {
     ],
   };
 
-  let lastError = 'request-failed';
-  for (const model of GEMINI_MODELS) {
+  // 1. Prefer asking Bob Desktop bridge to execute the request (single source of truth for key & verified model)
+  const bridgeStatus = await getBridgeStatus();
+  if (bridgeStatus.connected) {
     try {
+      const bridgeRes = await bridgeFetch('/events/generate', {
+        method: 'POST',
+        body: {
+          prompt,
+          systemInstruction,
+          jsonMode,
+          model: bridgeStatus.verifiedModel || (await getSettings()).verifiedModel
+        }
+      });
+
+      if (bridgeRes.ok && bridgeRes.data) {
+        if (bridgeRes.data.ok) {
+          return { ok: true, reply: bridgeRes.data.reply, model: bridgeRes.data.model };
+        }
+        if (bridgeRes.data.reason) {
+          return bridgeRes.data;
+        }
+      }
+    } catch (err) {
+      console.warn('[Bob Extension] Bridge request failed:', err?.message || err);
+    }
+  }
+
+  // 2. Fallback handling if Bob Desktop is not running or unreachable
+  let settings = await getSettings();
+  let key = (settings.geminiKey || '').trim();
+
+  // If no key in extension settings and desktop was not connected, inform user desktop is not running
+  if (!key) {
+    if (!bridgeStatus.connected) {
+      return {
+        ok: false,
+        reason: 'desktop-offline',
+        message: "Bob Desktop isn't running. Please open the Bob Desktop app to connect Gemini AI."
+      };
+    }
+    return {
+      ok: false,
+      reason: 'no-key',
+      message: 'No Gemini API key saved in Bob Desktop Settings.'
+    };
+  }
+
+  // 3. Direct API fallback with candidate models
+  const verified = settings.verifiedModel || 'gemini-3.1-flash-lite';
+  const candidateModels = [
+    verified,
+    'gemini-2.5-flash',
+    'gemini-3.1-flash-lite',
+    'gemini-flash-latest',
+    'gemini-3.8-flash'
+  ].filter(Boolean);
+  const uniqueModels = [...new Set(candidateModels)];
+
+  let lastError = 'request-failed';
+  let lastStatus = 500;
+  let isNetworkError = false;
+
+  for (const model of uniqueModels) {
+    try {
+      const payload = {
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      };
+      if (systemInstruction) {
+        payload.systemInstruction = typeof systemInstruction === 'string'
+          ? { parts: [{ text: systemInstruction }] }
+          : systemInstruction;
+      }
+      if (jsonMode) {
+        payload.generationConfig = { responseMimeType: 'application/json' };
+      }
+
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
-        body: JSON.stringify({ systemInstruction, contents: [{ role: 'user', parts: [{ text: prompt }] }] }),
+        body: JSON.stringify(payload),
       });
 
+      lastStatus = res.status;
       if (res.status === 404) {
-        lastError = 'model-unavailable';
+        const errText = await res.text().catch(() => '');
+        console.warn(`[Bob Gemini] Model "${model}" HTTP 404:`, errText.slice(0, 150));
+        lastError = `model-${model}-not-found`;
         continue;
       }
       if (res.status === 400 || res.status === 401 || res.status === 403) {
-        return { ok: false, reason: 'bad-key', status: res.status };
+        const errJson = await res.json().catch(() => ({}));
+        return {
+          ok: false,
+          reason: 'bad-key',
+          status: res.status,
+          message: errJson.error?.message || 'Invalid or rejected Gemini API key. Please check your key in Bob Desktop Settings.'
+        };
       }
       if (res.status === 429) {
-        return { ok: false, reason: 'rate-limited', status: 429 };
+        return {
+          ok: false,
+          reason: 'rate-limited',
+          status: 429,
+          retryAfter: 30,
+          message: 'Gemini API rate limit reached. Please wait a few seconds and try again.'
+        };
       }
       if (!res.ok) {
         lastError = `http-${res.status}`;
@@ -715,14 +816,37 @@ async function callGemini(prompt, contextText) {
       const data = await res.json();
       const parts = (((data.candidates || [])[0] || {}).content || {}).parts || [];
       const reply = parts.map((p) => p.text || '').join('').trim();
-      if (reply) return { ok: true, reply, model };
+      if (reply) {
+        if (settings.verifiedModel !== model) {
+          await setSettings({ verifiedModel: model });
+          bridgeFetch('/events/settings', { method: 'POST', body: { verifiedModel: model } }).catch(() => {});
+        }
+        return { ok: true, reply, model };
+      }
       lastError = 'empty-response';
     } catch (err) {
+      isNetworkError = true;
       lastError = (err && err.message) || 'network-error';
     }
   }
 
-  return { ok: false, reason: 'request-failed', detail: lastError };
+  if (isNetworkError) {
+    return {
+      ok: false,
+      reason: 'network-error',
+      status: 0,
+      message: 'Network error connecting to Gemini API. Please check your internet connection.'
+    };
+  }
+
+  return {
+    ok: false,
+    reason: 'model-unavailable',
+    status: lastStatus,
+    triedModels: uniqueModels,
+    message: `Model unavailable – tried ${uniqueModels.join(', ')}. Please check your model access in Bob Desktop Settings.`,
+    detail: `All candidate models failed (${uniqueModels.join(', ')}). Last error: ${lastError}`
+  };
 }
 
 async function buildContext(opts = {}) {
@@ -1124,21 +1248,180 @@ async function handleMessage(message, sender) {
       return relayToTab(tab.id, { type: 'BOB_HIGHLIGHT_SELECTION', color: message.color || 'yellow' });
     }
 
+    case 'AUTO_HIGHLIGHT':
     case 'AUTO_HIGHLIGHT_PAGE': {
       const tab = await activeTab(sender);
       if (!tab || !tab.id) return { ok: false, reason: 'no-tab' };
-      const tabs = await readList(KEYS.tabs);
-      const notes = await readList(KEYS.notes);
       const settings = await getSettings();
-      const focus = [
-        settings.researchFocus || '',
-        message.focus || '',
-        ...tabs.filter((t) => t.selected).map((t) => t.title),
-        ...notes.slice(0, 5).map((n) => n.text),
-      ]
-        .filter(Boolean)
-        .join('\n');
-      return relayToTab(tab.id, { type: 'BOB_AUTO_HIGHLIGHT', focus });
+      const goal = message.goal || message.focus || settings.activeGoal || settings.researchFocus || '';
+      return relayToTab(tab.id, { type: 'BOB_AUTO_HIGHLIGHT', goal, focus: goal });
+    }
+
+    case 'CLEAR_HIGHLIGHTS':
+    case 'CLEAR_PAGE_HIGHLIGHTS': {
+      const tab = await activeTab(sender);
+      const targetUrl = message.url || (tab ? tab.url : '');
+      if (targetUrl) {
+        const existing = await readList(KEYS.highlights);
+        await writeList(KEYS.highlights, existing.filter((h) => h.url !== targetUrl));
+        broadcast({ type: 'BOB_HIGHLIGHTS_CHANGED', url: targetUrl });
+      }
+      if (tab && tab.id) {
+        relayToTab(tab.id, { type: 'BOB_CLEAR_PAGE_HIGHLIGHTS' });
+      }
+      return { ok: true };
+    }
+
+    case 'ANALYZE_PAGE_FOR_HIGHLIGHTS': {
+      const blocks = Array.isArray(message.blocks) ? message.blocks : [];
+      const goal = String(message.goal || '').trim();
+      const pageTitle = String(message.title || '');
+      const pageUrl = String(message.url || '');
+
+      if (!blocks.length) {
+        return { ok: false, reason: 'no-blocks', message: 'No readable text blocks found on this page.' };
+      }
+
+      // Build a map of blockId -> block text for verification
+      const blockMap = new Map();
+      blocks.forEach((b) => {
+        if (b && b.id && b.text) blockMap.set(String(b.id), String(b.text));
+      });
+
+      // Format blocks for prompt (capped at 35 blocks, 800 chars each to stay snappy)
+      const blocksText = blocks
+        .slice(0, 35)
+        .map((b) => `[Block ID: ${b.id}]\n${b.text.slice(0, 800).trim()}`)
+        .join('\n\n');
+
+      const systemInstruction =
+        'You are Bob, an expert research analyst. You extract only the most valuable, high-signal passages from a webpage.\n' +
+        'CRITICAL RULES:\n' +
+        '1. The goal comes first. Passages that directly answer or inform the goal are top priority.\n' +
+        '2. Otherwise prioritize: direct conclusions, quantitative claims backed by numbers/evidence, core definitions of key terms, surprising/contradicting findings, caveats/limitations, concrete next actions.\n' +
+        '3. Ignore navigation, marketing fluff, boilerplate, ads, cookie notices, repeated headers.\n' +
+        '4. Every "quote" MUST be an EXACT, verbatim, word-for-word substring from the text of the block identified by "blockId". Do NOT alter words, grammar, or punctuation.\n' +
+        '5. Return ONLY a valid JSON array of 5 to 10 highlights adhering to this schema:\n' +
+        '[{"blockId": string, "quote": string, "reason": string (max 12 words), "category": "claim"|"data"|"definition"|"conclusion"|"caveat"|"action", "score": number between 0 and 1}]\n' +
+        'No markdown code fences, no extra conversational text.';
+
+      const userPrompt =
+        `PAGE TITLE: "${pageTitle}"\n` +
+        `RESEARCH GOAL: "${goal || 'Identify the most important findings, claims with data, core definitions, and actionable takeaways.'}"\n\n` +
+        `PAGE TEXT BLOCKS:\n${blocksText}\n\n` +
+        `Return only the JSON array of verified highlights:`;
+
+      const genRes = await callGemini(userPrompt, '', {
+        jsonMode: true,
+        systemInstruction
+      });
+
+      if (!genRes.ok) {
+        return genRes;
+      }
+
+      let rawText = genRes.reply || '';
+      rawText = rawText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
+
+      let items = [];
+      try {
+        items = JSON.parse(rawText);
+        if (!Array.isArray(items)) {
+          if (items && Array.isArray(items.highlights)) items = items.highlights;
+          else items = [];
+        }
+      } catch (err) {
+        const match = rawText.match(/\[\s*\{[\s\S]*\}\s*\]/);
+        if (match) {
+          try { items = JSON.parse(match[0]); } catch {}
+        }
+      }
+
+      if (!Array.isArray(items) || !items.length) {
+        return { ok: false, reason: 'parse-failed', detail: 'Gemini did not return a valid list of highlights.' };
+      }
+
+      const validCategories = new Set(['claim', 'data', 'definition', 'conclusion', 'caveat', 'action']);
+      
+      // Verification: ensure quote is an exact or normalized substring of real page block text
+      const verifiedItems = [];
+      for (const item of items) {
+        if (!item || typeof item.quote !== 'string') continue;
+        const q = item.quote.trim();
+        if (q.length < 8) continue;
+
+        let matchedBlockId = String(item.blockId || '');
+        let blkText = blockMap.get(matchedBlockId) || '';
+        const normQ = q.replace(/\s+/g, ' ').toLowerCase();
+
+        if (!blkText.replace(/\s+/g, ' ').toLowerCase().includes(normQ)) {
+          // Check other blocks
+          let foundInOther = false;
+          for (const [otherId, otherText] of blockMap.entries()) {
+            if (otherText.replace(/\s+/g, ' ').toLowerCase().includes(normQ)) {
+              matchedBlockId = otherId;
+              blkText = otherText;
+              foundInOther = true;
+              break;
+            }
+          }
+          if (!foundInOther) {
+            // Drop quote that does not match real page text
+            continue;
+          }
+        }
+
+        verifiedItems.push({
+          ...item,
+          blockId: matchedBlockId,
+          quote: q
+        });
+      }
+
+      if (!verifiedItems.length) {
+        return { ok: false, reason: 'no-verified-quotes', detail: 'Passages returned by model could not be verified on the page.' };
+      }
+
+      const sanitized = verifiedItems
+        .map((item, idx) => ({
+          id: 'hl_' + Date.now() + '_' + idx,
+          blockId: String(item.blockId || ''),
+          quote: String(item.quote).trim(),
+          reason: String(item.reason || 'Key research passage').slice(0, 120).trim(),
+          category: validCategories.has(String(item.category).toLowerCase()) ? String(item.category).toLowerCase() : 'conclusion',
+          score: typeof item.score === 'number' ? Math.max(0, Math.min(1, item.score)) : 0.8,
+          url: pageUrl,
+          title: pageTitle,
+          goal: goal || ''
+        }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 10);
+
+      // Save to highlights list
+      const existing = await readList(KEYS.highlights);
+      const updated = [...sanitized, ...existing.filter((h) => h.url !== pageUrl)].slice(0, 2000);
+      await writeList(KEYS.highlights, updated);
+
+      // Relay to the tab so page highlights immediately appear on the page DOM
+      const tab = await activeTab(sender);
+      if (tab && tab.id) {
+        relayToTab(tab.id, {
+          type: 'BOB_RENDER_HIGHLIGHTS',
+          highlights: sanitized,
+          goal,
+          url: pageUrl
+        });
+      }
+
+      broadcast({ type: 'BOB_HIGHLIGHTS_CHANGED', url: pageUrl, highlights: sanitized, goal });
+
+      return {
+        ok: true,
+        highlights: sanitized,
+        goal,
+        url: pageUrl,
+        count: sanitized.length
+      };
     }
 
     case 'RESTORE_HIGHLIGHTS': {

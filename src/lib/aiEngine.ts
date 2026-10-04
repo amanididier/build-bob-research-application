@@ -45,6 +45,7 @@ export interface AiSynthesisResponse {
 
 const ENGINE_STORAGE_KEY = 'bob_local_ai_installed_state_v1';
 const GEMINI_KEY_STORAGE = 'bob_gemini_api_key';
+const VERIFIED_MODEL_STORAGE = 'bob_verified_gemini_model';
 
 class BobAiManager {
   private hardwareInfo: SystemHardwareInfo;
@@ -52,8 +53,13 @@ class BobAiManager {
   private listeners: Array<(status: ModelDownloadStatus) => void> = [];
   private downloadInterval: any = null;
   private geminiKey: string | null = null;
+  private verifiedModel: string = 'gemini-3.1-flash-lite';
 
   constructor() {
+    try {
+      const savedModel = localStorage.getItem(VERIFIED_MODEL_STORAGE);
+      if (savedModel) this.verifiedModel = savedModel;
+    } catch {}
     this.hardwareInfo = detectSystemHardware();
     const tier = this.hardwareInfo.recommendedTier;
     const modelProfile = MODEL_CATALOG[tier];
@@ -140,16 +146,34 @@ class BobAiManager {
     this.listeners.forEach((fn) => fn(copy));
   }
 
+  public getVerifiedModel(): string {
+    return this.verifiedModel || 'gemini-3.1-flash-lite';
+  }
+
+  public setVerifiedModel(model: string): void {
+    this.verifiedModel = model || 'gemini-3.1-flash-lite';
+    try {
+      localStorage.setItem(VERIFIED_MODEL_STORAGE, this.verifiedModel);
+    } catch {}
+  }
+
   public async testGeminiConnection(key: string): Promise<{ ok: boolean; message: string; model?: string }> {
     const trimmed = key.trim();
     if (!trimmed) {
       return { ok: false, message: 'Please paste a valid Google AI Studio API key.' };
     }
 
-    const candidateModels = ['gemini-flash-latest', 'gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-3.8-flash'];
+    const candidateModels = [
+      this.verifiedModel,
+      'gemini-3.1-flash-lite',
+      'gemini-flash-latest',
+      'gemini-2.5-flash',
+      'gemini-3.8-flash'
+    ].filter(Boolean);
+    const uniqueModels = [...new Set(candidateModels)];
 
     // 1. Try SDK
-    for (const model of candidateModels) {
+    for (const model of uniqueModels) {
       try {
         const ai = new GoogleGenAI({ apiKey: trimmed });
         const res = await ai.models.generateContent({
@@ -157,6 +181,7 @@ class BobAiManager {
           contents: 'Respond with "Ready" in one word.'
         });
         if (res && res.text) {
+          this.setVerifiedModel(model);
           return { ok: true, message: `Connected to ${model}! Response verified.`, model };
         }
       } catch (err: any) {
@@ -165,7 +190,7 @@ class BobAiManager {
     }
 
     // 2. Try direct REST endpoint
-    for (const model of candidateModels) {
+    for (const model of uniqueModels) {
       try {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${trimmed}`, {
           method: 'POST',
@@ -175,6 +200,7 @@ class BobAiManager {
           })
         });
         if (res.ok) {
+          this.setVerifiedModel(model);
           return { ok: true, message: `Connected to ${model} via secure API endpoint!`, model };
         }
       } catch {}
@@ -234,7 +260,14 @@ class BobAiManager {
     // 1. Try Google Gemini API if user has connected their key
     const geminiKey = this.getGeminiKey();
     if (geminiKey) {
-      const candidateModels = ['gemini-flash-latest', 'gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-3.8-flash'];
+      const candidateModels = [
+        this.verifiedModel,
+        'gemini-3.1-flash-lite',
+        'gemini-flash-latest',
+        'gemini-2.5-flash',
+        'gemini-3.8-flash'
+      ].filter(Boolean);
+      const uniqueModels = [...new Set(candidateModels)];
       const systemPrompt = `You are Bob, an intelligent, helpful research companion.
 Speak naturally, warmly, and clearly like ChatGPT or Gemini.
 When presenting comparisons or structured findings, use clean markdown tables.

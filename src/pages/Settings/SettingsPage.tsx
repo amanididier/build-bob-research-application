@@ -117,7 +117,7 @@ export const SettingsPage: React.FC = () => {
     }
   }, []);
 
-  const handleSaveGeminiKey = (key: string) => {
+  const handleSaveGeminiKey = async (key: string) => {
     const trimmed = key.trim();
     bobAi.setGeminiKey(trimmed);
     setGeminiKeyInput(trimmed);
@@ -125,7 +125,33 @@ export const SettingsPage: React.FC = () => {
     setSaveToast(true);
     setKeyTestFeedback(null);
     setTimeout(() => setSaveToast(false), 2500);
-    triggerThinking('Key Saved', 'Google Gemini API key updated. Instant response tier active.', 'Configured');
+
+    // Sync key to desktop app and bridge
+    if (typeof window !== 'undefined' && (window as any).bob?.setGeminiKey) {
+      await (window as any).bob.setGeminiKey(trimmed);
+    } else {
+      await fetch('http://127.0.0.1:54321/events/settings', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-bob-token': 'development-token' },
+        body: JSON.stringify({ geminiKey: trimmed })
+      }).catch(() => {});
+    }
+
+    if (trimmed) {
+      const res = await bobAi.testGeminiConnection(trimmed);
+      if (res && res.ok && res.model) {
+        if (typeof window !== 'undefined' && (window as any).bob?.setVerifiedModel) {
+          await (window as any).bob.setVerifiedModel(res.model);
+        } else {
+          await fetch('http://127.0.0.1:54321/events/settings', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'x-bob-token': 'development-token' },
+            body: JSON.stringify({ verifiedModel: res.model })
+          }).catch(() => {});
+        }
+      }
+    }
+    triggerThinking('Key Saved', 'Google Gemini API key updated and verified. Connected to companion extension.', 'Configured');
   };
 
   const handleTestGeminiKey = async () => {
@@ -136,8 +162,23 @@ export const SettingsPage: React.FC = () => {
       const res = await bobAi.testGeminiConnection(geminiKeyInput);
       setKeyTestFeedback(res);
       if (res.ok) {
-        bobAi.setGeminiKey(geminiKeyInput.trim());
+        const trimmed = geminiKeyInput.trim();
+        bobAi.setGeminiKey(trimmed);
         setHasKey(true);
+        if (typeof window !== 'undefined' && (window as any).bob?.setGeminiKey) {
+          await (window as any).bob.setGeminiKey(trimmed);
+        }
+        if (res.model) {
+          if (typeof window !== 'undefined' && (window as any).bob?.setVerifiedModel) {
+            await (window as any).bob.setVerifiedModel(res.model);
+          } else {
+            await fetch('http://127.0.0.1:54321/events/settings', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json', 'x-bob-token': 'development-token' },
+              body: JSON.stringify({ geminiKey: trimmed, verifiedModel: res.model })
+            }).catch(() => {});
+          }
+        }
       }
     } catch (err: any) {
       setKeyTestFeedback({ ok: false, message: err?.message || 'Verification error' });

@@ -82,7 +82,17 @@
       pill.style.display = 'flex';
       btn.className = 'update-pill-btn blue';
       btn.innerHTML = '<span>Restart to finish</span><span class="arr">→</span>';
-      btn.title = 'Desktop update ready! Click to reload extension & restart desktop.';
+      btn.title = 'Bob update ready! Click to restart desktop or reload extension.';
+      btn.onclick = async () => {
+        toast('Restarting Bob to finish update…');
+        try {
+          await fetch('http://127.0.0.1:54321/events/restart', {
+            method: 'POST',
+            headers: { 'x-bob-token': 'development-token' }
+          }).catch(() => {});
+        } catch {}
+        try { chrome.runtime.reload(); } catch {}
+      };
     } else if (data.isDownloading) {
       pill.style.display = 'flex';
       btn.className = 'update-pill-btn yellow';
@@ -92,7 +102,10 @@
       pill.style.display = 'flex';
       btn.className = 'update-pill-btn yellow';
       btn.innerHTML = '<span>Update Available</span><span class="arr">→</span>';
-      btn.title = 'New version available. Click to download.';
+      btn.title = 'New version available. Click to open Bob Desktop and download.';
+      btn.onclick = () => {
+        openDesktop();
+      };
     } else {
       pill.style.display = 'none';
     }
@@ -133,14 +146,27 @@
 
     state.bridge.connected = isConn;
     renderUpdatePill(bridgeData);
+
+    if (bridgeData) {
+      if (bridgeData.version) state.desktopVersion = bridgeData.version;
+      if (bridgeData.settingsVersion && bridgeData.settingsVersion !== state.settingsVersion) {
+        state.settingsVersion = bridgeData.settingsVersion;
+        if (bridgeData.verifiedModel) state.verifiedModel = bridgeData.verifiedModel;
+        if (bridgeData.activeGoal !== undefined && bridgeData.activeGoal !== state.activeGoal) {
+          state.activeGoal = bridgeData.activeGoal;
+          updateGoalDisplay();
+        }
+      }
+    }
+
     const dot = $('desktop-status-dot');
     if (dot) {
       if (isConn) {
         dot.classList.remove('off');
-        dot.title = 'Bob Desktop is connected & listening on port 54321';
+        dot.title = `Bob Desktop connected (v${bridgeData && bridgeData.version ? bridgeData.version : state.desktopVersion})`;
       } else {
         dot.classList.add('off');
-        dot.title = 'Bob Desktop is offline or closed';
+        dot.title = 'Bob Desktop not running. Click to start Bob Desktop.';
       }
     }
   }
@@ -183,6 +209,11 @@
     });
     const target = $(`view-${viewName}`);
     if (target) target.classList.add('active');
+
+    if (viewName === 'important') {
+      updateGoalDisplay();
+      loadTabHighlights();
+    }
 
     // Close any floating menus on view change
     closeAllMenus();
@@ -418,6 +449,71 @@
     return card;
   }
 
+  function appendErrorCard({ reason, title, message, triedModels, retryPrompt }) {
+    const chatList = $('chatList');
+    if (!chatList) return;
+    const card = document.createElement('div');
+    card.className = 'ai-card error-card';
+
+    let displayTitle = title || 'Gemini Request Failed';
+    let displayMsg = message || 'Could not generate a response from Gemini.';
+    let showSettingsBtn = false;
+    let showRetryBtn = true;
+
+    if (reason === 'desktop-offline') {
+      displayTitle = "Bob Desktop isn't running";
+      displayMsg = "Bob Desktop is required for AI reasoning and Google Gemini connectivity. Please start Bob Desktop on your computer.";
+      showSettingsBtn = true;
+    } else if (reason === 'no-key') {
+      displayTitle = "No Gemini API key saved";
+      displayMsg = "Please save your Google Gemini API key in Bob Desktop Settings to enable live answers.";
+      showSettingsBtn = true;
+      showRetryBtn = false;
+    } else if (reason === 'bad-key') {
+      displayTitle = "Gemini key rejected";
+      displayMsg = "Google API rejected the key. Please verify your Gemini API key in Bob Desktop Settings.";
+      showSettingsBtn = true;
+    } else if (reason === 'model-unavailable') {
+      displayTitle = `Model unavailable – tried ${triedModels && triedModels.length ? triedModels.join(', ') : 'Flash candidate models'}`;
+      displayMsg = "All candidate Gemini models were unavailable or returned 404 for your key. Please verify your model tier in Bob Desktop Settings.";
+      showSettingsBtn = true;
+    } else if (reason === 'rate-limited') {
+      displayTitle = "Rate limit reached";
+      displayMsg = "Google Gemini rate limit reached. Please wait a few seconds and click Retry.";
+    } else if (reason === 'network-error') {
+      displayTitle = "Network connection error";
+      displayMsg = "Could not connect to Google Gemini API. Please check your internet connection.";
+    }
+
+    card.innerHTML = `
+      <div class="error-title">⚠️ ${escapeHtml(displayTitle)}</div>
+      <div class="error-msg">${escapeHtml(displayMsg)}</div>
+      <div class="error-actions">
+        ${showRetryBtn && retryPrompt ? `<button class="btn-error-retry" type="button">Retry</button>` : ''}
+        ${showSettingsBtn ? `<button class="btn-error-settings" type="button">Open Desktop Settings</button>` : ''}
+      </div>
+    `;
+
+    const retryBtn = card.querySelector('.btn-error-retry');
+    if (retryBtn) {
+      retryBtn.addEventListener('click', () => {
+        card.remove();
+        $('prompt').value = retryPrompt;
+        sendPrompt();
+      });
+    }
+
+    const settingsBtn = card.querySelector('.btn-error-settings');
+    if (settingsBtn) {
+      settingsBtn.addEventListener('click', () => {
+        openDesktop();
+      });
+    }
+
+    chatList.appendChild(card);
+    scrollChat();
+  }
+
   function scrollChat() {
     const container = document.querySelector('.content');
     if (container) {
@@ -465,48 +561,191 @@
         }
       });
 
-      if (res && res.ok && res.reply) {
-        replyText = res.reply;
-      } else if (res && res.reason === 'no-key') {
-        replyText = '✦ No Gemini API key found. Please save your Gemini API key in Bob Desktop Settings (or click the desktop icon in the top header) to enable live answers.';
-      } else if (res && res.reason === 'bad-key') {
-        replyText = '✦ Invalid or rejected Gemini API key. Please check your Gemini API key in Bob Desktop Settings.';
-      } else if (res && res.reason === 'rate-limited') {
-        replyText = '✦ Gemini API rate limit reached. Please wait a few seconds and try again.';
-      } else if (res && res.detail) {
-        replyText = `✦ Gemini request failed: ${res.detail}. Please check your Gemini key in Bob Desktop Settings.`;
-      } else {
-        replyText = (res && res.reply) || `Bob could not generate a response. Please check your Gemini API key in Bob Desktop Settings.`;
-      }
-    } catch (err) {
-      replyText = `Bob encountered a connection error. Please ensure Bob Desktop is running.`;
-    } finally {
-      state.busy = false;
       if (typingBubble && typingBubble.parentElement) {
         typingBubble.parentElement.removeChild(typingBubble);
       }
-      appendAiMessage(replyText, citations);
 
-      // Mirror directly to desktop if connected and in a research project
-      if (state.sessionMode === 'research' && state.activeProjectId) {
-        fetch('http://127.0.0.1:54321/events/chat', {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            'x-bob-token': 'development-token',
-            'x-bob-client': 'bob-chrome-extension'
-          },
-          body: JSON.stringify({
-            prompt: text,
-            reply: replyText,
-            projectId: state.activeProjectId,
-            sources: citations
-          })
-        }).catch(() => {});
+      if (res && res.ok && res.reply) {
+        replyText = res.reply;
+        appendAiMessage(replyText, citations);
+
+        // Mirror directly to desktop if connected and in a research project
+        if (state.sessionMode === 'research' && state.activeProjectId) {
+          fetch('http://127.0.0.1:54321/events/chat', {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              'x-bob-token': 'development-token',
+              'x-bob-client': 'bob-chrome-extension'
+            },
+            body: JSON.stringify({
+              prompt: text,
+              reply: replyText,
+              projectId: state.activeProjectId,
+              sources: citations
+            })
+          }).catch(() => {});
+        }
+
+        checkTaskMilestone(text);
+      } else {
+        appendErrorCard({
+          reason: res?.reason,
+          message: res?.message || res?.detail,
+          triedModels: res?.triedModels,
+          status: res?.status,
+          retryPrompt: text
+        });
       }
+    } catch (err) {
+      if (typingBubble && typingBubble.parentElement) {
+        typingBubble.parentElement.removeChild(typingBubble);
+      }
+      appendErrorCard({
+        reason: 'network-error',
+        message: err?.message || 'Connection error. Please ensure Bob Desktop is running.',
+        retryPrompt: text
+      });
+    } finally {
+      state.busy = false;
+    }
+  }
 
-      // Trigger context task prompt if active tasks exist
-      checkTaskMilestone(text);
+  // --------------------------------------------------- Important View & Highlights (Phase 2 & 3)
+
+  function updateGoalDisplay() {
+    const goalBar = $('activeGoalBar');
+    const goalText = $('activeGoalText');
+    const goalAsk = $('goalAskCard');
+
+    if (state.activeGoal && state.activeGoal.trim()) {
+      if (goalBar) goalBar.style.display = 'flex';
+      if (goalText) goalText.textContent = state.activeGoal;
+      if (goalAsk) goalAsk.style.display = 'none';
+    } else {
+      if (goalBar) goalBar.style.display = 'none';
+      if (goalAsk) goalAsk.style.display = 'block';
+    }
+  }
+
+  async function setGoalAndHighlight(newGoal) {
+    state.activeGoal = String(newGoal || '').trim();
+    updateGoalDisplay();
+
+    // Sync to extension storage and desktop bridge
+    chrome.storage.local.set({ activeGoal: state.activeGoal });
+    fetch('http://127.0.0.1:54321/events/settings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-bob-token': 'development-token' },
+      body: JSON.stringify({ activeGoal: state.activeGoal })
+    }).catch(() => {});
+
+    await runHighlightsForPage(state.activeGoal);
+  }
+
+  async function runHighlightsForPage(goal) {
+    const loading = $('highlightsLoading');
+    const empty = $('highlightsEmpty');
+    const list = $('highlightsList');
+
+    if (loading) loading.style.display = 'block';
+    if (empty) empty.style.display = 'none';
+
+    // Get visible blocks from current page
+    const tabs = await new Promise((r) => chrome.tabs.query({ active: true, currentWindow: true }, r));
+    const activeTab = tabs && tabs[0];
+    if (!activeTab || !activeTab.id) {
+      if (loading) loading.style.display = 'none';
+      toast('No active page found');
+      return;
+    }
+
+    // Ask tab to extract blocks
+    let pageBlocks = [];
+    try {
+      const blkRes = await new Promise((resolve) => {
+        chrome.tabs.sendMessage(activeTab.id, { type: 'BOB_EXTRACT_PAGE_BLOCKS' }, (res) => {
+          if (chrome.runtime.lastError) resolve(null);
+          else resolve(res);
+        });
+      });
+      if (blkRes && Array.isArray(blkRes.blocks)) {
+        pageBlocks = blkRes.blocks;
+      }
+    } catch {}
+
+    const res = await send({
+      type: 'ANALYZE_PAGE_FOR_HIGHLIGHTS',
+      blocks: pageBlocks,
+      goal: goal || state.activeGoal || 'Identify key findings, evidence, definitions, and conclusions.',
+      title: activeTab.title || '',
+      url: activeTab.url || ''
+    });
+
+    if (loading) loading.style.display = 'none';
+
+    if (res && res.ok && Array.isArray(res.highlights)) {
+      state.highlights = res.highlights;
+      renderHighlightsList(res.highlights);
+      toast(`✦ Found ${res.highlights.length} key highlights`);
+    } else {
+      toast(res.message || res.detail || 'Could not extract highlights');
+      if (empty) empty.style.display = 'block';
+    }
+  }
+
+  function renderHighlightsList(items = []) {
+    const list = $('highlightsList');
+    if (!list) return;
+
+    const empty = $('highlightsEmpty');
+    list.querySelectorAll('.highlight-row').forEach((el) => el.remove());
+
+    if (!items || !items.length) {
+      if (empty) empty.style.display = 'block';
+      return;
+    }
+    if (empty) empty.style.display = 'none';
+
+    items.forEach((item, idx) => {
+      const row = document.createElement('div');
+      row.className = `highlight-row ${idx === 0 ? 'top-highlight' : ''}`;
+      row.dataset.highlightId = item.id;
+
+      const cat = (item.category || 'conclusion').toLowerCase();
+      row.innerHTML = `
+        <div class="hl-header-line">
+          <div class="hl-meta">
+            <span class="hl-cat-dot ${cat}"></span>
+            <span class="hl-cat-badge">${cat.toUpperCase()}</span>
+          </div>
+          ${idx === 0 ? '<span class="hl-score-star" title="Top research highlight">★ TOP</span>' : ''}
+        </div>
+        <div class="hl-reason">${escapeHtml(item.reason || 'Key passage')}</div>
+        <div class="hl-quote">“${escapeHtml((item.quote || '').slice(0, 140))}”</div>
+      `;
+
+      row.addEventListener('click', async () => {
+        const tabs = await new Promise((r) => chrome.tabs.query({ active: true, currentWindow: true }, r));
+        const curTab = tabs && tabs[0];
+        if (curTab && curTab.id) {
+          chrome.tabs.sendMessage(curTab.id, { type: 'BOB_FOCUS_HIGHLIGHT', id: item.id });
+        }
+      });
+
+      list.appendChild(row);
+    });
+  }
+
+  async function loadTabHighlights() {
+    const tabs = await new Promise((r) => chrome.tabs.query({ active: true, currentWindow: true }, r));
+    const activeTab = tabs && tabs[0];
+    if (!activeTab || !activeTab.url) return;
+
+    const res = await send({ type: 'GET_HIGHLIGHTS', url: activeTab.url });
+    if (res && res.ok && Array.isArray(res.highlights)) {
+      state.highlights = res.highlights;
+      renderHighlightsList(res.highlights);
     }
   }
 
@@ -1062,8 +1301,12 @@
     if (toolAutoHl) {
       toolAutoHl.addEventListener('click', async () => {
         toggleToolsMenu();
-        await send({ type: 'AUTO_HIGHLIGHT' });
-        toast('Important passages highlighted on page');
+        switchView('important');
+        if (!state.activeGoal) {
+          toast('Select or set your research goal to highlight');
+        } else {
+          runHighlightsForPage(state.activeGoal);
+        }
       });
     }
 
@@ -1072,7 +1315,74 @@
       toolClearHl.addEventListener('click', async () => {
         toggleToolsMenu();
         await send({ type: 'CLEAR_HIGHLIGHTS' });
+        state.highlights = [];
+        renderHighlightsList([]);
+        toast('Highlights cleared from page');
+      });
+    }
+
+    // Important on this page view controls (Phase 2 & 3)
+    const btnRerunHl = $('btn-rerun-highlights');
+    if (btnRerunHl) {
+      btnRerunHl.addEventListener('click', () => {
+        runHighlightsForPage(state.activeGoal);
+      });
+    }
+
+    const btnClearSideHl = $('btn-clear-side-highlights');
+    if (btnClearSideHl) {
+      btnClearSideHl.addEventListener('click', async () => {
+        await send({ type: 'CLEAR_HIGHLIGHTS' });
+        state.highlights = [];
+        renderHighlightsList([]);
         toast('Highlights cleared');
+      });
+    }
+
+    const btnChangeGoal = $('btn-change-goal');
+    if (btnChangeGoal) {
+      btnChangeGoal.addEventListener('click', () => {
+        const goalAsk = $('goalAskCard');
+        if (goalAsk) goalAsk.style.display = 'block';
+      });
+    }
+
+    // Goal suggestions click
+    $$('.goal-suggest-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const chosenGoal = btn.dataset.goal || btn.textContent.trim();
+        setGoalAndHighlight(chosenGoal);
+      });
+    });
+
+    // Custom goal input
+    const btnSetCustomGoal = $('btn-set-custom-goal');
+    const customGoalInput = $('customGoalInput');
+    if (btnSetCustomGoal && customGoalInput) {
+      btnSetCustomGoal.addEventListener('click', () => {
+        const g = customGoalInput.value.trim();
+        if (g) {
+          setGoalAndHighlight(g);
+          customGoalInput.value = '';
+        }
+      });
+      customGoalInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const g = customGoalInput.value.trim();
+          if (g) {
+            setGoalAndHighlight(g);
+            customGoalInput.value = '';
+          }
+        }
+      });
+    }
+
+    // Just show me the key points
+    const btnJustKey = $('btn-just-key-points');
+    if (btnJustKey) {
+      btnJustKey.addEventListener('click', () => {
+        setGoalAndHighlight('Identify the most important findings, claims with data, core definitions, and conclusions.');
       });
     }
 
@@ -1304,13 +1614,42 @@
     wireEvents();
     syncComposerSize();
 
-    // Check desktop bridge immediately and set heartbeat
+    // Check desktop bridge immediately and set periodic sync
     await checkBridgeStatus();
-    setInterval(checkBridgeStatus, 2500);
+    setInterval(checkBridgeStatus, 25000);
     window.addEventListener('focus', checkBridgeStatus);
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) checkBridgeStatus();
     });
+
+    // Listen for broadcast sync events from background service worker
+    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
+      chrome.runtime.onMessage.addListener((msg) => {
+        if (!msg) return;
+        if (msg.type === 'BOB_HIGHLIGHTS_CHANGED') {
+          if (Array.isArray(msg.highlights)) {
+            state.highlights = msg.highlights;
+            renderHighlightsList(msg.highlights);
+          }
+          if (msg.goal !== undefined) {
+            state.activeGoal = msg.goal;
+            updateGoalDisplay();
+          }
+        }
+        if (msg.type === 'BOB_SETTINGS_SYNCED') {
+          if (msg.settings) {
+            if (msg.settings.verifiedModel) state.verifiedModel = msg.settings.verifiedModel;
+            if (msg.settings.activeGoal !== undefined) {
+              state.activeGoal = msg.settings.activeGoal;
+              updateGoalDisplay();
+            }
+          }
+          if (msg.bridge) {
+            renderUpdatePill(msg.bridge);
+          }
+        }
+      });
+    }
 
     // Load initial context
     loadTabs().catch(() => {});
