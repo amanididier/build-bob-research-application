@@ -81,7 +81,9 @@
     if (data.readyToRestart) {
       pill.style.display = 'flex';
       btn.className = 'update-pill-btn blue';
-      btn.innerHTML = '<span>Restart to finish</span><span class="arr">→</span>';
+      btn.style.setProperty('background-color', '#0080f5', 'important');
+      btn.style.setProperty('color', '#ffffff', 'important');
+      btn.innerHTML = '<span style="color:#ffffff!important;font-weight:700;">Restart to finish</span><span class="arr" style="color:#ffffff!important;">→</span>';
       btn.title = 'Bob update ready! Click to restart desktop or reload extension.';
       btn.onclick = async () => {
         toast('Restarting Bob to finish update…');
@@ -96,12 +98,16 @@
     } else if (data.isDownloading) {
       pill.style.display = 'flex';
       btn.className = 'update-pill-btn yellow';
-      btn.innerHTML = `<span>Updating… ${data.updatePercent || 0}%</span>`;
+      btn.style.setProperty('background-color', '#fffc00', 'important');
+      btn.style.setProperty('color', '#171717', 'important');
+      btn.innerHTML = `<span style="color:#171717!important;font-weight:700;">Updating… ${data.updatePercent || 0}%</span>`;
       btn.title = `Downloading update: ${data.updatePercent || 0}%`;
     } else if (data.isAvailable) {
       pill.style.display = 'flex';
       btn.className = 'update-pill-btn yellow';
-      btn.innerHTML = '<span>Update Available</span><span class="arr">→</span>';
+      btn.style.setProperty('background-color', '#fffc00', 'important');
+      btn.style.setProperty('color', '#171717', 'important');
+      btn.innerHTML = '<span style="color:#171717!important;font-weight:700;">Update Available</span><span class="arr" style="color:#171717!important;">→</span>';
       btn.title = 'New version available. Click to open Bob Desktop and download.';
       btn.onclick = () => {
         openDesktop();

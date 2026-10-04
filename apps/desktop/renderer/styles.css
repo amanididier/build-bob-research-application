@@ -32,30 +32,114 @@ li .meta a, li .meta button { color: #7da2ff; background: none; padding: 0; }
   gap: 8px;
   max-width: min(430px, 42vw);
   margin-left: 14px;
-  padding: 7px 9px 7px 11px;
+  padding: 6px 12px;
   border: 1px solid rgba(245, 190, 70, 0.42);
   border-radius: 999px;
-  background: rgba(245, 190, 70, 0.14);
-  color: #ffe8a3;
-  box-shadow: 0 8px 22px rgba(20, 14, 2, 0.16);
+  background: #fffc00;
+  color: #171717;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
   font-size: 12px;
+  font-weight: 700;
   white-space: nowrap;
 }
-.updatePill[data-status="downloading"] { border-color: rgba(245, 190, 70, 0.6); }
-.updatePill[data-status="ready"] { border-color: rgba(93, 211, 145, 0.5); background: rgba(93, 211, 145, 0.13); color: #c9ffdc; }
-.updatePill[data-status="error"] { border-color: rgba(245, 113, 113, 0.5); background: rgba(245, 113, 113, 0.12); color: #ffd0d0; }
-.updatePillDot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: #f5be46; box-shadow: 0 0 0 3px rgba(245, 190, 70, 0.14); }
-.updatePill[data-status="downloading"] .updatePillDot { animation: updatePulse 1.1s ease-in-out infinite; }
-.updatePill[data-status="ready"] .updatePillDot { background: #5dd391; box-shadow: 0 0 0 3px rgba(93, 211, 145, 0.14); }
-.updatePill[data-status="error"] .updatePillDot { background: #f57171; box-shadow: 0 0 0 3px rgba(245, 113, 113, 0.14); }
-.updatePillText { overflow: hidden; text-overflow: ellipsis; }
-.updatePillProgress { width: 62px; height: 5px; overflow: hidden; border-radius: 999px; background: rgba(255,255,255,0.14); }
-.updatePillProgress i { display: block; width: 0; height: 100%; border-radius: inherit; background: #f5be46; transition: width 160ms ease; }
-.updatePillAction { padding: 4px 9px; border: 0; border-radius: 999px; background: #f5be46; color: #241b08; font-size: 11px; font-weight: 700; cursor: pointer; }
-.updatePill[data-status="ready"] .updatePillAction { background: #5dd391; color: #092314; }
-.updatePill[data-status="error"] .updatePillAction { background: #f57171; color: #2a0909; }
-.updatePillAction:disabled { opacity: 0.6; cursor: wait; }
-.updatePillDismiss { padding: 0 2px; border: 0; background: transparent; color: currentColor; font-size: 16px; line-height: 1; opacity: 0.65; cursor: pointer; }
-.updatePillDismiss:hover { opacity: 1; }
+.updatePill[data-status="available"] {
+  border-color: #ebd200;
+  background: #fffc00;
+  color: #171717;
+}
+.updatePill[data-status="downloading"] {
+  border-color: #ebd200;
+  background: #fffc00;
+  color: #171717;
+}
+.updatePill[data-status="ready"] {
+  border-color: #006dd4;
+  background: #0080f5;
+  color: #ffffff;
+}
+.updatePill[data-status="error"] {
+  border-color: rgba(245, 113, 113, 0.5);
+  background: rgba(245, 113, 113, 0.12);
+  color: #ffd0d0;
+}
+.updatePillDot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: #171717;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+}
+.updatePill[data-status="downloading"] .updatePillDot {
+  animation: updatePulse 1.1s ease-in-out infinite;
+}
+.updatePill[data-status="ready"] .updatePillDot {
+  background: #ffffff;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
+}
+.updatePill[data-status="error"] .updatePillDot {
+  background: #f57171;
+  box-shadow: 0 0 0 3px rgba(245, 113, 113, 0.14);
+}
+.updatePillText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 700;
+}
+.updatePillProgress {
+  width: 62px;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.15);
+}
+.updatePillProgress i {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: #171717;
+  transition: width 160ms ease;
+}
+.updatePillAction {
+  padding: 3px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: #171717;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+.updatePillAction:hover {
+  transform: scale(1.03);
+}
+.updatePill[data-status="ready"] .updatePillAction {
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+.updatePill[data-status="error"] .updatePillAction {
+  background: #f57171;
+  color: #2a0909;
+}
+.updatePillAction:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.updatePillDismiss {
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: currentColor;
+  font-size: 16px;
+  line-height: 1;
+  opacity: 0.65;
+  cursor: pointer;
+}
+.updatePillDismiss:hover {
+  opacity: 1;
+}
 @keyframes updatePulse { 50% { opacity: 0.4; transform: scale(0.75); } }
 @media (max-width: 900px) { .updatePill { max-width: 260px; margin-left: 8px; } }

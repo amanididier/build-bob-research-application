@@ -153,11 +153,12 @@ export const DesktopWindowHeader: React.FC = () => {
             {updateInfo.status === 'ready' && (
               <button
                 onClick={handleRestartToUpdate}
-                className="flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-[#0080f5] hover:bg-[#006dd4] text-white text-[12px] font-semibold tracking-tight shadow-sm transition-all active:scale-95 cursor-pointer"
+                style={{ backgroundColor: '#0080f5', color: '#ffffff' }}
+                className="flex items-center gap-1.5 px-3.5 py-1 rounded-full !bg-[#0080f5] hover:!bg-[#006dd4] !text-white text-[12px] font-semibold tracking-tight shadow-sm transition-all active:scale-95 cursor-pointer"
                 title="Update downloaded! Click to restart Bob and apply update."
               >
-                <span>Restart to finish</span>
-                <span className="text-[12px] leading-none">→</span>
+                <span className="font-semibold !text-white">Restart to finish</span>
+                <span className="text-[12px] leading-none !text-white">→</span>
               </button>
             )}
 
@@ -165,11 +166,12 @@ export const DesktopWindowHeader: React.FC = () => {
             {updateInfo.status === 'available' && (
               <button
                 onClick={handleStartDownload}
-                className="flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-[#fffc00] hover:bg-[#ebd200] text-[#171717] text-[12px] font-bold tracking-tight shadow-xs transition-all active:scale-95 cursor-pointer"
+                style={{ backgroundColor: '#fffc00', color: '#171717' }}
+                className="flex items-center gap-1.5 px-3.5 py-1 rounded-full !bg-[#fffc00] hover:!bg-[#ebd200] !text-[#171717] text-[12px] font-bold tracking-tight shadow-xs transition-all active:scale-95 cursor-pointer"
                 title={`Click to download and install Update v${updateInfo.version || ''}`}
               >
-                <span>Update Available</span>
-                <span className="text-[12px] leading-none">→</span>
+                <span className="font-bold !text-[#171717]">Update Available</span>
+                <span className="text-[12px] leading-none !text-[#171717]">→</span>
               </button>
             )}
 

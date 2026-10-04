@@ -45,14 +45,16 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Base button reset */
-button {
-  border: 0;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-  padding: 0;
+@layer base {
+  /* Base button reset */
+  button {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    padding: 0;
+  }
 }
 
 /* Clean neutral focus ring - NO yellow outline or box */

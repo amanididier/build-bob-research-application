@@ -154,21 +154,31 @@ button {
 }
 
 .update-pill-btn.blue {
-  background: #0080f5;
-  color: #ffffff;
+  background: #0080f5 !important;
+  color: #ffffff !important;
+}
+
+.update-pill-btn.blue * {
+  color: #ffffff !important;
 }
 
 .update-pill-btn.blue:hover {
-  background: #006dd4;
+  background: #006dd4 !important;
+  color: #ffffff !important;
 }
 
 .update-pill-btn.yellow {
-  background: var(--yellow);
-  color: #171717;
+  background: #fffc00 !important;
+  color: #171717 !important;
+}
+
+.update-pill-btn.yellow * {
+  color: #171717 !important;
 }
 
 .update-pill-btn.yellow:hover {
-  background: #ebd200;
+  background: #ebd200 !important;
+  color: #171717 !important;
 }
 
 .update-pill-btn:active {
