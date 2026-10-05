@@ -45,10 +45,9 @@
       </div>
     </header>
 
-    <!-- Top Navigation Bar: Research | Important | Summary | Tabs | Tasks -->
+    <!-- Top Navigation Bar: Research | Summary | Tabs | Tasks -->
     <nav class="nav" role="tablist">
       <button class="active" data-view="research" role="tab" aria-selected="true">Research</button>
-      <button data-view="important" role="tab" aria-selected="false">Important</button>
       <button data-view="summary" role="tab" aria-selected="false">Summary</button>
       <button data-view="tabs" role="tab" aria-selected="false">Tabs</button>
       <button data-view="tasks" role="tab" aria-selected="false">Tasks</button>
@@ -84,7 +83,10 @@
             <h2>Choose research project</h2>
             <button class="icon" id="btn-back-projects" title="Back">←</button>
           </div>
-          <input class="search" id="project-search-input" placeholder="Search or create a project…" autocomplete="off">
+          <div class="project-create-row">
+            <input class="search" id="project-search-input" placeholder="Search or type a new project name…" autocomplete="off">
+            <button class="pill yellow-sm" id="btn-create-project-submit" title="Create new research project">＋ Create</button>
+          </div>
           <div id="project-list"></div>
         </div>
 
@@ -94,63 +96,16 @@
             <h2 id="sessionTitle">Research session</h2>
             <button class="pill bluepill" id="btn-chat-new">＋ New</button>
           </div>
+          <!-- Active Goal Display Chip -->
+          <div class="goal-chip-bar" id="activeGoalBar" style="display:none">
+            <div class="goal-chip">
+              <span class="goal-chip-icon">🎯</span>
+              <span class="goal-chip-label">Goal:</span>
+              <span class="goal-chip-text" id="activeGoalText">Key findings</span>
+            </div>
+            <button class="icon-xs" id="btn-change-goal" title="Change research goal">✏️</button>
+          </div>
           <div class="chat-list" id="chatList"></div>
-        </div>
-      </section>
-
-      <!-- 2. IMPORTANT ON THIS PAGE VIEW -->
-      <section class="view" id="view-important">
-        <div class="section-head">
-          <h2>Important on this page</h2>
-          <div class="head-btn-group">
-            <button class="pill yellow-sm" id="btn-rerun-highlights" title="Re-run highlights with Gemini">↻ Re-run</button>
-            <button class="pill plain-sm" id="btn-clear-side-highlights" title="Clear highlights from page">✕ Clear</button>
-          </div>
-        </div>
-
-        <!-- Active Goal Display Chip -->
-        <div class="goal-chip-bar" id="activeGoalBar" style="display:none">
-          <div class="goal-chip">
-            <span class="goal-chip-icon">🎯</span>
-            <span class="goal-chip-label">Goal:</span>
-            <span class="goal-chip-text" id="activeGoalText">Key findings</span>
-          </div>
-          <button class="icon-xs" id="btn-change-goal" title="Change goal">✏️</button>
-        </div>
-
-        <!-- Goal Question Card (Shown before highlighting when no goal exists) -->
-        <div class="goal-ask-card" id="goalAskCard">
-          <div class="goal-ask-header">
-            <span class="goal-sparkle">✦</span>
-            <h3>What are you trying to find out from this page?</h3>
-          </div>
-          <p class="goal-ask-sub">Bob uses your goal to filter and highlight only high-signal evidence.</p>
-          <div class="goal-suggestions" id="goalSuggestions">
-            <button class="goal-suggest-btn" data-goal="Key findings & main conclusions">💡 Key findings & conclusions</button>
-            <button class="goal-suggest-btn" data-goal="Data, metrics, numbers & evidence">📊 Data, metrics & evidence</button>
-            <button class="goal-suggest-btn" data-goal="Core definitions, terms & concepts">🔍 Definitions & core concepts</button>
-          </div>
-          <div class="goal-custom-row">
-            <input class="goal-input" id="customGoalInput" placeholder="Or type your specific research question…" autocomplete="off" />
-            <button class="pill yellow" id="btn-set-custom-goal">Set Goal</button>
-          </div>
-          <div class="goal-skip-row">
-            <button class="btn-text-subtle" id="btn-just-key-points">Just show me the key points</button>
-          </div>
-        </div>
-
-        <!-- Highlights Loading State -->
-        <div class="highlights-loading" id="highlightsLoading" style="display:none">
-          <div class="loading-spinner"></div>
-          <p id="highlightsLoadingText">Analyzing page text with Gemini…</p>
-        </div>
-
-        <!-- Highlights List -->
-        <div class="highlights-list" id="highlightsList">
-          <div class="card empty-highlights" id="highlightsEmpty">
-            <b>No highlights yet.</b>
-            <p class="muted">Set your research goal above or click "Just show me the key points" to extract and highlight key passages on this page.</p>
-          </div>
         </div>
       </section>
 
@@ -249,6 +204,54 @@
       <div class="notes-body" id="notesList"></div>
     </div>
 
+    <!-- Clean Goal Modal Card (Opens on General start, New/Select Research with no goal, or Highlight / Ctrl+B+H) -->
+    <div class="goal-modal" id="goalModalCard" style="display:none">
+      <div class="goal-modal-backdrop" id="goalModalBackdrop"></div>
+      <div class="goal-modal-card">
+        <div class="goal-modal-head">
+          <div class="goal-modal-title">
+            <span class="goal-sparkle">🎯</span>
+            <h3>Set Research & Highlight Goal</h3>
+          </div>
+          <button class="icon-sm" id="btn-close-goal-modal" title="Close">✕</button>
+        </div>
+        <p class="goal-modal-sub">Bob uses your goal to highlight high-signal evidence on pages and customize all AI answers.</p>
+        
+        <div class="goal-suggestions-label">Suggestions</div>
+        <div class="goal-suggestions-list" id="goalModalSuggestions">
+          <button class="goal-option-item" data-goal="Find key claims, thesis statements & supporting evidence">
+            <span class="goal-option-icon">💡</span>
+            <span class="goal-option-text">Find key claims & supporting evidence</span>
+          </button>
+          <button class="goal-option-item" data-goal="Extract actionable takeaways, practical steps & recommendations">
+            <span class="goal-option-icon">📋</span>
+            <span class="goal-option-text">Extract actionable takeaways & recommendations</span>
+          </button>
+          <button class="goal-option-item" data-goal="Core definitions, terms & foundational concepts">
+            <span class="goal-option-icon">🔍</span>
+            <span class="goal-option-text">Core definitions, terms & foundational concepts</span>
+          </button>
+          <button class="goal-option-item" data-goal="Synthesize data, metrics, benchmarks & experimental findings">
+            <span class="goal-option-icon">📊</span>
+            <span class="goal-option-text">Synthesize data, metrics & statistical findings</span>
+          </button>
+          <button class="goal-option-item" data-goal="Compare approaches, pros & cons, and architectural tradeoffs">
+            <span class="goal-option-icon">⚖️</span>
+            <span class="goal-option-text">Compare approaches, tradeoffs & pros/cons</span>
+          </button>
+        </div>
+
+        <div class="goal-custom-composer">
+          <input class="goal-custom-input" id="customGoalModalInput" placeholder="Or type your custom research goal…" autocomplete="off" />
+          <button class="pill yellow" id="btn-set-goal-modal">Set Goal</button>
+        </div>
+
+        <div class="goal-skip-footer">
+          <button class="btn-text-subtle" id="btn-skip-goal-modal">Just show me key points</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Quick Ask Modal Card -->
     <div class="inline-card" id="inlineCard">
       <div class="inline-head">
@@ -263,8 +266,8 @@
         <div class="inline-bar single-line">
           <input id="inlineInput" placeholder="Ask anything about this page…" autocomplete="off">
           <button class="send" id="btn-inline-send" type="button" aria-label="Send">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 19V5M5 12l7-7 7 7"/>
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
             </svg>
           </button>
         </div>
@@ -307,28 +310,33 @@
         <button class="icon-sm" id="btn-close-bridge" title="Close Bridge">✕</button>
       </div>
 
-      <!-- Main Input Bar -->
-      <div class="composer-bar single-line">
-        <button class="c-plus" id="btn-open-inline" type="button" title="Quick Ask" aria-label="Quick Ask">+</button>
-        <button class="c-flash" id="btn-tools" type="button" title="Tools" aria-label="Tools">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M13 2 4.5 13.5h6L9 22 19.5 9.5h-6L13 2z"/></svg>
-        </button>
-        <textarea id="prompt" rows="1" placeholder="Ask Bob about tabs or page…"></textarea>
-        <div class="c-actions">
-          <button class="c-ico" id="btn-voice" type="button" title="Voice Dictation" aria-label="Voice">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+      <!-- Main Input Card matching the desktop HTML design -->
+      <div class="composer-box" id="composerBox">
+        <textarea id="prompt" rows="2" placeholder="Ask Bob anything about your research..."></textarea>
+        <div class="composerBar">
+          <button class="toolBtn" id="btn-open-inline" type="button" title="Quick Ask" aria-label="Quick Ask">＋</button>
+          <button class="toolBtn" id="btn-tools" type="button" title="Bob tools" aria-label="Tools">✦</button>
+          <span class="spacer"></span>
+          <button class="toolBtn mic" id="btn-voice" type="button" title="Voice Dictation" aria-label="Voice">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <rect x="8" y="3" width="8" height="12" rx="4"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/>
+            </svg>
           </button>
-          <button class="send" id="btn-send" type="button" aria-label="Send">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <button class="send" id="btn-send" type="button" aria-label="Send" title="Send (Enter)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 11.5 20 4l-3.5 16-4.3-6.1L4 11.5Z"/><path d="m12.2 13.8 4.2-4.2"/>
+            </svg>
           </button>
         </div>
       </div>
+      <div class="composer-hint">Connected context · tabs · AI conversations · tasks</div>
     </div>
 
     <!-- Toast Notification -->
     <div class="toast" id="toast"></div>
   </div>
 
+  <script src="responseRenderer.js"></script>
   <script src="sidepanel.js"></script>
 </body>
 </html>

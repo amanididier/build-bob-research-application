@@ -266,8 +266,11 @@ function startBridge() {
             contents: [{ role: 'user', parts: [{ text: prompt }] }]
           }
           if (systemInstruction) {
+            const rawSysText = typeof systemInstruction === 'string'
+              ? systemInstruction
+              : (systemInstruction?.parts?.[0]?.text || JSON.stringify(systemInstruction));
             payload.systemInstruction = {
-              parts: [{ text: typeof systemInstruction === 'string' ? systemInstruction : JSON.stringify(systemInstruction) }]
+              parts: [{ text: rawSysText }]
             }
           }
           if (jsonMode) {
@@ -536,13 +539,14 @@ function startBridge() {
     }
 
     if (pathname === '/events/projects') {
+      const projData = body.project || body;
       const newProj = {
-        id: body.id || id(),
-        name: String(body.name || 'New Research').slice(0, 100),
-        color: body.color || 'blue',
+        id: projData.id || id(),
+        name: String(projData.name || 'New Research').slice(0, 100),
+        color: projData.color || 'blue',
         createdAt: Date.now()
       }
-      store.projects = [...(store.projects || []), newProj]
+      store.projects = [newProj, ...(store.projects || []).filter(p => p.id !== newProj.id)]
       saveStore()
       notify()
       return send(200, { ok: true, project: newProj, projects: store.projects })

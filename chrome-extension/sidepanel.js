@@ -216,9 +216,8 @@
     const target = $(`view-${viewName}`);
     if (target) target.classList.add('active');
 
-    if (viewName === 'important') {
+    if (viewName === 'research') {
       updateGoalDisplay();
-      loadTabHighlights();
     }
 
     // Close any floating menus on view change
@@ -280,6 +279,44 @@
 
     saveSessionRecord('General Chat', 'general', null);
     toast('General session · temporary 24h history');
+
+    // Pop up the clean goal modal if no goal is set yet
+    if (!state.activeGoal) {
+      setTimeout(() => {
+        showGoalModal({
+          onComplete: () => {
+            toast('Goal customized for general chat');
+          }
+        });
+      }, 150);
+    }
+  }
+
+  function createNewResearchProject(name) {
+    const title = String(name || '').trim() || 'New research';
+    const newId = 'proj_' + Date.now();
+    const proj = {
+      id: newId,
+      name: title,
+      color: 'blue',
+      desc: 'Desktop Workspace Project · Active sync',
+      createdAt: Date.now()
+    };
+    state.projects.unshift(proj);
+    chrome.storage.local.set({ projects: state.projects });
+
+    // Sync to Desktop so it appears in "Recent Projects" on desktop
+    fetch('http://127.0.0.1:54321/events/projects', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-bob-token': 'development-token',
+        'x-bob-client': 'bob-chrome-extension'
+      },
+      body: JSON.stringify({ action: 'create', project: proj })
+    }).catch(() => {});
+
+    selectProject(proj);
   }
 
   async function openProjects() {
@@ -374,6 +411,17 @@
 
     saveSessionRecord(proj.name, 'research', proj.id);
     toast(`Connected to "${proj.name}"`);
+
+    // Pop up the clean goal modal if no goal is set yet
+    if (!state.activeGoal) {
+      setTimeout(() => {
+        showGoalModal({
+          onComplete: () => {
+            toast(`Goal set for "${proj.name}"`);
+          }
+        });
+      }, 150);
+    }
   }
 
   let chatSyncTimer = null;
@@ -428,31 +476,49 @@
   function appendAiMessage(text, citations = []) {
     const chatList = $('chatList');
     if (!chatList) return null;
-    const card = document.createElement('div');
-    card.className = 'ai-card';
-    card.innerHTML = `<div>${escapeHtml(text)}</div>`;
 
-    if (citations && citations.length > 0) {
-      const refWrap = document.createElement('div');
-      refWrap.style.marginTop = '6px';
-      citations.forEach((c) => {
-        const ref = document.createElement('span');
-        ref.className = 'ref';
-        ref.textContent = `↗ ${c.title || c.url || 'Source'}`;
-        refWrap.appendChild(ref);
+    const row = document.createElement('div');
+    row.className = 'ai-message';
+
+    const avatar = document.createElement('div');
+    avatar.className = 'ai-avatar';
+    avatar.innerHTML = `<img src="icons/bob-logo.png" alt="Bob" width="16" height="16">`;
+
+    const body = document.createElement('div');
+    body.className = 'ai-body';
+
+    if (window.renderBobResponse && typeof window.renderBobResponse === 'function') {
+      const rendered = window.renderBobResponse(text, citations, {
+        onSaveNotes: (raw) => {
+          saveNote(raw, state.tab ? state.tab.url : '');
+        },
+        onCreateTask: (raw) => {
+          const firstLine = raw.split('\n')[0].replace(/^#+\s*/, '').slice(0, 70);
+          addTask(firstLine);
+        }
       });
-      card.appendChild(refWrap);
+      body.appendChild(rendered);
+    } else {
+      body.innerHTML = `<div>${escapeHtml(text)}</div>`;
+      if (citations && citations.length > 0) {
+        const refWrap = document.createElement('div');
+        refWrap.style.marginTop = '6px';
+        citations.forEach((c) => {
+          const ref = document.createElement('span');
+          ref.className = 'ref';
+          ref.textContent = `↗ ${c.title || c.url || 'Source'}`;
+          refWrap.appendChild(ref);
+        });
+        body.appendChild(refWrap);
+      }
     }
 
-    const meta = document.createElement('div');
-    meta.className = 'meta';
-    const tabCount = state.tabs.filter((t) => t.selected).length || 3;
-    meta.textContent = `Using ${tabCount} relevant browser tabs · Bob Research`;
-    card.appendChild(meta);
+    row.appendChild(avatar);
+    row.appendChild(body);
 
-    chatList.appendChild(card);
+    chatList.appendChild(row);
     scrollChat();
-    return card;
+    return row;
   }
 
   function appendErrorCard({ reason, title, message, triedModels, retryPrompt }) {
@@ -563,7 +629,8 @@
           projectName: state.activeProjectName,
           title: state.tab ? state.tab.title : '',
           url: state.tab ? state.tab.url : '',
-          excerpt: state.pageText
+          excerpt: state.pageText,
+          activeGoal: state.activeGoal || ''
         }
       });
 
@@ -617,7 +684,89 @@
     }
   }
 
-  // --------------------------------------------------- Important View & Highlights (Phase 2 & 3)
+  // --------------------------------------------------- Research Goal & Highlights Modal
+
+  function showGoalModal(opts = {}) {
+    const modal = $('goalModalCard');
+    if (!modal) return;
+    modal.style.display = 'flex';
+
+    const input = $('customGoalModalInput');
+    if (input) {
+      input.value = '';
+      setTimeout(() => input.focus(), 80);
+    }
+
+    const closeModal = () => {
+      modal.style.display = 'none';
+    };
+
+    const btnClose = $('btn-close-goal-modal');
+    if (btnClose) btnClose.onclick = closeModal;
+
+    const backdrop = $('goalModalBackdrop');
+    if (backdrop) backdrop.onclick = closeModal;
+
+    const commitGoal = (goalText) => {
+      const g = String(goalText || '').trim();
+      if (!g) return;
+      state.activeGoal = g;
+      updateGoalDisplay();
+
+      chrome.storage.local.set({ activeGoal: g });
+      fetch('http://127.0.0.1:54321/events/settings', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-bob-token': 'development-token' },
+        body: JSON.stringify({ activeGoal: g })
+      }).catch(() => {});
+
+      closeModal();
+      toast('Goal set: ' + (g.length > 32 ? g.slice(0, 32) + '…' : g));
+      if (typeof opts.onComplete === 'function') {
+        opts.onComplete(g);
+      }
+    };
+
+    // Suggestions list
+    $$('#goalModalSuggestions .goal-option-item').forEach((item) => {
+      item.onclick = () => {
+        const val = item.dataset.goal || item.textContent.trim();
+        commitGoal(val);
+      };
+    });
+
+    // Custom goal input & button
+    const btnSet = $('btn-set-goal-modal');
+    if (btnSet && input) {
+      btnSet.onclick = () => commitGoal(input.value);
+      input.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          commitGoal(input.value);
+        }
+      };
+    }
+
+    // Skip button: default comprehensive goal
+    const btnSkip = $('btn-skip-goal-modal');
+    if (btnSkip) {
+      btnSkip.onclick = () => {
+        commitGoal('Identify the most important findings, claims with data, core definitions, and actionable takeaways.');
+      };
+    }
+  }
+
+  function handleAutoHighlight() {
+    if (!state.activeGoal) {
+      showGoalModal({
+        onComplete: (goal) => {
+          runHighlightsForPage(goal);
+        }
+      });
+    } else {
+      runHighlightsForPage(state.activeGoal);
+    }
+  }
 
   function updateGoalDisplay() {
     const goalBar = $('activeGoalBar');
@@ -693,7 +842,12 @@
     if (res && res.ok && Array.isArray(res.highlights)) {
       state.highlights = res.highlights;
       renderHighlightsList(res.highlights);
-      toast(`✦ Found ${res.highlights.length} key highlights`);
+      chrome.tabs.sendMessage(activeTab.id, {
+        type: 'BOB_RENDER_HIGHLIGHTS',
+        highlights: res.highlights,
+        goal: state.activeGoal
+      }, () => {});
+      toast(`✦ Highlighted ${res.highlights.length} key sections`);
     } else {
       toast(res.message || res.detail || 'Could not extract highlights');
       if (empty) empty.style.display = 'block';
@@ -1111,33 +1265,21 @@
     body.scrollTop = body.scrollHeight;
   }
 
-  // ----------------------------------------------------------- Auto Sizing Bar
+  // ----------------------------------------------------------- Auto Sizing Composer
 
   function syncComposerSize() {
     const ta = $('prompt');
     if (!ta) return;
-    const bar = ta.closest('.composer-bar');
     const val = (ta.value || '').trim();
 
-    // When empty (before user types), keep strictly as a sleek 42px single-line pill!
     if (!val) {
-      ta.style.height = '22px';
-      if (bar) bar.classList.add('single-line');
+      ta.style.height = '38px';
       return;
     }
 
-    // Only grow vertically when multi-line content or long text is typed
-    ta.style.height = '22px';
-    const h = Math.min(100, Math.max(22, ta.scrollHeight));
+    ta.style.height = '38px';
+    const h = Math.min(120, Math.max(38, ta.scrollHeight));
     ta.style.height = h + 'px';
-
-    if (bar) {
-      if (h <= 26 && !val.includes('\n')) {
-        bar.classList.add('single-line');
-      } else {
-        bar.classList.remove('single-line');
-      }
-    }
   }
 
   function escapeHtml(str) {
@@ -1305,14 +1447,9 @@
 
     const toolAutoHl = $('tool-auto-highlight');
     if (toolAutoHl) {
-      toolAutoHl.addEventListener('click', async () => {
+      toolAutoHl.addEventListener('click', () => {
         toggleToolsMenu();
-        switchView('important');
-        if (!state.activeGoal) {
-          toast('Select or set your research goal to highlight');
-        } else {
-          runHighlightsForPage(state.activeGoal);
-        }
+        handleAutoHighlight();
       });
     }
 
@@ -1320,6 +1457,7 @@
     if (toolClearHl) {
       toolClearHl.addEventListener('click', async () => {
         toggleToolsMenu();
+        await send({ type: 'CLEAR_PAGE_HIGHLIGHTS' });
         await send({ type: 'CLEAR_HIGHLIGHTS' });
         state.highlights = [];
         renderHighlightsList([]);
@@ -1327,70 +1465,35 @@
       });
     }
 
-    // Important on this page view controls (Phase 2 & 3)
-    const btnRerunHl = $('btn-rerun-highlights');
-    if (btnRerunHl) {
-      btnRerunHl.addEventListener('click', () => {
-        runHighlightsForPage(state.activeGoal);
-      });
-    }
-
-    const btnClearSideHl = $('btn-clear-side-highlights');
-    if (btnClearSideHl) {
-      btnClearSideHl.addEventListener('click', async () => {
-        await send({ type: 'CLEAR_HIGHLIGHTS' });
-        state.highlights = [];
-        renderHighlightsList([]);
-        toast('Highlights cleared');
-      });
-    }
-
     const btnChangeGoal = $('btn-change-goal');
     if (btnChangeGoal) {
       btnChangeGoal.addEventListener('click', () => {
-        const goalAsk = $('goalAskCard');
-        if (goalAsk) goalAsk.style.display = 'block';
-      });
-    }
-
-    // Goal suggestions click
-    $$('.goal-suggest-btn').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const chosenGoal = btn.dataset.goal || btn.textContent.trim();
-        setGoalAndHighlight(chosenGoal);
-      });
-    });
-
-    // Custom goal input
-    const btnSetCustomGoal = $('btn-set-custom-goal');
-    const customGoalInput = $('customGoalInput');
-    if (btnSetCustomGoal && customGoalInput) {
-      btnSetCustomGoal.addEventListener('click', () => {
-        const g = customGoalInput.value.trim();
-        if (g) {
-          setGoalAndHighlight(g);
-          customGoalInput.value = '';
-        }
-      });
-      customGoalInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          const g = customGoalInput.value.trim();
-          if (g) {
-            setGoalAndHighlight(g);
-            customGoalInput.value = '';
+        showGoalModal({
+          onComplete: (g) => {
+            runHighlightsForPage(g);
           }
-        }
+        });
       });
     }
 
-    // Just show me the key points
-    const btnJustKey = $('btn-just-key-points');
-    if (btnJustKey) {
-      btnJustKey.addEventListener('click', () => {
-        setGoalAndHighlight('Identify the most important findings, claims with data, core definitions, and conclusions.');
-      });
-    }
+    // Global shortcut Ctrl+B+H (or Cmd+B+H) to trigger Bob Auto Highlight
+    let ctrlBTimer = 0;
+    window.addEventListener('keydown', (e) => {
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable)) return;
+      const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+      const key = e.key.toLowerCase();
+      if (isCtrlOrCmd && key === 'b') {
+        ctrlBTimer = Date.now();
+        return;
+      }
+      const isChord = Date.now() - ctrlBTimer < 1800 && key === 'h';
+      const isShiftCombo = isCtrlOrCmd && e.shiftKey && key === 'h';
+      if (isChord || isShiftCombo) {
+        e.preventDefault();
+        ctrlBTimer = 0;
+        handleAutoHighlight();
+      }
+    });
 
     const toolBridge = $('tool-bridge');
     if (toolBridge) toolBridge.addEventListener('click', toggleBridgeHandoff);
@@ -1641,6 +1744,9 @@
             state.activeGoal = msg.goal;
             updateGoalDisplay();
           }
+        }
+        if (msg.type === 'BOB_TRIGGER_AUTO_HIGHLIGHT') {
+          handleAutoHighlight();
         }
         if (msg.type === 'BOB_SETTINGS_SYNCED') {
           if (msg.settings) {

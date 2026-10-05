@@ -325,6 +325,15 @@
     openQuickAskCard(text, range);
   }
 
+  const CATEGORY_COLOR_MAP = {
+    claim: 'blue',
+    data: 'green',
+    definition: 'purple',
+    conclusion: 'yellow',
+    caveat: 'orange',
+    action: 'pink'
+  };
+
   // --------------------------------- 90° traffic light standing pill ---------
 
   function renderTrafficPill() {
@@ -347,23 +356,22 @@
         </div>
         <div class="bob-traffic-lights" id="traffic-lights-container"></div>
         <div class="bob-pill-overflow-blur" id="traffic-blur" style="display: none;"></div>
-        <button class="bob-pill-nav-btn" id="btn-pill-play" title="Navigate through highlights">▶</button>
-        <button class="bob-pill-clear-btn" id="btn-pill-clear" title="Clear all highlights">✕</button>
+        <button class="bob-pill-nav-btn" id="btn-pill-play" type="button" title="Navigate highlights (Arrow keys: Up/Left = Prev, Down/Right = Next)">▶</button>
+        <button class="bob-pill-clear-btn" id="btn-pill-clear" type="button" title="Close pill and clear highlights">✕</button>
         <div class="bob-pill-preview-card" id="traffic-preview-card"></div>
       `;
       root.appendChild(trafficPill);
 
       setupPillDrag(trafficPill);
 
-      trafficPill.querySelector('#btn-pill-play').addEventListener('click', () => {
-        stepNextHighlight();
+      trafficPill.querySelector('#btn-pill-play').addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleNavigation();
       });
 
-      trafficPill.querySelector('#btn-pill-clear').addEventListener('click', () => {
-        send({ type: 'CLEAR_PAGE_HIGHLIGHTS' });
-        highlights.forEach((h) => unwrapHighlight(h.id));
-        highlights = [];
-        renderTrafficPill();
+      trafficPill.querySelector('#btn-pill-clear').addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeAndClearTrafficPill();
       });
     }
 
@@ -376,8 +384,9 @@
     // Render the 3 traffic light circles matching the first 3 highlighted colors
     const firstThree = highlights.slice(0, 3);
     firstThree.forEach((h, i) => {
-      const circle = el('div', `bob-light-circle ${h.color}`);
-      circle.title = `Jump to highlight ${i + 1}`;
+      const circle = el('div', `bob-light-circle ${h.color || 'blue'}`);
+      circle.setAttribute('data-idx', String(i));
+      circle.title = `Jump to highlight ${i + 1} (${h.category || h.color})`;
       circle.addEventListener('click', () => focusHighlight(i));
       lightsContainer.appendChild(circle);
     });
@@ -388,15 +397,150 @@
       blurEl.style.display = 'none';
     }
 
-    // Populate preview card on hover
-    highlights.slice(0, 6).forEach((h, i) => {
-      const item = el('div', 'bob-preview-item');
+    // Populate preview card on hover with ChatGPT-style single-line key sections
+    const head = el('div', 'bob-preview-head');
+    head.innerHTML = `
+      <span class="bob-preview-title">Key Highlights</span>
+      <span class="bob-preview-count">${highlights.length} found</span>
+    `;
+    previewCard.appendChild(head);
+
+    highlights.slice(0, 8).forEach((h, i) => {
+      const item = el('div', `bob-preview-item ${h.color || 'blue'}`);
+      item.setAttribute('data-idx', String(i));
+      const category = (h.category || h.color || 'Point').toUpperCase();
+      const cleanSnippet = (h.text || '').replace(/\s+/g, ' ').trim();
       item.innerHTML = `
-        <div class="bob-preview-item-color ${h.color}">Highlight ${i + 1} · ${h.color}</div>
-        <div>“${(h.text || '').slice(0, 90)}…”</div>
+        <span class="bob-preview-badge ${h.color || 'blue'}">${escapeHtml(category)}</span>
+        <span class="bob-preview-line">${escapeHtml(cleanSnippet)}</span>
       `;
-      item.addEventListener('click', () => focusHighlight(i));
+      item.title = cleanSnippet;
+
+      // Click navigates directly to that highlight
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        focusHighlight(i);
+      });
+
+      // Hover on preview item temporarily highlights in page
+      item.addEventListener('mouseenter', () => {
+        const targetEl = h.element || (h.range && h.range.startContainer && (h.range.startContainer.nodeType === Node.TEXT_NODE ? h.range.startContainer.parentElement : h.range.startContainer));
+        if (targetEl) {
+          targetEl.classList.add('bob-hl-focus');
+        }
+      });
+      item.addEventListener('mouseleave', () => {
+        const targetEl = h.element || (h.range && h.range.startContainer && (h.range.startContainer.nodeType === Node.TEXT_NODE ? h.range.startContainer.parentElement : h.range.startContainer));
+        if (targetEl && activeNavIndex !== i) {
+          targetEl.classList.remove('bob-hl-focus');
+        }
+      });
+
       previewCard.appendChild(item);
+    });
+  }
+
+  function closeAndClearTrafficPill() {
+    stopNavigation();
+    if (trafficPill) {
+      // Smooth slide-to-right exit animation
+      trafficPill.classList.add('bob-pill-closing');
+      trafficPill.style.transition = 'transform 0.32s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease';
+      trafficPill.style.transform = 'translateX(140px)';
+      trafficPill.style.opacity = '0';
+      trafficPill.style.pointerEvents = 'none';
+    }
+
+    // Clear all highlights from page
+    try {
+      send({ type: 'CLEAR_PAGE_HIGHLIGHTS' });
+      send({ type: 'CLEAR_HIGHLIGHTS' });
+    } catch {}
+
+    clearAllHighlights();
+
+    document.querySelectorAll('.bob-highlight-pulse, .bob-hl-focus').forEach((el) => {
+      el.classList.remove('bob-highlight-pulse', 'bob-hl-focus');
+    });
+
+    setTimeout(() => {
+      if (trafficPill) {
+        trafficPill.remove();
+        trafficPill = null;
+      }
+    }, 320);
+  }
+
+  let isNavigating = false;
+
+  function onNavKeyDown(e) {
+    if (!isNavigating || !highlights.length) return;
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable)) return;
+
+    if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      // Move to previous highlight unless on the first one
+      if (activeNavIndex > 0) {
+        activeNavIndex--;
+        focusHighlight(activeNavIndex);
+      } else {
+        showToast('First highlight reached', 'info');
+      }
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+      e.preventDefault();
+      // Move down to next highlight
+      if (activeNavIndex < highlights.length - 1) {
+        activeNavIndex++;
+        focusHighlight(activeNavIndex);
+      } else {
+        showToast('Last highlight reached', 'info');
+      }
+    } else if (e.key === 'Escape') {
+      stopNavigation();
+      showToast('Highlight navigation closed', 'info');
+    }
+  }
+
+  function toggleNavigation() {
+    if (isNavigating) {
+      if (activeNavIndex < highlights.length - 1) {
+        activeNavIndex++;
+        focusHighlight(activeNavIndex);
+      } else {
+        activeNavIndex = 0;
+        focusHighlight(0);
+      }
+    } else {
+      startNavigation();
+    }
+  }
+
+  function startNavigation() {
+    if (!highlights.length) return;
+    isNavigating = true;
+    window.addEventListener('keydown', onNavKeyDown);
+    const playBtn = trafficPill?.querySelector('#btn-pill-play');
+    if (playBtn) {
+      playBtn.classList.add('active');
+      playBtn.title = 'Navigation active (Up/Left = Prev, Down/Right = Next, Esc = Exit)';
+    }
+    if (activeNavIndex < 0 || activeNavIndex >= highlights.length) {
+      activeNavIndex = 0;
+    }
+    focusHighlight(activeNavIndex);
+    showToast(`Highlight 1 of ${highlights.length} · Use ↑/← or ↓/→ to navigate`, 'ok');
+  }
+
+  function stopNavigation() {
+    isNavigating = false;
+    window.removeEventListener('keydown', onNavKeyDown);
+    const playBtn = trafficPill?.querySelector('#btn-pill-play');
+    if (playBtn) {
+      playBtn.classList.remove('active');
+      playBtn.title = 'Navigate highlights (Arrow keys: Up/Left = Prev, Down/Right = Next)';
+    }
+    document.querySelectorAll('.bob-light-circle.active, .bob-preview-item.active').forEach((el) => {
+      el.classList.remove('active');
     });
   }
 
@@ -464,6 +608,20 @@
     document.querySelectorAll('.bob-highlight-pulse, .bob-hl-focus').forEach((el) => {
       el.classList.remove('bob-highlight-pulse', 'bob-hl-focus');
     });
+
+    // Highlight active circle and preview item in standing pill
+    if (trafficPill) {
+      trafficPill.querySelectorAll('.bob-light-circle.active, .bob-preview-item.active').forEach((el) => {
+        el.classList.remove('active');
+      });
+      const activeCircle = trafficPill.querySelector(`.bob-light-circle[data-idx="${index}"]`);
+      if (activeCircle) activeCircle.classList.add('active');
+      const activeItem = trafficPill.querySelector(`.bob-preview-item[data-idx="${index}"]`);
+      if (activeItem) {
+        activeItem.classList.add('active');
+        activeItem.scrollIntoView?.({ block: 'nearest' });
+      }
+    }
 
     let targetEl = h.element || (h.nodes && h.nodes[0]) || (h.range && h.range.startContainer && (h.range.startContainer.nodeType === Node.TEXT_NODE ? h.range.startContainer.parentElement : h.range.startContainer));
     if (targetEl) {
@@ -681,7 +839,7 @@
         reason: item.reason || 'Key passage',
         category: cat,
         score: item.score || 0.8,
-        color: cat,
+        color: CATEGORY_COLOR_MAP[cat] || 'blue',
         range,
         element: startEl,
         top: (startEl && startEl.getBoundingClientRect().top + window.scrollY) || 0,
@@ -739,6 +897,28 @@
       return res;
     }
   }
+
+  // ------------------------------------------------------------- shortcut ---
+  let ctrlBChordTime = 0;
+  window.addEventListener('keydown', (e) => {
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable)) return;
+    const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+    const key = e.key ? e.key.toLowerCase() : '';
+
+    if (isCtrlOrCmd && key === 'b') {
+      ctrlBChordTime = Date.now();
+      return;
+    }
+
+    const isChord = Date.now() - ctrlBChordTime < 1800 && key === 'h';
+    const isShiftCombo = isCtrlOrCmd && e.shiftKey && key === 'h';
+    if (isChord || isShiftCombo) {
+      e.preventDefault();
+      ctrlBChordTime = 0;
+      send({ type: 'TRIGGER_AUTO_HIGHLIGHT' });
+      showToast('✦ Bob Auto-Highlight requested (Ctrl+B+H)', 'ok');
+    }
+  });
 
   // ------------------------------------------------------------- messages ---
 

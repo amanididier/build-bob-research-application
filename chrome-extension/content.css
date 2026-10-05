@@ -184,6 +184,13 @@ mark.bob-hl.bob-hl-focus {
   }
 }
 
+.bob-traffic-pill.bob-pill-closing {
+  transform: translateX(140px) scale(0.92) !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease !important;
+}
+
 .bob-traffic-pill:hover {
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.22);
 }
@@ -204,7 +211,7 @@ mark.bob-hl.bob-hl-focus {
   color: #171717;
 }
 
-/* Traffic Light Circles (3 vertical circles) */
+/* Traffic Light Circles (vertical circles) */
 .bob-traffic-lights {
   display: flex;
   flex-direction: column;
@@ -226,19 +233,39 @@ mark.bob-hl.bob-hl-focus {
   transform: scale(1.3);
 }
 
+.bob-light-circle.active {
+  transform: scale(1.35);
+  box-shadow: 0 0 0 2.5px #171717, 0 0 10px rgba(0, 0, 0, 0.3) !important;
+}
+
 .bob-light-circle.blue {
-  background: #38bdf8;
-  box-shadow: 0 0 6px rgba(56, 189, 248, 0.5);
+  background: #0080f5;
+  box-shadow: 0 0 6px rgba(0, 128, 245, 0.5);
 }
 
 .bob-light-circle.green {
-  background: #22c55e;
-  box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+  background: #16a34a;
+  box-shadow: 0 0 6px rgba(22, 163, 74, 0.5);
 }
 
 .bob-light-circle.yellow {
-  background: #facc15;
-  box-shadow: 0 0 6px rgba(250, 204, 21, 0.5);
+  background: #fffc00;
+  box-shadow: 0 0 6px rgba(255, 252, 0, 0.6);
+}
+
+.bob-light-circle.purple {
+  background: #9333ea;
+  box-shadow: 0 0 6px rgba(147, 51, 234, 0.5);
+}
+
+.bob-light-circle.orange {
+  background: #ea580c;
+  box-shadow: 0 0 6px rgba(234, 88, 12, 0.5);
+}
+
+.bob-light-circle.pink {
+  background: #e11d48;
+  box-shadow: 0 0 6px rgba(225, 29, 72, 0.5);
 }
 
 /* Blur indicator if >3 highlights exist */
@@ -265,14 +292,27 @@ mark.bob-hl.bob-hl-focus {
   font-size: 10px;
   font-weight: 800;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-  transition: transform 0.14s ease;
+  transition: transform 0.14s ease, background 0.15s ease;
 }
 
 .bob-pill-nav-btn:hover {
   transform: scale(1.12);
 }
 
-/* Clear / Stop button in clean red */
+.bob-pill-nav-btn.active {
+  background: #0080f5;
+  color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(0, 128, 245, 0.25);
+  animation: bob-nav-pulse 1.6s infinite;
+}
+
+@keyframes bob-nav-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+/* Clear / Close button in clean subtle red */
 .bob-pill-clear-btn {
   width: 22px;
   height: 22px;
@@ -294,30 +334,31 @@ mark.bob-hl.bob-hl-focus {
   transform: scale(1.1);
 }
 
-/* Hover Preview Card */
+/* Hover Preview Card - Sleek ChatGPT-style single-line key sections */
 .bob-pill-preview-card {
   position: absolute;
-  right: 54px;
+  right: 56px;
   top: 0;
-  width: 260px;
-  padding: 12px;
+  width: 290px;
+  max-width: calc(100vw - 80px);
+  padding: 8px 10px;
   background: rgba(255, 255, 255, 0.98);
   border: 1px solid rgba(0, 0, 0, 0.12);
-  border-radius: 16px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.22);
+  border-radius: 14px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
   backdrop-filter: blur(14px);
   display: none;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   font-size: 11.5px;
-  line-height: 1.45;
   color: #171717;
+  z-index: 2147483646;
 }
 
 @media (prefers-color-scheme: dark) {
   .bob-pill-preview-card {
-    background: rgba(28, 27, 24, 0.98);
-    border-color: rgba(255, 255, 255, 0.15);
+    background: rgba(24, 23, 21, 0.98);
+    border-color: rgba(255, 255, 255, 0.14);
     color: #f5f4f0;
   }
 }
@@ -326,28 +367,157 @@ mark.bob-hl.bob-hl-focus {
   display: flex;
 }
 
-.bob-preview-item {
-  padding: 6px 8px;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.04);
-  cursor: pointer;
-  transition: background 0.12s ease;
-}
-
-.bob-preview-item:hover {
-  background: rgba(255, 252, 0, 0.25);
-}
-
-.bob-preview-item-color {
-  font-size: 9.5px;
-  font-weight: 800;
-  text-transform: uppercase;
+.bob-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 4px 6px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   margin-bottom: 2px;
 }
 
-.bob-preview-item-color.blue { color: #0284c7; }
-.bob-preview-item-color.green { color: #16a34a; }
-.bob-preview-item-color.yellow { color: #ca8a04; }
+.bob-preview-title {
+  font-weight: 750;
+  font-size: 11px;
+  letter-spacing: -0.01em;
+  color: #171717;
+}
+
+@media (prefers-color-scheme: dark) {
+  .bob-preview-title { color: #ffffff; }
+  .bob-preview-head { border-bottom-color: rgba(255, 255, 255, 0.1); }
+}
+
+.bob-preview-count {
+  font-size: 10px;
+  font-weight: 600;
+  color: #737373;
+}
+
+.bob-preview-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.03);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-left: 3px solid transparent;
+}
+
+@media (prefers-color-scheme: dark) {
+  .bob-preview-item { background: rgba(255, 255, 255, 0.04); }
+}
+
+.bob-preview-badge {
+  font-size: 8.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  padding: 1.5px 5px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+
+.bob-preview-badge.blue { background: rgba(0, 128, 245, 0.15); color: #0070d8; }
+.bob-preview-badge.yellow { background: rgba(255, 252, 0, 0.35); color: #854d0e; }
+.bob-preview-badge.green { background: rgba(22, 163, 74, 0.15); color: #15803d; }
+.bob-preview-badge.purple { background: rgba(168, 85, 247, 0.15); color: #7e22ce; }
+.bob-preview-badge.orange { background: rgba(234, 88, 12, 0.15); color: #c2410c; }
+.bob-preview-badge.pink { background: rgba(225, 29, 72, 0.15); color: #be123c; }
+
+.bob-preview-line {
+  flex: 1;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* Hover and active states match highlight colors with high contrast for complete readability */
+.bob-preview-item.blue:hover,
+.bob-preview-item.blue.active {
+  background: #0080f5 !important;
+  color: #ffffff !important;
+  border-left-color: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 128, 245, 0.3);
+}
+.bob-preview-item.blue:hover .bob-preview-badge,
+.bob-preview-item.blue.active .bob-preview-badge {
+  background: rgba(255, 255, 255, 0.25) !important;
+  color: #ffffff !important;
+}
+
+.bob-preview-item.yellow:hover,
+.bob-preview-item.yellow.active {
+  background: #fffc00 !important;
+  color: #171717 !important;
+  border-left-color: #171717;
+  box-shadow: 0 2px 8px rgba(235, 210, 0, 0.35);
+}
+.bob-preview-item.yellow:hover .bob-preview-badge,
+.bob-preview-item.yellow.active .bob-preview-badge {
+  background: rgba(23, 23, 23, 0.15) !important;
+  color: #171717 !important;
+}
+
+.bob-preview-item.green:hover,
+.bob-preview-item.green.active {
+  background: #16a34a !important;
+  color: #ffffff !important;
+  border-left-color: #ffffff;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.3);
+}
+.bob-preview-item.green:hover .bob-preview-badge,
+.bob-preview-item.green.active .bob-preview-badge {
+  background: rgba(255, 255, 255, 0.25) !important;
+  color: #ffffff !important;
+}
+
+.bob-preview-item.purple:hover,
+.bob-preview-item.purple.active {
+  background: #9333ea !important;
+  color: #ffffff !important;
+  border-left-color: #ffffff;
+  box-shadow: 0 2px 8px rgba(147, 51, 234, 0.3);
+}
+.bob-preview-item.purple:hover .bob-preview-badge,
+.bob-preview-item.purple.active .bob-preview-badge {
+  background: rgba(255, 255, 255, 0.25) !important;
+  color: #ffffff !important;
+}
+
+.bob-preview-item.orange:hover,
+.bob-preview-item.orange.active {
+  background: #ea580c !important;
+  color: #ffffff !important;
+  border-left-color: #ffffff;
+  box-shadow: 0 2px 8px rgba(234, 88, 12, 0.3);
+}
+.bob-preview-item.orange:hover .bob-preview-badge,
+.bob-preview-item.orange.active .bob-preview-badge {
+  background: rgba(255, 255, 255, 0.25) !important;
+  color: #ffffff !important;
+}
+
+.bob-preview-item.pink:hover,
+.bob-preview-item.pink.active {
+  background: #e11d48 !important;
+  color: #ffffff !important;
+  border-left-color: #ffffff;
+  box-shadow: 0 2px 8px rgba(225, 29, 72, 0.3);
+}
+.bob-preview-item.pink:hover .bob-preview-badge,
+.bob-preview-item.pink.active .bob-preview-badge {
+  background: rgba(255, 255, 255, 0.25) !important;
+  color: #ffffff !important;
+}
 
 /* --------------------------------------- inline colab-style ask bob card */
 

@@ -688,17 +688,41 @@ async function startAsk({ prompt, selection, tab }) {
 
 async function callGemini(prompt, contextText, opts = {}) {
   const jsonMode = Boolean(opts.jsonMode);
+  const activeGoal = opts.activeGoal || (opts.context && opts.context.activeGoal) || '';
+  const goalPrompt = activeGoal
+    ? `\nACTIVE RESEARCH GOAL: "${activeGoal}". Prioritize insights, evidence, comparisons, and structured takeaways that directly advance this objective.\n`
+    : '';
+
+  const systemInstructionText =
+    'You are Bob, an intelligent, structured, and warm research companion.\n' +
+    'Structure your response cleanly like modern ChatGPT research answers. Adhere strictly to these formatting standards:\n\n' +
+    '1. HEADLINE CREATION (MANDATORY):\n' +
+    '   - Never output an unbroken wall of text without headings.\n' +
+    '   - Divide your response into 2 to 4 clear thematic sections using Markdown H2 headers (e.g. "## Key Findings & Core Takeaways", "## Evidence & Comparative Analysis", "## Actionable Next Steps").\n' +
+    '   - Use H3 headers (###) for deeper sub-topic divisions where needed.\n\n' +
+    '2. SENTENCE LENGTH & TONE:\n' +
+    '   - Keep sentences short, crisp, and punchy (15–25 words max per sentence).\n' +
+    '   - High information density. Eliminate polite filler, throat-clearing, and verbose preambles.\n\n' +
+    '3. BULLETS WITH BOLD LEAD-INS (MANDATORY):\n' +
+    '   - Always use bullet points with bold lead-ins for key insights and claims:\n' +
+    '     - **Concept / Finding**: Direct, informative explanation.\n' +
+    '     - **Evidence / Metric**: Numerical or factual proof from the context.\n' +
+    '   - Use numbered lists (1., 2., 3.) when outlining sequential workflows, ranked items, or chronological steps.\n\n' +
+    '4. COMPARISON TABLES:\n' +
+    '   - Whenever comparing 2 or more tools, frameworks, approaches, or data points, synthesize them into a clean Markdown table (| Metric / Aspect | Option A | Option B |).\n\n' +
+    '5. CALLOUTS FOR CRUCIAL ADVICE & CAVEATS:\n' +
+    '   - Use blockquote callouts for critical highlights, warnings, or limitations:\n' +
+    '     > **Tip**: Actionable advice or power tip.\n' +
+    '     > **Important**: Critical requirement or prerequisite.\n' +
+    '     > **Caution**: Known risks, caveats, or failure modes.\n\n' +
+    '6. GROUNDING & CITATIONS:\n' +
+    '   - Ground all statements in the provided research context and cite sources using [1], [2] where applicable.\n' +
+    '   - Never invent statistics or facts not present in the context.\n' +
+    goalPrompt +
+    `\nRESEARCH CONTEXT:\n${contextText || '(no page or research context supplied)'}`;
+
   const systemInstruction = opts.systemInstruction || {
-    parts: [
-      {
-        text:
-          'You are Bob, a precise and warm research companion living in a Chrome side panel.\n' +
-          'Answer using only the provided research context and the user question. Never invent notes, projects, statistics or sources that are not in the context.\n' +
-          'If the context is insufficient, say exactly what is missing.\n' +
-          'Be concise: prefer short paragraphs or tight bullet lists.\n\n' +
-          `RESEARCH CONTEXT:\n${contextText || '(no page or research context supplied)'}`,
-      },
-    ],
+    parts: [{ text: systemInstructionText }],
   };
 
   // 1. Prefer asking Bob Desktop bridge to execute the request (single source of truth for key & verified model)
@@ -709,7 +733,7 @@ async function callGemini(prompt, contextText, opts = {}) {
         method: 'POST',
         body: {
           prompt,
-          systemInstruction,
+          systemInstruction: systemInstructionText,
           jsonMode,
           model: bridgeStatus.verifiedModel || (await getSettings()).verifiedModel
         }
@@ -1198,7 +1222,9 @@ async function handleMessage(message, sender) {
       }).catch(() => {});
 
       // 2. Call Gemini
-      let result = await callGemini(prompt, contextText);
+      let result = await callGemini(prompt, contextText, {
+        activeGoal: (message.context && message.context.activeGoal) || ''
+      });
 
       // If no key in extension settings, try fetching the key from Bob Desktop bridge
       if (!result.ok && result.reason === 'no-key') {
@@ -1246,6 +1272,19 @@ async function handleMessage(message, sender) {
       const tab = await activeTab(sender);
       if (!tab || !tab.id) return { ok: false, reason: 'no-tab' };
       return relayToTab(tab.id, { type: 'BOB_HIGHLIGHT_SELECTION', color: message.color || 'yellow' });
+    }
+
+    case 'TRIGGER_AUTO_HIGHLIGHT': {
+      const tab = await activeTab(sender);
+      if (tab && tab.id) {
+        broadcast({ type: 'BOB_TRIGGER_AUTO_HIGHLIGHT', tabId: tab.id });
+        try {
+          if (chrome.sidePanel && chrome.sidePanel.open) {
+            chrome.sidePanel.open({ tabId: tab.id }).catch(() => {});
+          }
+        } catch {}
+      }
+      return { ok: true };
     }
 
     case 'AUTO_HIGHLIGHT':

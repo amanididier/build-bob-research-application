@@ -655,6 +655,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } else {
         // Fallback HTTP poll to local desktop bridge port 54321
         try {
+          // 1. Sync projects created from Chrome extension
+          try {
+            const pRes = await fetch('http://127.0.0.1:54321/events/projects', {
+              headers: { 'x-bob-token': 'development-token' }
+            });
+            if (pRes.ok) {
+              const pData = await pRes.json();
+              if (pData.ok && Array.isArray(pData.projects)) {
+                setProjects((prev) => {
+                  let changed = false;
+                  const currentIds = new Set(prev.map((p) => p.id));
+                  const newItems: ResearchProjectItem[] = [];
+
+                  for (const bp of pData.projects) {
+                    if (bp && bp.id && !currentIds.has(bp.id)) {
+                      newItems.push({
+                        id: bp.id,
+                        title: bp.name || 'Research Project',
+                        dotColor: bp.color === 'green' ? '#10b981' : bp.color === 'yellow' ? '#f59e0b' : '#3b82f6',
+                        sourceCount: 1,
+                        openTasks: 0,
+                        status: 'active today',
+                        summary: 'Project created from Chrome Side Panel · Synced to desktop',
+                      });
+                      changed = true;
+                    }
+                  }
+
+                  if (changed) {
+                    const merged = [...newItems, ...prev];
+                    try {
+                      localStorage.setItem('bob_research_sessions_v3', JSON.stringify(merged));
+                    } catch {}
+                    return merged;
+                  }
+                  return prev;
+                });
+              }
+            }
+          } catch {}
+
+          // 2. Sync chat messages
           const res = await fetch(`http://127.0.0.1:54321/events/messages?project=${encodeURIComponent(activeResearchId)}`, {
             headers: { 'x-bob-token': 'development-token' }
           });
