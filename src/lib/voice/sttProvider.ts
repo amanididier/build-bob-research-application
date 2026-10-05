@@ -230,6 +230,17 @@ export class DualEngineSTTProvider implements STTProvider {
     return '';
   }
 
+  /**
+   * Force-finalize everything captured so far. Called on speech end so a
+   * result doesn't wait for the ~55s chunk boundary (or for WebSpeech, which
+   * is often absent/offline in Electron) — this is what made both modes
+   * appear to listen indefinitely and never produce a result.
+   */
+  public async flush(): Promise<void> {
+    if (!this.active || this.audioChunks.length === 0) return;
+    await this.detachAndTranscribeChunk();
+  }
+
   public stop(): void {
     this.active = false;
 

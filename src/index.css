@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Bob toggles a .dark class on <html>/<body>. Make Tailwind's dark: variant
+   follow that class instead of the OS prefers-color-scheme media query, so
+   dark-only colors never leak into light mode (tables, pills, badges, etc.). */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --bg: #fafaf8;
   --s: #ffffff;

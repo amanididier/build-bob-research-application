@@ -668,7 +668,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 let changed = false;
 
                 for (const m of deskStore.messages) {
-                  const pid = m.projectId || activeResearchId;
+                  // Only mirror messages explicitly addressed to a session.
+                  // Falling back to the active session here is what made a
+                  // brand-new "New research" inherit another session's chats.
+                  const pid = m.projectId;
+                  if (!pid) continue;
                   if (!next[pid]) next[pid] = [];
 
                   const exists = next[pid].some(
