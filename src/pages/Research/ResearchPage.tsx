@@ -128,7 +128,7 @@ export const ResearchPage: React.FC = () => {
                 <div
                   className={`max-w-[80%] px-3.5 py-2.5 rounded-[15px] text-[12px] leading-relaxed ${
                     msg.role === 'user'
-                      ? 'bg-[var(--bs)] text-[#1e3a8a] dark:text-[#bfdbfe]'
+                      ? 'bg-[var(--user-pill-bg)] text-[var(--user-pill-text)]'
                       : 'bg-[var(--s2)] text-[var(--t)]'
                   }`}
                 >

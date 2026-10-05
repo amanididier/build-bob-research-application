@@ -471,4 +471,7 @@
 
   // Export to window
   window.renderBobResponse = renderBobResponse;
+  // Shared escaping helper for the other extension scripts (content.js,
+  // sidepanel.js) which build HTML strings in the same JS context.
+  window.escapeHtml = escapeHtml;
 })();

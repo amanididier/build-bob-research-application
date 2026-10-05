@@ -12,6 +12,9 @@
   --b: #4385f5;
   --bs: #e7f0ff;
   --g: #38b96e;
+  /* User message pill: premium translucent blue, always readable (light & dark) */
+  --user-pill-bg: #2f7cf6;
+  --user-pill-text: #ffffff;
   --shadow: 0 24px 70px rgba(0, 0, 0, 0.08);
   --side: 275px;
 }
@@ -27,6 +30,8 @@ html.dark, body.dark {
   --bs: #1d2d43;
   --y: #edb81a;
   --b: #76a5ff;
+  --user-pill-bg: rgba(47, 124, 246, 0.34);
+  --user-pill-text: #eaf2ff;
   --shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
 }
 

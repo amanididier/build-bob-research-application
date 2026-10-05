@@ -262,7 +262,7 @@ export const ChatView: React.FC = () => {
           if (msg.role === 'user') {
             return (
               <div key={msg.id} className="flex gap-3 items-start justify-end">
-                <div className="max-w-[80%] bg-[var(--bs)] text-[#1e3a8a] dark:text-[#bfdbfe] px-4 py-3 rounded-[18px] text-[13px] leading-relaxed shadow-sm">
+                <div className="max-w-[80%] bg-[var(--user-pill-bg)] text-[var(--user-pill-text)] px-4 py-3 rounded-[18px] text-[13px] leading-relaxed shadow-sm">
                   {msg.text}
                 </div>
               </div>
