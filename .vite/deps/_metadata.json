@@ -1,0 +1,72 @@
+{
+  "hash": "0cb6d046",
+  "configHash": "5563c747",
+  "lockfileHash": "61b8e36c",
+  "browserHash": "910e4e40",
+  "optimized": {
+    "@google/genai": {
+      "src": "../../node_modules/.pnpm/@google+genai@2.27.0/node_modules/@google/genai/dist/web/index.mjs",
+      "file": "@google_genai.js",
+      "fileHash": "79c9bd5a",
+      "needsInterop": false
+    },
+    "jspdf": {
+      "src": "../../node_modules/.pnpm/jspdf@4.2.1/node_modules/jspdf/dist/jspdf.es.min.js",
+      "file": "jspdf.js",
+      "fileHash": "77a28cf4",
+      "needsInterop": false
+    },
+    "lucide-react": {
+      "src": "../../node_modules/.pnpm/lucide-react@0.546.0_react@19.3.0/node_modules/lucide-react/dist/esm/lucide-react.js",
+      "file": "lucide-react.js",
+      "fileHash": "8903d7b6",
+      "needsInterop": false
+    },
+    "react-dom/client": {
+      "src": "../../node_modules/.pnpm/react-dom@19.3.0_react@19.3.0/node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "5a3f18f7",
+      "needsInterop": true
+    },
+    "react": {
+      "src": "../../node_modules/.pnpm/react@19.3.0/node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "89efadff",
+      "needsInterop": true
+    },
+    "react/jsx-dev-runtime": {
+      "src": "../../node_modules/.pnpm/react@19.3.0/node_modules/react/jsx-dev-runtime.js",
+      "file": "react_jsx-dev-runtime.js",
+      "fileHash": "c98f7ac8",
+      "needsInterop": true
+    },
+    "zustand": {
+      "src": "../../node_modules/.pnpm/zustand@5.0.15_@types+react@19.3.0_react@19.3.0/node_modules/zustand/esm/index.mjs",
+      "file": "zustand.js",
+      "fileHash": "628195d3",
+      "needsInterop": false
+    }
+  },
+  "chunks": {
+    "html2canvas-DALpXDv4": {
+      "file": "html2canvas-DALpXDv4.js",
+      "isDynamicEntry": true
+    },
+    "index.es-CJ0JOVZb": {
+      "file": "index.es-CJ0JOVZb.js",
+      "isDynamicEntry": true
+    },
+    "purify.es-B5FnNtCV": {
+      "file": "purify.es-B5FnNtCV.js",
+      "isDynamicEntry": true
+    },
+    "rolldown-runtime-DC62tzP2": {
+      "file": "rolldown-runtime-DC62tzP2.js",
+      "isDynamicEntry": false
+    },
+    "typeof-CRRZfkuU": {
+      "file": "typeof-CRRZfkuU.js",
+      "isDynamicEntry": false
+    }
+  }
+}

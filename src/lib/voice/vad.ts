@@ -1,4 +1,5 @@
 import { DEFAULT_VOICE_CONFIG } from './voiceConfig';
+import type { VoiceMode } from './types';
 
 export interface VADCallbacks {
   onSpeechStart: () => void;
@@ -17,7 +18,7 @@ export class VoiceActivityDetector {
   private silenceTimer: any = null;
   private isRunning = false;
 
-  public start(stream: MediaStream, callbacks: VADCallbacks): void {
+  public start(stream: MediaStream, callbacks: VADCallbacks, mode: VoiceMode = 'call'): void {
     if (this.isRunning) return;
 
     try {
@@ -68,7 +69,7 @@ export class VoiceActivityDetector {
                 callbacks.onSpeechEnd();
               }
               this.silenceTimer = null;
-            }, DEFAULT_VOICE_CONFIG.speechEndSilenceDurationMs);
+            }, mode === 'prompt' ? DEFAULT_VOICE_CONFIG.promptSilenceDurationMs : DEFAULT_VOICE_CONFIG.callSilenceDurationMs);
           }
         }
 

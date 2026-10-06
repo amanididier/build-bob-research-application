@@ -5,6 +5,7 @@ import { bobAi } from '../aiEngine';
 export interface STTProvider {
   start: (onTranscript: (event: STTEvent) => void, onError: (err: string) => void) => Promise<void>;
   stop: () => void;
+  stopAndFlush?: () => Promise<string>;
   isListening: () => boolean;
 }
 
@@ -19,6 +20,7 @@ export class DualEngineSTTProvider implements STTProvider {
   private onTranscriptCallback?: (event: STTEvent) => void;
   private onErrorCallback?: (err: string) => void;
   private isProcessingChunk = false;
+  private stopping = false;
 
   constructor() {
     this.initWebSpeech();
@@ -49,6 +51,7 @@ export class DualEngineSTTProvider implements STTProvider {
     if (this.active) return;
 
     this.active = true;
+    this.stopping = false;
     this.lastFinalTranscript = '';
     this.fullTranscript = '';
     this.audioChunks = [];
@@ -116,7 +119,7 @@ export class DualEngineSTTProvider implements STTProvider {
     };
 
     this.recognition.onend = () => {
-      if (this.active) {
+      if (this.active && !this.stopping) {
         try {
           this.recognition.start();
         } catch {}
@@ -241,7 +244,28 @@ export class DualEngineSTTProvider implements STTProvider {
     await this.detachAndTranscribeChunk();
   }
 
+  public async stopAndFlush(): Promise<string> {
+    if (!this.active) return this.fullTranscript;
+    this.stopping = true;
+    const recorder = this.mediaRecorder;
+    if (recorder && recorder.state !== 'inactive') {
+      await new Promise<void>((resolve) => {
+        const previousStop = recorder.onstop;
+        recorder.onstop = (event) => {
+          previousStop?.call(recorder, event);
+          resolve();
+        };
+        try { recorder.stop(); } catch { resolve(); }
+      });
+    }
+    await this.detachAndTranscribeChunk();
+    const transcript = this.fullTranscript;
+    this.stop();
+    return transcript;
+  }
+
   public stop(): void {
+    this.stopping = true;
     this.active = false;
 
     if (this.chunkIntervalId) {

@@ -6,10 +6,8 @@ import { audioQueue } from './audioQueue';
 import { ResponseTextChunker } from './textChunker';
 
 const SILENCE_MS: Record<VoiceMode, number> = {
-  // Prompt mode: the draft settles into the composer after a long pause; the user sends it.
-  prompt: 10_000,
-  // Call mode: Bob answers as soon as you stop talking.
-  call: 3_000
+  prompt: 0,
+  call: 1_000
 };
 
 export class VoiceController {
@@ -91,7 +89,8 @@ export class VoiceController {
         onSpeechStart: () => this.handleSpeechStart(),
         onSpeechEnd: () => this.handleSpeechEnd(),
         onEnergyChange: (energy) => this.energyListeners.forEach((fn) => fn(energy))
-      }
+      },
+      this.mode
     );
   }
 
@@ -168,11 +167,24 @@ export class VoiceController {
   }
 
   private handleSpeechEnd(): void {
-    if (!this.isVoiceModeActive) return;
-    // Transcribe everything said in this turn now, instead of waiting for the
-    // next 60-second chunk boundary.
-    if (typeof (stt as any).flush === 'function') {
-      void (stt as any).flush();
+    if (!this.isVoiceModeActive || this.mode === 'prompt') return;
+    void stt.flush?.();
+  }
+
+  public async endPromptRecording(): Promise<void> {
+    if (!this.isVoiceModeActive || this.mode !== 'prompt') return;
+    this.setState('TRANSCRIBING');
+    vad.stop();
+    const transcript = await (stt.stopAndFlush?.() || Promise.resolve(this.currentTranscript));
+    this.isVoiceModeActive = false;
+    micManager.stopCapture();
+    this.currentTranscript = transcript.trim();
+    if (this.currentTranscript) {
+      this.onTranscriptUpdate?.(this.currentTranscript, true);
+      this.setState('IDLE');
+    } else {
+      this.setState('ERROR', 'No speech detected.');
+      this.setState('IDLE');
     }
   }
 

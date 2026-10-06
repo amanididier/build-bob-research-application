@@ -188,7 +188,9 @@ export const BottomComposer: React.FC = () => {
             voiceState === 'LISTENING'
               ? 'Listening... speak naturally, your words appear here...'
               : voiceState === 'USER_SPEAKING'
-              ? 'Transcribing your voice...'
+              ? 'Listening...'
+              : voiceState === 'TRANSCRIBING'
+              ? 'Transcribing...'
               : voiceState === 'SPEAKING'
               ? 'Bob is speaking (click mic or talk to interrupt)...'
               : 'Message Bob...'
@@ -232,6 +234,24 @@ export const BottomComposer: React.FC = () => {
               <span className="text-[11.5px] font-semibold text-[var(--y)] select-none">
                 {voiceMode === 'call' ? 'Call connected' : 'Listening...'}
               </span>
+            </div>
+          )}
+
+          {voiceMode === 'prompt' && isVoiceActive && voiceState !== 'TRANSCRIBING' && (
+            <button
+              type="button"
+              onClick={() => void voiceController.endPromptRecording()}
+              title="End dictation and transcribe"
+              className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 mr-1 text-[11.5px] font-semibold text-red-600 dark:text-red-400"
+            >
+              <Square className="w-2.5 h-2.5 fill-current" />
+              End
+            </button>
+          )}
+
+          {voiceState === 'TRANSCRIBING' && (
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/40 mr-1 text-[11.5px] font-semibold text-amber-600 dark:text-amber-400">
+              Transcribing...
             </div>
           )}
 
