@@ -482,14 +482,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsAiGenerating(true);
 
     try {
-      const response: AiSynthesisResponse = await bobAi.generateResearchAnswer(
-        promptText,
-        activeResearchId
-      );
+      const useVoiceStream = voiceController.isCallActive() && !voiceController.isLive();
+      const response: AiSynthesisResponse = useVoiceStream
+        ? await bobAi.streamResearchAnswer(promptText, activeResearchId, (_accumulated, delta) => {
+            voiceController.feedAIStreamChunk(delta);
+          })
+        : await bobAi.generateResearchAnswer(promptText, activeResearchId);
 
-      // Feed into voice system for progressive speech playback
-      voiceController.feedAIStreamChunk(response.answer);
-      voiceController.finalizeAIResponse(response.answer);
+      // Voice Call speaks sentences as they stream in; close the final chunk now.
+      if (useVoiceStream) {
+        voiceController.finalizeAIResponse(response.answer);
+      }
 
       const assistantMsg: ChatMessage = {
         id: `a-${Date.now()}`,
@@ -560,6 +563,63 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setIsAiGenerating(false);
     }
   };
+
+  // Gemini Live already spoke both sides of the turn — persist without a second request.
+  const appendVoiceExchange = (userText: string, bobText: string) => {
+    const newMessages: ChatMessage[] = [];
+    if (userText.trim()) {
+      newMessages.push({
+        id: `u-${Date.now()}`,
+        role: 'user',
+        text: userText.trim(),
+        timestamp: 'Just now',
+      });
+    }
+    if (bobText.trim()) {
+      newMessages.push({
+        id: `a-${Date.now() + 1}`,
+        role: 'assistant',
+        text: bobText.trim(),
+        timestamp: 'Just now',
+        modelTier: 'gemini-live',
+      });
+    }
+    if (newMessages.length === 0) return;
+
+    setSessionMessages((prev) => {
+      const existing = prev[activeResearchId] || [];
+      const updated = { ...prev, [activeResearchId]: [...existing, ...newMessages] };
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('bob_session_messages_v3', JSON.stringify(updated));
+        } catch {}
+      }
+      return updated;
+    });
+
+    const bob = typeof window !== 'undefined' ? (window as any).bob : null;
+    if (bob?.add) {
+      newMessages.forEach((m, i) => {
+        bob
+          .add('messages', {
+            id: m.id,
+            role: m.role,
+            text: m.text,
+            projectId: activeResearchId,
+            origin: 'desktop',
+            at: Date.now() + i,
+          })
+          .catch(() => {});
+      });
+    }
+  };
+
+  useEffect(() => {
+    voiceController.registerHandlers({
+      onVoiceExchange: appendVoiceExchange,
+      onGetVoiceContext: () => bobAi.getVoiceContext(activeResearchId),
+    });
+  }, [activeResearchId]);
 
   const clearChat = () => {
     setSessionMessages((prev) => {

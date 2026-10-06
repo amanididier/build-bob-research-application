@@ -15,7 +15,7 @@ import {
   Volume2,
   VolumeX
 } from 'lucide-react';
-import { bobVoice } from '../../lib/voiceAgent';
+import { voiceController } from '../../lib/voice/voiceController';
 
 export const ChatView: React.FC = () => {
   const { 
@@ -40,24 +40,28 @@ export const ChatView: React.FC = () => {
   const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
 
   React.useEffect(() => {
-    const unsub = bobVoice.subscribe((speaking) => {
-      if (!speaking) {
+    const unsub = voiceController.addSpeakingListener((info) => {
+      if (!info.speaking) {
         setSpeakingMsgId(null);
       }
     });
-    return unsub;
+    return () => {
+      unsub();
+      // Read Aloud must not keep talking after the chat disappears.
+      voiceController.stopSpeaking();
+    };
   }, []);
 
   const handleSpeakMessage = (id: string, text: string) => {
     if (speakingMsgId === id) {
-      bobVoice.stopSpeaking();
+      voiceController.stopSpeaking();
       setSpeakingMsgId(null);
-    } else {
-      setSpeakingMsgId(id);
-      bobVoice.speak(text, () => {
-        setSpeakingMsgId(null);
-      });
+      return;
     }
+    setSpeakingMsgId(id);
+    // Chunked Gemini TTS through the shared queue: audio starts on the first
+    // sentence, and any older Read Aloud/Call audio is invalidated first.
+    voiceController.speakText(text, 'read-aloud');
   };
 
   const project = projects.find((p) => p.id === activeResearchId) || projects[0];
@@ -371,14 +375,14 @@ export const ChatView: React.FC = () => {
                             ? 'text-amber-500 bg-[var(--s2)] font-semibold'
                             : 'hover:bg-[var(--s2)] text-[var(--m)] hover:text-[var(--t)]'
                         }`}
-                        title={speakingMsgId === msg.id ? 'Pause voice' : 'Listen with Bob humanistic voice'}
+                        title={speakingMsgId === msg.id ? 'Stop Read Aloud' : 'Listen with Bob humanistic voice'}
                       >
                         {speakingMsgId === msg.id ? (
                           <VolumeX className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
                         ) : (
                           <Volume2 className="w-3.5 h-3.5" />
                         )}
-                        <span>{speakingMsgId === msg.id ? 'Speaking' : 'Read Aloud'}</span>
+                        <span>{speakingMsgId === msg.id ? 'Stop' : 'Read Aloud'}</span>
                       </button>
 
                       <span className="flex-1" />

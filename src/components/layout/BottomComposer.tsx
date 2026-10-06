@@ -27,10 +27,16 @@ export const BottomComposer: React.FC = () => {
     voiceState,
     startVoiceMode,
     stopVoiceMode,
+    endDictation,
     interrupt,
     voiceMode,
     setVoiceMode,
     errorMessage,
+    notice,
+    clearNotice,
+    isSpeaking,
+    stopSpeaking,
+    provider,
   } = useVoiceStore();
 
   const handleSend = useCallback(async (textToSend?: string) => {
@@ -72,6 +78,13 @@ export const BottomComposer: React.FC = () => {
     return () => clearTimeout(t);
   }, [launcherToast]);
 
+  // Transient voice notices (fallback active, provider problems) — never flooding.
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => clearNotice(), 6000);
+    return () => clearTimeout(t);
+  }, [notice, clearNotice]);
+
   // Do not show on Chrome side panel page because that page has its own dedicated dock composer
   if (currentPage === 'chrome') {
     return null;
@@ -107,16 +120,24 @@ export const BottomComposer: React.FC = () => {
   };
 
   const handleToggleVoice = async () => {
-    if (voiceState === 'SPEAKING') {
-      interrupt();
+    const sessionActive = voiceController.isActive();
+
+    if (!sessionActive) {
+      // Read Aloud (or a stale SPEAKING state) owns the output right now.
+      if (isSpeaking || voiceState === 'SPEAKING') {
+        stopSpeaking();
+        return;
+      }
+      setMicMenuOpen((v) => !v);
       return;
     }
 
-    if (voiceState !== 'IDLE' && voiceState !== 'ERROR') {
-      stopVoiceMode();
-      setMicMenuOpen(false);
+    setMicMenuOpen(false);
+    if (voiceMode === 'prompt') {
+      // Finalize the recording, transcribe it, drop it into the composer, release the mic.
+      await endDictation();
     } else {
-      setMicMenuOpen((v) => !v);
+      stopVoiceMode();
     }
   };
 
@@ -139,8 +160,8 @@ export const BottomComposer: React.FC = () => {
     }
   };
 
-  const isVoiceActive = voiceState !== 'IDLE' && voiceState !== 'ERROR' && voiceState !== 'STOPPING';
-  const isExpanded = Boolean(prompt.trim()) || isVoiceActive;
+  const isVoiceActive = voiceController.isActive() || voiceState === 'CONNECTING';
+  const isExpanded = Boolean(prompt.trim()) || isVoiceActive || voiceState === 'SPEAKING';
 
   if (isVoiceActive && voiceMode === 'call') {
     return <VoiceCallOverlay onClose={() => stopVoiceMode()} />;
@@ -227,6 +248,31 @@ export const BottomComposer: React.FC = () => {
             </div>
           )}
 
+          {notice && !errorMessage && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--ys)] dark:bg-[#382c0b] border border-[var(--y)]/40 mr-1 max-w-[280px] animate-in fade-in duration-150">
+              <AlertCircle className="w-3.5 h-3.5 text-[var(--y)] shrink-0" />
+              <span className="text-[10.5px] font-semibold text-[var(--y)] truncate">{notice}</span>
+            </div>
+          )}
+
+          {(voiceState === 'CONNECTING' || voiceState === 'FALLBACK') && (
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-500/15 border border-sky-500/40 mr-1 animate-in fade-in duration-150 shadow-xs">
+              <span className="w-1.5 h-1.5 bg-sky-500 rounded-full animate-ping" />
+              <span className="text-[11.5px] font-semibold text-sky-600 dark:text-sky-400 select-none">
+                {voiceState === 'CONNECTING' ? 'Connecting to Bob...' : 'Backup voice active'}
+              </span>
+            </div>
+          )}
+
+          {voiceState === 'TRANSCRIBING' && (
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-violet-500/15 border border-violet-500/40 mr-1 animate-in fade-in duration-150 shadow-xs">
+              <Sparkles className="w-3.5 h-3.5 text-violet-500 animate-pulse" strokeWidth={1.8} />
+              <span className="text-[11.5px] font-semibold text-violet-600 dark:text-violet-400 select-none">
+                Transcribing...
+              </span>
+            </div>
+          )}
+
           {/* Dynamic Voice State Indicators */}
           {voiceState === 'LISTENING' && (
             <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--ys)] dark:bg-[#382c0b] border border-[var(--y)]/50 animate-in fade-in duration-150 mr-1 shadow-xs">
@@ -240,19 +286,13 @@ export const BottomComposer: React.FC = () => {
           {voiceMode === 'prompt' && isVoiceActive && voiceState !== 'TRANSCRIBING' && (
             <button
               type="button"
-              onClick={() => void voiceController.endPromptRecording()}
+              onClick={() => void endDictation()}
               title="End dictation and transcribe"
-              className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 mr-1 text-[11.5px] font-semibold text-red-600 dark:text-red-400"
+              className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 mr-1 text-[11.5px] font-semibold text-red-600 dark:text-red-400 cursor-pointer"
             >
               <Square className="w-2.5 h-2.5 fill-current" />
               End
             </button>
-          )}
-
-          {voiceState === 'TRANSCRIBING' && (
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/40 mr-1 text-[11.5px] font-semibold text-amber-600 dark:text-amber-400">
-              Transcribing...
-            </div>
           )}
 
           {voiceState === 'USER_SPEAKING' && (

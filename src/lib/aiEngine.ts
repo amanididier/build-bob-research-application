@@ -438,6 +438,87 @@ Would you like me to turn these insights into concrete tasks or format them for 
     };
   }
 
+  /**
+   * Streaming variant used by voice Call only: emits partial text so TTS can
+   * start on the first sentence instead of waiting for the whole answer.
+   * Falls back to the normal (non-streaming) path if streaming is unavailable.
+   */
+  public async streamResearchAnswer(
+    query: string,
+    projectId: string = 'urugendo',
+    onDelta?: (accumulated: string, delta: string) => void
+  ): Promise<AiSynthesisResponse> {
+    const startTime = performance.now();
+    const geminiKey = this.getGeminiKey();
+    if (!geminiKey || !onDelta) {
+      return this.generateResearchAnswer(query, projectId);
+    }
+
+    const memory = localMemoryBank.buildPromptContext(query, projectId);
+    const citations = memory.citedNodes.map((m) => ({
+      title: m.title,
+      url: m.sourceUrl,
+      snippet: m.content.slice(0, 160) + (m.content.length > 160 ? '...' : ''),
+    }));
+    const systemPrompt = `You are Bob, an intelligent, helpful research companion.
+Speak naturally, warmly, and clearly like ChatGPT or Gemini.
+When presenting comparisons or structured findings, use clean markdown tables.
+Synthesize the user's research context smoothly without sounding robotic or repetitive.
+Here is the available context:
+${memory.contextText}`;
+
+    const candidateModels = [
+      this.verifiedModel,
+      'gemini-3.1-flash-lite',
+      'gemini-flash-latest',
+      'gemini-2.5-flash',
+      'gemini-3.8-flash',
+    ].filter(Boolean);
+
+    for (const model of [...new Set(candidateModels)]) {
+      try {
+        const ai = new GoogleGenAI({ apiKey: geminiKey });
+        const chat = ai.chats.create({ model, config: { systemInstruction: systemPrompt } });
+        const stream = await chat.sendMessageStream({ message: `User Question: ${query}` });
+
+        let answer = '';
+        for await (const chunk of stream as any) {
+          const delta: string = chunk?.text || '';
+          if (!delta) continue;
+          answer += delta;
+          onDelta(answer, delta);
+        }
+
+        if (answer.trim()) {
+          return {
+            answer,
+            sources: citations,
+            tokensPerSec: 72,
+            latencyMs: Math.round(performance.now() - startTime),
+            modelTier: 'cloud-gemini',
+            modelName: model,
+            memoryNodesUsed: memory.citedNodes.length,
+            provider: 'gemini',
+          };
+        }
+      } catch (err: any) {
+        console.warn(`Gemini stream (${model}) failed:`, err?.message || err);
+      }
+    }
+
+    return this.generateResearchAnswer(query, projectId);
+  }
+
+  /** Compact research context for the realtime voice session instruction. */
+  public getVoiceContext(projectId: string = 'urugendo'): string {
+    try {
+      const memory = localMemoryBank.buildPromptContext('', projectId);
+      return (memory.contextText || '').slice(0, 4000);
+    } catch {
+      return '';
+    }
+  }
+
   public async extractTasksFromContext(projectId: string = 'urugendo'): Promise<AiTaskSuggestion[]> {
     const memories = localMemoryBank.getAllMemories(projectId);
     await new Promise((r) => setTimeout(r, 500));

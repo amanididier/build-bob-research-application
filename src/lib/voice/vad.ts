@@ -1,10 +1,15 @@
 import { DEFAULT_VOICE_CONFIG } from './voiceConfig';
-import type { VoiceMode } from './types';
 
 export interface VADCallbacks {
   onSpeechStart: () => void;
   onSpeechEnd: () => void;
   onEnergyChange?: (energy: number) => void;
+}
+
+export interface VADOptions {
+  /** Per-session end-of-turn silence window (call: ~1.5s, dictation: longer). */
+  silenceMs?: number;
+  threshold?: number;
 }
 
 export class VoiceActivityDetector {
@@ -17,9 +22,14 @@ export class VoiceActivityDetector {
   private lastSpeechTime = 0;
   private silenceTimer: any = null;
   private isRunning = false;
+  private silenceMs = DEFAULT_VOICE_CONFIG.speechEndSilenceDurationMs;
+  private threshold = DEFAULT_VOICE_CONFIG.speechStartThreshold;
 
-  public start(stream: MediaStream, callbacks: VADCallbacks, mode: VoiceMode = 'call'): void {
+  public start(stream: MediaStream, callbacks: VADCallbacks, options?: VADOptions): void {
     if (this.isRunning) return;
+
+    this.silenceMs = options?.silenceMs ?? DEFAULT_VOICE_CONFIG.speechEndSilenceDurationMs;
+    this.threshold = options?.threshold ?? DEFAULT_VOICE_CONFIG.speechStartThreshold;
 
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
@@ -46,7 +56,7 @@ export class VoiceActivityDetector {
         callbacks.onEnergyChange?.(energy);
 
         const now = Date.now();
-        const threshold = DEFAULT_VOICE_CONFIG.speechStartThreshold;
+        const threshold = this.threshold;
 
         if (energy > threshold) {
           if (!this.isSpeaking) {
@@ -69,7 +79,7 @@ export class VoiceActivityDetector {
                 callbacks.onSpeechEnd();
               }
               this.silenceTimer = null;
-            }, mode === 'prompt' ? DEFAULT_VOICE_CONFIG.promptSilenceDurationMs : DEFAULT_VOICE_CONFIG.callSilenceDurationMs);
+            }, this.silenceMs);
           }
         }
 
@@ -116,6 +126,22 @@ export class VoiceActivityDetector {
       } catch {}
       this.audioContext = null;
     }
+  }
+  public isDetecting(): boolean {
+    return this.isRunning;
+  }
+
+  public inSpeech(): boolean {
+    return this.isSpeaking;
+  }
+
+  /** Re-arm end-of-turn detection without touching the audio graph. */
+  public resetSpeech(): void {
+    if (this.silenceTimer) {
+      clearTimeout(this.silenceTimer);
+      this.silenceTimer = null;
+    }
+    this.isSpeaking = false;
   }
 }
 

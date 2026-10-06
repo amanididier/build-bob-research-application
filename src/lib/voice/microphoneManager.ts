@@ -99,6 +99,16 @@ export class MicrophoneManager {
   public isActive(): boolean {
     return this.isCapturing;
   }
+
+  /** Real mute: disables the captured audio tracks (no fake UI-only state). */
+  public setMuted(muted: boolean): void {
+    if (!this.mediaStream) return;
+    this.mediaStream.getAudioTracks().forEach((track) => {
+      try {
+        track.enabled = !muted;
+      } catch {}
+    });
+  }
 }
 
 export const micManager = new MicrophoneManager();
