@@ -17,7 +17,40 @@ export interface TTSProvider {
 }
 
 /** Natural-voice models, tried in order. Bounded — no retry loops. */
-const TTS_MODELS = ['gemini-3.8-flash-lite-tts', 'gemini-2.5-flash-preview-tts'];
+const TTS_MODELS = ['gemini-3.8-flash-lite-tts', 'gemini-3.8-flash-tts', 'gemini-2.5-flash-preview-tts'];
+
+const DEFAULT_TTS_SAMPLE_RATE = 24000;
+
+function parseSampleRate(mimeType: string | undefined): number {
+  const match = /rate=(\d+)/i.exec(mimeType || '');
+  return match ? Number(match[1]) : DEFAULT_TTS_SAMPLE_RATE;
+}
+
+/**
+ * Gemini TTS returns headerless 16-bit PCM (audio/L16;rate=24000). An <audio>
+ * element cannot decode raw PCM, so wrap it in a WAV container before playback.
+ */
+function pcmToWavBlob(pcm: Uint8Array<ArrayBuffer>, sampleRate: number): Blob {
+  const header = new ArrayBuffer(44);
+  const view = new DataView(header);
+  const writeText = (offset: number, text: string) => {
+    for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i));
+  };
+  writeText(0, 'RIFF');
+  view.setUint32(4, 36 + pcm.byteLength, true);
+  writeText(8, 'WAVE');
+  writeText(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeText(36, 'data');
+  view.setUint32(40, pcm.byteLength, true);
+  return new Blob([header, pcm], { type: 'audio/wav' });
+}
 
 function splitForProvider(text: string, max: number): string[] {
   if (text.length <= max) return [text];
@@ -292,13 +325,20 @@ export class UltraHumanEdgeTTSProvider implements TTSProvider {
 
         const data = await res.json().catch(() => null);
         if (res.ok) {
-          const base64Audio = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+          const inlineData = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+          const base64Audio = inlineData?.data;
           if (base64Audio) {
-            voiceDiagnostics.event(`TTS ${model} responded in ${Math.round(performance.now() - started)}ms`);
+            const mime = String(inlineData?.mimeType || '');
             const binary = atob(base64Audio);
             const bytes = new Uint8Array(binary.length);
             for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-            const blob = new Blob([bytes], { type: 'audio/wav' });
+            const isRawPcm = /l16|pcm/i.test(mime) || !/wav|mp3|ogg|aac|flac|webm/i.test(mime);
+            const blob = isRawPcm
+              ? pcmToWavBlob(bytes, parseSampleRate(mime))
+              : new Blob([bytes], { type: mime });
+            voiceDiagnostics.event(
+              `TTS ${model} responded in ${Math.round(performance.now() - started)}ms (${blob.size} bytes, ${isRawPcm ? `pcm→wav @${parseSampleRate(mime)}` : mime})`
+            );
             if (!external) this.abortController = null;
             return URL.createObjectURL(blob);
           }

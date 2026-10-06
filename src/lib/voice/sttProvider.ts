@@ -10,7 +10,7 @@ export interface STTProvider {
 }
 
 /** Transcription models, tried in order. Bounded — never an infinite retry loop. */
-const STT_MODELS = ['gemini-3.5-transcribe', 'gemini-2.5-flash-transcribe'];
+const STT_MODELS = ['gemini-3.5-transcribe', 'gemini-3.5-transcribe-live'];
 const MIN_BLOB_BYTES = 500;
 
 export class DualEngineSTTProvider implements STTProvider {

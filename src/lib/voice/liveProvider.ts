@@ -92,7 +92,7 @@ export class GeminiLiveProvider {
 
     const models = DEFAULT_VOICE_CONFIG.liveModels.length
       ? DEFAULT_VOICE_CONFIG.liveModels
-      : ['gemini-live-2.5-flash-preview'];
+      : ['gemini-3.8-live'];
 
     for (const model of models) {
       if (this.stopped) return false;

@@ -16,10 +16,13 @@ export const DEFAULT_VOICE_CONFIG: VoiceConfig = {
   maxQueueLength: 20,
   continuous: true,
   liveEnabled: true,
+  // Order matters: current stable Live model first, then the legacy preview that
+  // is known to connect today, then extended-thinking (same family as the first,
+  // so if that family is gated for this key it would fail too — hence last).
   liveModels: [
+    'gemini-3.8-live',
     'gemini-live-2.5-flash-preview',
-    'gemini-live-2.5-flash',
-    'gemini-2.0-flash-live-preview-04-09',
+    'gemini-3.8-live-extended-thinking',
   ],
   liveVoice: 'Kore',
   liveConnectTimeoutMs: 12000,
