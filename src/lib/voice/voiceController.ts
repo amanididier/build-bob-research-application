@@ -1,12 +1,12 @@
 import { VoiceState, VoiceStateListener, VoiceMode } from './types';
-import { DEFAULT_VOICE_CONFIG } from './voiceConfig';
+import { DEFAULT_VOICE_CONFIG, SILENCE_TIMEOUT_MS, MAX_CALL_IDLE_MS, DEFAULT_VOICE_KEY } from './voiceConfig';
 import { micManager } from './microphoneManager';
 import { vad } from './vad';
-import { stt } from './sttProvider';
+import { stt, STTModelStatus } from './sttProvider';
 import { audioQueue } from './audioQueue';
-import { tts } from './ttsProvider';
+import { tts, TTSModelStatus } from './ttsProvider';
 import { ResponseTextChunker } from './textChunker';
-import { liveProvider, GeminiLiveProvider } from './liveProvider';
+import { liveProvider } from './liveProvider';
 import { voiceDiagnostics, classifyError } from './diagnostics';
 import { bobAi } from '../aiEngine';
 
@@ -21,19 +21,12 @@ export interface SpeakingInfo {
 export interface VoiceHandlers {
   onTranscriptUpdate: (transcript: string, isFinal: boolean) => void;
   onSubmitMessage: (text: string) => Promise<void>;
-  /** Live mode already produced Bob's spoken answer — persist both sides, no new request. */
   onVoiceExchange?: (userText: string, bobText: string) => void;
-  /** Research context injected into the realtime session. */
   onGetVoiceContext?: () => string;
 }
 
 const ERROR_AUTO_CLEAR_MS = 6000;
 
-/**
- * Single authoritative voice state machine and the only owner of Bob's audio
- * output. Prompt = mic → STT → composer. Call = Gemini Live realtime, with a
- * visible fallback to VAD → STT → chat → chunked TTS.
- */
 export class VoiceController {
   private state: VoiceState = 'IDLE';
   private listeners: Set<VoiceStateListener> = new Set();
@@ -43,6 +36,9 @@ export class VoiceController {
 
   private currentTranscript = '';
   private lastBobReply = '';
+  private lastPersistedTurnId = -1;
+  private turnUserText = '';
+  private turnBobText = '';
   private isVoiceModeActive = false;
   private mode: VoiceMode = 'prompt';
   private handlers?: VoiceHandlers;
@@ -53,16 +49,15 @@ export class VoiceController {
   private speakingSource: SpeechSource | null = null;
   private isSubmitting = false;
   private responseCancelled = false;
-
-  private liveActive = false;
-  private liveBobText = '';
-  private liveBobFromTranscription = false;
-  private pendingLiveUserText = '';
   private streamingReply = '';
 
   private idleTimer: any = null;
   private turnTimer: any = null;
   private errorTimer: any = null;
+  private callIdleTimer: any = null;
+  private transcriptReadyTimer: any = null;
+
+  private sttUnsubscribe: (() => void) | null = null;
 
   constructor() {
     this.chunker = new ResponseTextChunker((chunk) => {
@@ -71,6 +66,19 @@ export class VoiceController {
 
     audioQueue.setPlaybackStateListener((isPlaying) => this.handlePlaybackState(isPlaying));
     audioQueue.addErrorListener((message) => this.notify(message));
+
+    this.sttUnsubscribe = stt.subscribe((status: STTModelStatus) => {
+      if (status.state === 'downloading' || status.state === 'loading') {
+        if (this.state !== 'LOADING_MODEL' && this.isVoiceModeActive) this.setState('LOADING_MODEL');
+      } else if (status.state === 'ready') {
+        if (this.state === 'LOADING_MODEL' && this.isVoiceModeActive) {
+          this.notify('Local voice ready');
+          voiceDiagnostics.event('Voice model downloaded successfully');
+        }
+      } else if (status.state === 'error') {
+        this.failSoft(status.message);
+      }
+    });
   }
 
   // ---------------------------------------------------------------- listeners
@@ -97,7 +105,6 @@ export class VoiceController {
     return () => this.noticeListeners.delete(listener);
   }
 
-  /** Merged so the composer and the app context can each own part of the contract. */
   public registerHandlers(handlers: Partial<VoiceHandlers>): void {
     this.handlers = { ...(this.handlers || {}), ...handlers } as VoiceHandlers;
   }
@@ -143,19 +150,19 @@ export class VoiceController {
   }
 
   public isLive(): boolean {
-    return this.liveActive;
+    return false;
   }
 
   public getProviderLabel(): string {
-    if (this.liveActive) return `Gemini Live (${liveProvider.getModel()})`;
-    if (this.isCallActive()) return 'Gemini Fallback (STT → chat → TTS)';
+    if (this.isCallActive()) return 'Local Call (Moonshine STT → Bob brain → Moonshine TTS)';
+    if (this.isVoiceModeActive && this.mode === 'prompt') return 'Local Prompt (Moonshine STT only)';
     return this.mode === 'prompt' ? 'STT only' : 'idle';
   }
 
   public setMode(mode: VoiceMode): void {
     if (this.mode === mode) return;
     this.mode = mode;
-    if (this.isVoiceModeActive && !this.liveActive) {
+    if (this.isVoiceModeActive) {
       vad.stop();
       const stream = micManager.getStream();
       if (stream) this.startVad(stream);
@@ -168,7 +175,6 @@ export class VoiceController {
     if (targetMode) this.mode = targetMode;
     if (this.isVoiceModeActive) return true;
 
-    // Only one Bob audio session may own the output.
     this.stopSpeaking();
 
     voiceDiagnostics.reset();
@@ -176,14 +182,19 @@ export class VoiceController {
     this.lastBobReply = '';
     this.currentTranscript = '';
     this.responseCancelled = false;
+    this.turnUserText = '';
+    this.turnBobText = '';
 
     try {
+      this.setState('REQUESTING_PERMISSION');
+      this.notify('Requesting microphone access…');
       const stream = await micManager.startCapture();
+      this.notify('Microphone ready');
       voiceDiagnostics.set({ microphone: 'active' });
       this.isVoiceModeActive = true;
 
       if (this.mode === 'call') {
-        await this.startCallSession(stream);
+        await this.startLocalCallSession(stream);
       } else {
         await this.startDictationSession(stream);
       }
@@ -214,7 +225,7 @@ export class VoiceController {
   // ---------------------------------------------------------- prompt / dictation
 
   private async startDictationSession(stream: MediaStream): Promise<void> {
-    this.setState('LISTENING');
+    this.setState('CONNECTING_LOCAL_ENGINE');
     this.startVad(stream, DEFAULT_VOICE_CONFIG.promptSilenceDurationMs);
     this.armIdleTimer();
 
@@ -227,20 +238,26 @@ export class VoiceController {
         if (event.isFinal) {
           voiceDiagnostics.mark('sttEnd');
           voiceDiagnostics.event(`Transcript received (${event.transcript.length} chars)`);
-          // Prompt mode never auto-sends: the user reviews and presses Send.
-          if (this.state !== 'USER_SPEAKING') this.setState('LISTENING');
+          this.setState('TRANSCRIPT_READY');
+          this.notify('Transcript ready');
+          if (this.transcriptReadyTimer) clearTimeout(this.transcriptReadyTimer);
+          this.transcriptReadyTimer = setTimeout(() => {
+            this.transcriptReadyTimer = null;
+            if (this.state === 'TRANSCRIPT_READY') this.setState('LISTENING');
+          }, 2500);
           return;
         }
         if (this.state !== 'USER_SPEAKING') this.setState('USER_SPEAKING');
       },
       (errMsg) => this.failSoft(errMsg)
     );
+
+    if (this.state !== 'USER_SPEAKING' && this.state !== 'TRANSCRIPT_READY') {
+      this.setState('LISTENING');
+      this.notify('Listening…');
+    }
   }
 
-  /**
-   * Prompt mode "End": finalize the captured audio, transcribe it, put the
-   * transcript into the real composer, then release the microphone.
-   */
   public async endDictation(): Promise<string> {
     if (!this.isVoiceModeActive || this.mode !== 'prompt') {
       this.stopVoiceMode();
@@ -250,6 +267,7 @@ export class VoiceController {
     this.clearTimers();
     vad.stop();
     this.setState('TRANSCRIBING');
+    this.notify('Transcribing locally…');
     voiceDiagnostics.stage('stt', 'Audio finalized — sending to STT');
 
     let text = this.currentTranscript.trim();
@@ -283,110 +301,13 @@ export class VoiceController {
 
   // ------------------------------------------------------------------ call mode
 
-  private async startCallSession(stream: MediaStream): Promise<void> {
-    const apiKey = bobAi.getGeminiKey();
-
-    if (!apiKey && !stt.hasWebSpeech()) {
-      this.failWith('Gemini API key required for voice. Add your key in Settings.');
-      return;
-    }
-
-    if (DEFAULT_VOICE_CONFIG.liveEnabled && apiKey && GeminiLiveProvider.isSupported()) {
-      this.setState('CONNECTING');
-      voiceDiagnostics.set({ provider: 'Gemini Live', connection: 'connecting' });
-      voiceDiagnostics.event('Connecting to Bob (live voice)…');
-
-      const connected = await liveProvider.connect(stream, apiKey, this.buildLiveInstruction(), {
-        onConnected: (model) => {
-          this.liveActive = true;
-          voiceDiagnostics.set({ provider: 'Gemini Live', model, connection: 'connected' });
-          voiceDiagnostics.event('Live voice connected');
-          this.setState('LISTENING');
-          this.armIdleTimer();
-        },
-        onUserSpeechStart: () => {
-          this.clearIdleTimer();
-          this.armTurnTimer();
-          voiceDiagnostics.mark('speechStart');
-          voiceDiagnostics.set({ vad: 'speech detected (server VAD)' });
-          if (this.state !== 'SUBMITTING') this.setState('USER_SPEAKING');
-        },
-        onUserSpeechEnd: () => {
-          this.clearTurnTimer();
-          voiceDiagnostics.mark('speechEnd');
-          voiceDiagnostics.set({ vad: 'speech ended' });
-          // Safety net: if Live never returns audio/turnComplete, the idle timer
-          // still recovers the session instead of listening forever.
-          this.armIdleTimer();
-        },
-        onUserTranscript: (text, isFinal) => {
-          this.currentTranscript = text;
-          if (isFinal) this.pendingLiveUserText = text;
-          voiceDiagnostics.event(isFinal ? 'User turn transcribed' : 'Transcribing user…');
-          this.emitState();
-        },
-        onModelText: (text, isFinal) => {
-          if (!text) return;
-          // Prefer the output transcription; modelTurn text is the backup signal.
-          if (isFinal) {
-            this.liveBobFromTranscription = true;
-            this.liveBobText = text;
-          } else if (!this.liveBobFromTranscription) {
-            this.liveBobText += text;
-          }
-          this.lastBobReply = this.liveBobText;
-          this.emitState();
-        },
-        onModelAudioStart: () => {
-          this.clearIdleTimer();
-          voiceDiagnostics.set({ audio: 'playing (live)' });
-          if (this.state !== 'USER_SPEAKING') this.setState('SPEAKING');
-        },
-        onModelAudioEnd: () => {
-          this.persistLiveExchange();
-          if (this.isVoiceModeActive && this.state !== 'USER_SPEAKING') {
-            this.setState('LISTENING');
-            this.armIdleTimer();
-          }
-        },
-        onInterrupted: () => {
-          voiceDiagnostics.event('Barge-in: Bob stopped, listening again');
-          this.lastBobReply = '';
-          this.liveBobText = '';
-          this.liveBobFromTranscription = false;
-          if (this.isVoiceModeActive) this.setState('USER_SPEAKING');
-        },
-        onError: (message) => this.notify(message),
-        onClosed: () => {
-          if (!this.isVoiceModeActive || this.mode !== 'call') return;
-          const wasLive = this.liveActive;
-          this.liveActive = false;
-          if (wasLive) this.notify('Live voice connection closed. Switching to backup voice.');
-          void this.startFallbackCall();
-        },
-      });
-
-      if (connected) return;
-      liveProvider.stop();
-      voiceDiagnostics.event('Live voice unavailable — backup voice pipeline active');
-      this.notify('Live voice unavailable. Backup voice active.');
-    }
-
-    await this.startFallbackCall();
-  }
-
-  private async startFallbackCall(): Promise<void> {
+  private async startLocalCallSession(stream: MediaStream): Promise<void> {
     if (!this.isVoiceModeActive) return;
-    const stream = micManager.getStream();
-    if (!stream) {
-      this.failWith('Microphone is no longer available. Start the call again.');
-      return;
-    }
 
-    this.liveActive = false;
-    voiceDiagnostics.set({ provider: 'Gemini Fallback', connection: 'n/a (HTTP)', model: 'chat + TTS' });
-    this.setState('FALLBACK');
-    this.startVad(stream, DEFAULT_VOICE_CONFIG.callSilenceDurationMs);
+    this.setState('CONNECTING_LOCAL_ENGINE');
+    this.notify('Connecting local voice engine…');
+    this.lastPersistedTurnId = -1;
+    this.startVad(stream, SILENCE_TIMEOUT_MS);
 
     await stt.start(
       (event) => {
@@ -397,7 +318,7 @@ export class VoiceController {
           void this.handleFinalTranscript(event.transcript);
           return;
         }
-        if (this.state !== 'USER_SPEAKING' && this.state !== 'THINKING' && this.state !== 'SUBMITTING') {
+        if (this.state !== 'USER_SPEAKING' && this.state !== 'THINKING') {
           this.setState('USER_SPEAKING');
         }
       },
@@ -405,35 +326,9 @@ export class VoiceController {
     );
 
     this.setState('LISTENING');
+    this.notify('Listening…');
     this.armIdleTimer();
-  }
-
-  private buildLiveInstruction(): string {
-    let context = '';
-    try {
-      context = this.handlers?.onGetVoiceContext?.() || '';
-    } catch {
-      context = '';
-    }
-    return [
-      'You are Bob, a warm, intelligent research companion speaking live by voice.',
-      'Answer conversationally in short spoken sentences (2-4 unless detail is requested).',
-      'Never use markdown, tables, bullet symbols, code blocks or URLs — this is audio only.',
-      'If the user interrupts, stop and respond to the new request.',
-      context ? `Current research context:\n${context.slice(0, 3500)}` : '',
-    ]
-      .filter(Boolean)
-      .join('\n');
-  }
-
-  private persistLiveExchange(): void {
-    const userText = this.pendingLiveUserText.trim();
-    const bobText = this.liveBobText.trim();
-    this.pendingLiveUserText = '';
-    this.liveBobText = '';
-    this.liveBobFromTranscription = false;
-    if (!userText && !bobText) return;
-    this.handlers?.onVoiceExchange?.(userText, bobText);
+    this.armCallIdleTimer();
   }
 
   // ------------------------------------------------------------- turn handling
@@ -441,17 +336,17 @@ export class VoiceController {
   private handleSpeechStart(): void {
     if (!this.isVoiceModeActive) return;
     this.clearIdleTimer();
+    this.clearCallIdleTimer();
     this.armTurnTimer();
     voiceDiagnostics.mark('speechStart');
     voiceDiagnostics.resetTurn();
     voiceDiagnostics.set({ vad: 'speech detected' });
 
-    // Barge-in: never make the user click Stop first.
     if (this.state === 'SPEAKING' || audioQueue.isPlaying()) {
       this.interrupt();
       return;
     }
-    if (this.state !== 'SUBMITTING' && this.state !== 'THINKING') {
+    if (this.state !== 'THINKING') {
       this.setState('USER_SPEAKING');
     }
   }
@@ -461,9 +356,32 @@ export class VoiceController {
     this.clearTurnTimer();
     voiceDiagnostics.mark('speechEnd');
     voiceDiagnostics.set({ vad: 'speech ended' });
-    // Transcribe this turn now instead of waiting for the ~55s chunk boundary.
-    void stt.flush();
+
+    if (this.mode === 'prompt') {
+      void (async () => {
+        try {
+          await stt.flush();
+          const result = await stt.finalize();
+          if (result.text && this.isVoiceModeActive && this.mode === 'prompt') {
+            this.currentTranscript = result.text;
+            this.handlers?.onTranscriptUpdate(result.text, true);
+            this.setState('TRANSCRIPT_READY');
+            this.notify('Done transcribing');
+            if (this.transcriptReadyTimer) clearTimeout(this.transcriptReadyTimer);
+            this.transcriptReadyTimer = setTimeout(() => {
+              this.transcriptReadyTimer = null;
+              if (this.state === 'TRANSCRIPT_READY') this.setState('LISTENING');
+            }, 2500);
+          }
+        } catch {}
+      })();
+    } else {
+      this.setState('TRANSCRIBING');
+      this.notify('Transcribing locally…');
+      void stt.flush();
+    }
     this.armIdleTimer();
+    this.armCallIdleTimer();
   }
 
   private async handleFinalTranscript(transcript: string): Promise<void> {
@@ -474,30 +392,29 @@ export class VoiceController {
     this.responseCancelled = false;
     this.callGeneration = -1;
     this.streamingReply = '';
+    this.turnUserText = cleanText;
+    this.turnBobText = '';
     this.clearIdleTimer();
+    this.clearCallIdleTimer();
     voiceDiagnostics.mark('transcript');
-    this.setState('SUBMITTING');
+    this.setState('THINKING');
+    this.notify('Bob is thinking…');
+    this.currentTranscript = '';
+    voiceDiagnostics.stage('gemini', 'Waiting for Bob');
 
     try {
-      this.setState('THINKING');
-      this.currentTranscript = '';
-      voiceDiagnostics.stage('gemini', 'Waiting for Bob');
       await this.handlers?.onSubmitMessage(cleanText);
     } catch (err) {
       console.warn('Voice submit message error:', err);
       this.notify('Bob could not process that request.');
     } finally {
       this.isSubmitting = false;
-      if (this.isVoiceModeActive && !audioQueue.isPlaying()) {
-        this.setState('LISTENING');
-        this.armIdleTimer();
-      }
     }
   }
 
   /** Call mode: streamed answer text → sentence chunks → TTS as they arrive. */
   public feedAIStreamChunk(deltaText: string): void {
-    if (!this.isCallActive() || this.liveActive || this.responseCancelled) return;
+    if (!this.isCallActive() || this.responseCancelled) return;
     if (!deltaText) return;
 
     if (this.callGeneration < 0) {
@@ -506,17 +423,37 @@ export class VoiceController {
       voiceDiagnostics.stage('tts', 'Synthesizing first sentence');
     }
     this.streamingReply += deltaText;
+    this.turnBobText += deltaText;
     this.lastBobReply = this.streamingReply;
     this.chunker.feed(deltaText);
   }
 
   public finalizeAIResponse(fullText?: string): void {
-    if (!this.isCallActive() || this.liveActive) return;
+    if (!this.isCallActive()) return;
     if (this.responseCancelled) return;
     this.chunker.flush();
-    this.lastBobReply = this.streamingReply || fullText || this.lastBobReply;
+    const finalBob = this.streamingReply || fullText || this.turnBobText || this.lastBobReply;
+    this.lastBobReply = finalBob;
+    this.turnBobText = finalBob;
     this.callGeneration = -1;
+
     this.emitState();
+
+    if (!audioQueue.isPlaying() && this.turnUserText && this.turnBobText) {
+      this.persistLocalExchange();
+    }
+  }
+
+  private persistLocalExchange(): void {
+    const userText = this.turnUserText.trim();
+    const bobText = this.turnBobText.trim();
+    const turnId = audioQueue.getGenerationId();
+    if (!userText && !bobText) return;
+    if (turnId === this.lastPersistedTurnId) return;
+    this.lastPersistedTurnId = turnId;
+    this.handlers?.onVoiceExchange?.(userText, bobText);
+    this.turnUserText = '';
+    this.turnBobText = '';
   }
 
   // --------------------------------------------------------------- audio output
@@ -527,17 +464,22 @@ export class VoiceController {
       if (!isPlaying) {
         this.speakingSource = null;
         if (!this.isVoiceModeActive) this.setState('IDLE');
+        this.notify('Bob stopped speaking');
       }
       this.emitSpeaking(isPlaying);
       return;
     }
 
-    if (this.isVoiceModeActive && this.mode === 'call' && !this.liveActive) {
+    if (this.isCallActive()) {
       if (isPlaying && this.state !== 'USER_SPEAKING' && this.state !== 'INTERRUPTING') {
         this.setState('SPEAKING');
+        this.notify('Bob is speaking');
       } else if (!isPlaying && this.state === 'SPEAKING') {
+        this.notify('Bob stopped speaking');
+        this.persistLocalExchange();
         this.setState('LISTENING');
         this.armIdleTimer();
+        this.armCallIdleTimer();
       }
     }
     this.emitSpeaking(isPlaying);
@@ -552,15 +494,11 @@ export class VoiceController {
     this.speakingListeners.forEach((l) => l(info));
   }
 
-  /**
-   * Unified speech output (Read Aloud and Call share this path and this queue).
-   * Returns the generation id; anything enqueued under an older id is discarded.
-   */
+  /** Unified speech output (Read Aloud and Call share this path and this queue). */
   public speakText(text: string, source: SpeechSource = 'read-aloud'): number {
     const clean = (text || '').trim();
     if (!clean) return audioQueue.getGenerationId();
 
-    // Single output owner: Read Aloud interrupts Call audio and vice versa.
     if (this.speakingSource === 'call' && this.isCallActive()) this.interrupt();
     this.stopSpeaking();
 
@@ -591,8 +529,7 @@ export class VoiceController {
       this.readAloudChunker = null;
     }
     this.speakingSource = null;
-    audioQueue.interrupt(); // new generation + stop in-flight TTS: STOP always wins
-    if (this.liveActive) liveProvider.clearScheduledAudio();
+    audioQueue.interrupt();
     this.emitSpeaking(false);
     if (!this.isVoiceModeActive && this.state === 'SPEAKING') this.setState('IDLE');
   }
@@ -612,12 +549,17 @@ export class VoiceController {
     }
     this.speakingSource = null;
     audioQueue.interrupt();
-    if (this.liveActive) liveProvider.clearScheduledAudio();
     this.emitSpeaking(false);
+    this.setState('INTERRUPTING');
 
     if (this.isVoiceModeActive) {
-      this.setState('LISTENING');
-      this.armIdleTimer();
+      setTimeout(() => {
+        if (this.isVoiceModeActive) {
+          this.setState('LISTENING');
+          this.armIdleTimer();
+          this.armCallIdleTimer();
+        }
+      }, 120);
     } else {
       this.setState('IDLE');
     }
@@ -633,16 +575,34 @@ export class VoiceController {
       const busy =
         this.state === 'USER_SPEAKING' ||
         this.state === 'THINKING' ||
-        this.state === 'SUBMITTING' ||
         this.state === 'TRANSCRIBING' ||
-        audioQueue.isPlaying() ||
-        liveProvider.isPlayingAudio();
+        this.state === 'TRANSCRIPT_READY' ||
+        audioQueue.isPlaying();
       if (busy) {
         this.armIdleTimer();
         return;
       }
       this.endSessionWithMessage('No speech detected. Voice session ended.');
     }, DEFAULT_VOICE_CONFIG.idleNoSpeechTimeoutMs);
+  }
+
+  private armCallIdleTimer(): void {
+    this.clearCallIdleTimer();
+    if (!this.isVoiceModeActive || this.mode !== 'call') return;
+    this.callIdleTimer = setTimeout(() => {
+      if (!this.isVoiceModeActive || this.mode !== 'call') return;
+      const busy =
+        this.state === 'USER_SPEAKING' ||
+        this.state === 'THINKING' ||
+        this.state === 'SPEAKING' ||
+        this.state === 'TRANSCRIBING' ||
+        audioQueue.isPlaying();
+      if (busy) {
+        this.armCallIdleTimer();
+        return;
+      }
+      this.endSessionWithMessage('Call went idle too long. Ended for safety.');
+    }, MAX_CALL_IDLE_MS);
   }
 
   private armTurnTimer(): void {
@@ -661,6 +621,13 @@ export class VoiceController {
     }
   }
 
+  private clearCallIdleTimer(): void {
+    if (this.callIdleTimer) {
+      clearTimeout(this.callIdleTimer);
+      this.callIdleTimer = null;
+    }
+  }
+
   private clearTurnTimer(): void {
     if (this.turnTimer) {
       clearTimeout(this.turnTimer);
@@ -670,7 +637,12 @@ export class VoiceController {
 
   private clearTimers(): void {
     this.clearIdleTimer();
+    this.clearCallIdleTimer();
     this.clearTurnTimer();
+    if (this.transcriptReadyTimer) {
+      clearTimeout(this.transcriptReadyTimer);
+      this.transcriptReadyTimer = null;
+    }
   }
 
   private scheduleErrorClear(): void {
@@ -681,7 +653,6 @@ export class VoiceController {
     }, ERROR_AUTO_CLEAR_MS);
   }
 
-  /** Non-fatal problem: tell the user, then go back to a safe listening/idle state. */
   private failSoft(message: string): void {
     voiceDiagnostics.event(message);
     if (!this.isVoiceModeActive) {
@@ -691,7 +662,6 @@ export class VoiceController {
     }
     this.notify(message);
     if (this.mode === 'prompt') {
-      // Dictation stays usable: the transcript may still arrive, and End still works.
       return;
     }
     this.endSessionWithMessage(message);
@@ -713,12 +683,11 @@ export class VoiceController {
   // ------------------------------------------------------------------- cleanup
 
   public stopVoiceMode(): void {
-    this.teardown();
     this.setState('STOPPING');
+    this.teardown();
     this.setState('IDLE');
   }
 
-  /** Release microphone, VAD, STT, Live socket, timers and queued audio. */
   private teardown(): void {
     this.clearTimers();
     this.isVoiceModeActive = false;
@@ -727,8 +696,8 @@ export class VoiceController {
     this.callGeneration = -1;
     this.streamingReply = '';
     this.speakingSource = null;
-    this.pendingLiveUserText = '';
-    this.liveBobText = '';
+    this.turnUserText = '';
+    this.turnBobText = '';
 
     this.chunker.reset();
     if (this.readAloudChunker) {
@@ -738,7 +707,6 @@ export class VoiceController {
 
     audioQueue.interrupt();
     liveProvider.stop();
-    this.liveActive = false;
     vad.stop();
     stt.stop();
     micManager.stopCapture();

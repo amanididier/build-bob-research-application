@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Plus, Sparkles, Mic, MicOff, Send, Volume2, Square, Chrome, Phone, AlertCircle } from 'lucide-react';
+import { Plus, Sparkles, Mic, MicOff, Send, Volume2, Square, Chrome, Phone, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useVoiceStore } from '../../store/useVoiceStore';
 import { voiceController } from '../../lib/voice/voiceController';
 import { VoiceCallOverlay, VoiceWaveform } from '../voice/VoiceCallOverlay';
+import { ModelInstallCard } from '../voice/ModelInstallCard';
 
 export const BottomComposer: React.FC = () => {
   const { 
@@ -23,6 +24,9 @@ export const BottomComposer: React.FC = () => {
   const [launcherToast, setLauncherToast] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  const [installCardOpen, setInstallCardOpen] = useState<'stt' | 'tts' | null>(null);
+  const [installRetryMode, setInstallRetryMode] = useState<'prompt' | 'call' | null>(null);
+
   const {
     voiceState,
     startVoiceMode,
@@ -37,6 +41,8 @@ export const BottomComposer: React.FC = () => {
     isSpeaking,
     stopSpeaking,
     provider,
+    sttModelStatus,
+    ttsModelStatus,
   } = useVoiceStore();
 
   const handleSend = useCallback(async (textToSend?: string) => {
@@ -144,7 +150,28 @@ export const BottomComposer: React.FC = () => {
   const startMode = async (m: 'prompt' | 'call') => {
     setVoiceMode(m);
     setMicMenuOpen(false);
+
+    if (sttModelStatus.state !== 'ready' && sttModelStatus.state !== 'listening') {
+      setInstallCardOpen('stt');
+      setInstallRetryMode(m);
+      return;
+    }
     await startVoiceMode(m);
+  };
+
+  const handleInstallCompleted = async () => {
+    const kind = installCardOpen;
+    setInstallCardOpen(null);
+    if (kind === 'stt' && installRetryMode) {
+      const mode = installRetryMode;
+      setInstallRetryMode(null);
+      // small buffer so listeners fire
+      setTimeout(() => {
+        void startVoiceMode(mode);
+      }, 100);
+    } else {
+      setInstallRetryMode(null);
+    }
   };
 
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -255,11 +282,29 @@ export const BottomComposer: React.FC = () => {
             </div>
           )}
 
-          {(voiceState === 'CONNECTING' || voiceState === 'FALLBACK') && (
+          {voiceState === 'REQUESTING_PERMISSION' && (
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-500/15 border border-sky-500/40 mr-1 animate-in fade-in duration-150 shadow-xs">
+              <Mic className="w-3.5 h-3.5 text-sky-500 animate-pulse" strokeWidth={1.8} />
+              <span className="text-[11.5px] font-semibold text-sky-600 dark:text-sky-400 select-none">
+                Requesting microphone access…
+              </span>
+            </div>
+          )}
+
+          {voiceState === 'LOADING_MODEL' && (
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-500/15 border border-sky-500/40 mr-1 animate-in fade-in duration-150 shadow-xs">
+              <Sparkles className="w-3.5 h-3.5 text-sky-500 animate-pulse" strokeWidth={1.8} />
+              <span className="text-[11.5px] font-semibold text-sky-600 dark:text-sky-400 select-none">
+                Loading Moonshine…
+              </span>
+            </div>
+          )}
+
+          {voiceState === 'CONNECTING_LOCAL_ENGINE' && (
             <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-500/15 border border-sky-500/40 mr-1 animate-in fade-in duration-150 shadow-xs">
               <span className="w-1.5 h-1.5 bg-sky-500 rounded-full animate-ping" />
               <span className="text-[11.5px] font-semibold text-sky-600 dark:text-sky-400 select-none">
-                {voiceState === 'CONNECTING' ? 'Connecting to Bob...' : 'Backup voice active'}
+                Connecting local engine…
               </span>
             </div>
           )}
@@ -268,7 +313,25 @@ export const BottomComposer: React.FC = () => {
             <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-violet-500/15 border border-violet-500/40 mr-1 animate-in fade-in duration-150 shadow-xs">
               <Sparkles className="w-3.5 h-3.5 text-violet-500 animate-pulse" strokeWidth={1.8} />
               <span className="text-[11.5px] font-semibold text-violet-600 dark:text-violet-400 select-none">
-                Transcribing...
+                Transcribing locally…
+              </span>
+            </div>
+          )}
+
+          {voiceState === 'TRANSCRIPT_READY' && (
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40 mr-1 animate-in fade-in duration-150 shadow-xs">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" strokeWidth={1.8} />
+              <span className="text-[11.5px] font-semibold text-emerald-600 dark:text-emerald-400 select-none">
+                Done transcribing
+              </span>
+            </div>
+          )}
+
+          {voiceState === 'THINKING' && (
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/15 border border-indigo-500/40 mr-1 animate-in fade-in duration-150 shadow-xs">
+              <Sparkles className="w-3.5 h-3.5 text-indigo-500 animate-pulse" strokeWidth={1.8} />
+              <span className="text-[11.5px] font-semibold text-indigo-600 dark:text-indigo-400 select-none">
+                Bob is thinking…
               </span>
             </div>
           )}
@@ -375,6 +438,16 @@ export const BottomComposer: React.FC = () => {
           </button>
         </div>
       </div>
+
+      <ModelInstallCard
+        kind={installCardOpen ?? 'stt'}
+        open={installCardOpen !== null}
+        onClose={() => {
+          setInstallCardOpen(null);
+          setInstallRetryMode(null);
+        }}
+        onCompleted={handleInstallCompleted}
+      />
     </>
   );
 };

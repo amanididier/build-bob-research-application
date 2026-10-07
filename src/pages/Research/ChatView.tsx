@@ -16,6 +16,8 @@ import {
   VolumeX
 } from 'lucide-react';
 import { voiceController } from '../../lib/voice/voiceController';
+import { useVoiceStore } from '../../store/useVoiceStore';
+import { ModelInstallCard } from '../../components/voice/ModelInstallCard';
 
 export const ChatView: React.FC = () => {
   const { 
@@ -30,6 +32,8 @@ export const ChatView: React.FC = () => {
     userName
   } = useApp();
 
+  const { ttsModelStatus, stopSpeaking } = useVoiceStore();
+
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [savedNotes, setSavedNotes] = useState<Record<string, boolean>>({});
   const [extractedTasks, setExtractedTasks] = useState<Record<string, boolean>>({});
@@ -38,6 +42,8 @@ export const ChatView: React.FC = () => {
   // Auth pop-up after first response
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
+  const [ttsInstallCardOpen, setTtsInstallCardOpen] = useState(false);
+  const [pendingReadAloud, setPendingReadAloud] = useState<{ id: string; text: string } | null>(null);
 
   React.useEffect(() => {
     const unsub = voiceController.addSpeakingListener((info) => {
@@ -47,21 +53,37 @@ export const ChatView: React.FC = () => {
     });
     return () => {
       unsub();
-      // Read Aloud must not keep talking after the chat disappears.
-      voiceController.stopSpeaking();
+      stopSpeaking();
     };
-  }, []);
+  }, [stopSpeaking]);
 
   const handleSpeakMessage = (id: string, text: string) => {
     if (speakingMsgId === id) {
-      voiceController.stopSpeaking();
+      stopSpeaking();
       setSpeakingMsgId(null);
       return;
     }
+
+    if (ttsModelStatus.state !== 'ready' && ttsModelStatus.state !== 'speaking') {
+      setPendingReadAloud({ id, text });
+      setTtsInstallCardOpen(true);
+      return;
+    }
+
     setSpeakingMsgId(id);
-    // Chunked Gemini TTS through the shared queue: audio starts on the first
-    // sentence, and any older Read Aloud/Call audio is invalidated first.
     voiceController.speakText(text, 'read-aloud');
+  };
+
+  const handleTtsInstallCompleted = () => {
+    setTtsInstallCardOpen(false);
+    const pending = pendingReadAloud;
+    setPendingReadAloud(null);
+    if (pending) {
+      setTimeout(() => {
+        setSpeakingMsgId(pending.id);
+        voiceController.speakText(pending.text, 'read-aloud');
+      }, 100);
+    }
   };
 
   const project = projects.find((p) => p.id === activeResearchId) || projects[0];
@@ -426,6 +448,16 @@ export const ChatView: React.FC = () => {
           setIsAuthOpen(false);
           triggerThinking('Account Synced', `Welcome back, ${user.name}! Workspace records synced.`, 'Ready');
         }}
+      />
+
+      <ModelInstallCard
+        kind="tts"
+        open={ttsInstallCardOpen}
+        onClose={() => {
+          setTtsInstallCardOpen(false);
+          setPendingReadAloud(null);
+        }}
+        onCompleted={handleTtsInstallCompleted}
       />
     </div>
   );

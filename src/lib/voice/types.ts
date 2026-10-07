@@ -2,17 +2,19 @@ export type VoiceMode = 'prompt' | 'call';
 
 export type VoiceState =
   | 'IDLE'
-  | 'CONNECTING'
+  | 'REQUESTING_PERMISSION'
+  | 'LOADING_MODEL'
+  | 'CONNECTING_LOCAL_ENGINE'
   | 'LISTENING'
   | 'USER_SPEAKING'
   | 'TRANSCRIBING'
-  | 'SUBMITTING'
+  | 'TRANSCRIPT_READY'
   | 'THINKING'
   | 'SPEAKING'
   | 'INTERRUPTING'
-  | 'FALLBACK'
+  | 'STOPPING'
   | 'ERROR'
-  | 'STOPPING';
+  | 'FALLBACK';
 
 export interface VoiceConfig {
   enabled: boolean;
@@ -42,13 +44,21 @@ export interface STTEvent {
   transcript: string;
   isFinal: boolean;
   confidence?: number;
-  engine?: 'webspeech' | 'gemini';
+  engine?: 'moonshine';
 }
 
 export interface STTResult {
   text: string;
   error?: {
-    code: 'NO_KEY' | 'NETWORK' | 'STT_REJECTED' | 'STT_EMPTY' | 'STT_FAILED' | 'NO_AUDIO';
+    code:
+      | 'MODEL_LOADING'
+      | 'MODEL_LOAD_FAILED'
+      | 'MICROPHONE_PERMISSION_DENIED'
+      | 'MICROPHONE_NOT_FOUND'
+      | 'NETWORK'
+      | 'STT_EMPTY'
+      | 'STT_FAILED'
+      | 'NO_AUDIO';
     message: string;
   };
 }
@@ -61,7 +71,7 @@ export interface AudioChunk {
   audioUrl?: string;
 }
 
-export type TTSEngine = 'gemini-tts' | 'browser-synthesis';
+export type TTSEngine = 'moonshine-tts' | 'browser-synthesis';
 
 export type VoiceStateListener = (
   state: VoiceState,

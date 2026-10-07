@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
   Cpu, 
@@ -13,10 +13,19 @@ import {
   Trash2,
   RefreshCw,
   AlertCircle,
-  HardDrive
+  HardDrive,
+  Mic,
+  Volume2,
+  Play,
+  Download,
+  StopCircle,
+  XCircle
 } from 'lucide-react';
 import { detectSystemHardware, MODEL_CATALOG } from '../../lib/hardware';
 import { bobAi } from '../../lib/aiEngine';
+import { useVoiceStore } from '../../store/useVoiceStore';
+import type { TtsVoiceEntry } from '@moonshine-ai/moonshine-wasm';
+import { tts } from '../../lib/voice/ttsProvider';
 
 export const SettingsPage: React.FC = () => {
   const { 
@@ -31,7 +40,50 @@ export const SettingsPage: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, []);
 
-  const [activeTab, setActiveTab] = useState<'ai' | 'updates' | 'memory' | 'browser' | 'privacy'>('ai');
+  const [activeTab, setActiveTab] = useState<'ai' | 'updates' | 'memory' | 'browser' | 'privacy' | 'voice'>('ai');
+  const [voiceList, setVoiceList] = useState<TtsVoiceEntry[]>([]);
+  const [voiceListLoading, setVoiceListLoading] = useState(false);
+  const [micTestMsg, setMicTestMsg] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [previewingVoice, setPreviewingVoice] = useState<string | null>(null);
+
+  const {
+    sttModelStatus,
+    ttsModelStatus,
+    preloadSttModel,
+    preloadTtsModel,
+    deleteSttModel,
+    deleteTtsModel,
+    previewTtsVoice,
+    setDefaultVoice,
+    getDefaultVoice,
+    unloadVoiceModels,
+    testMicrophone,
+    stopSpeaking
+  } = useVoiceStore();
+
+  const moonshineVersion = '0.1.5';
+
+  useEffect(() => {
+    if (activeTab !== 'voice') return;
+    let cancelled = false;
+    setVoiceListLoading(true);
+    tts.listVoices()
+      .then((list) => { if (!cancelled) setVoiceList(list || []); })
+      .catch(() => { if (!cancelled) setVoiceList([]); })
+      .finally(() => { if (!cancelled) setVoiceListLoading(false); });
+    return () => { cancelled = true; };
+  }, [activeTab]);
+
+  const displayVoices = useMemo(() => {
+    if (voiceList && voiceList.length > 0) return voiceList.slice(0, 8);
+    const placeholders: TtsVoiceEntry[] = [
+      { id: 'aria', name: 'Aria', language: 'en_us', gender: 'female', style: 'Warm & friendly' } as any,
+      { id: 'kore', name: 'Kore', language: 'en_us', gender: 'male', style: 'Deep & calm' } as any,
+      { id: 'nova', name: 'Nova', language: 'en_us', gender: 'female', style: 'Bright & energetic' } as any,
+      { id: 'onyx', name: 'Onyx', language: 'en_us', gender: 'male', style: 'Authoritative' } as any,
+    ];
+    return placeholders;
+  }, [voiceList]);
   const [openChromeByDefault, setOpenChromeByDefault] = useState(true);
   const [localOnlyMode, setLocalOnlyMode] = useState(true);
 
@@ -309,6 +361,18 @@ export const SettingsPage: React.FC = () => {
           >
             <ShieldCheck className="w-4 h-4 text-[var(--g)]" />
             <span>Privacy</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('voice')}
+            className={`w-full text-left px-4 py-3 rounded-2xl text-[12.5px] font-semibold flex items-center gap-3 transition-colors ${
+              activeTab === 'voice'
+                ? 'bg-[var(--s)] text-[var(--t)] shadow-sm border border-[var(--line)]'
+                : 'text-[var(--m)] hover:text-[var(--t)] hover:bg-[var(--s2)]'
+            }`}
+          >
+            <Mic className="w-4 h-4 text-[var(--y)]" />
+            <span>Voice Models</span>
           </button>
         </div>
 
@@ -721,6 +785,319 @@ export const SettingsPage: React.FC = () => {
                   }`}
                 >
                   <div className={`w-4 h-4 rounded-full bg-white dark:bg-neutral-900 shadow-sm transition-transform ${localOnlyMode ? 'translate-x-5' : 'translate-x-0'}`} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Voice Models Section */}
+          {activeTab === 'voice' && (
+            <div className="space-y-7">
+              <div className="border-b border-[var(--line)] pb-4">
+                <h3 className="text-[18px] font-bold text-[var(--t)] m-0 mb-1">Voice Models</h3>
+                <p className="text-[12.5px] text-[var(--m)] m-0 leading-relaxed">
+                  Bob's voice runs locally on your computer — no transcription credits, no cloud calls, fully offline once downloaded.
+                </p>
+              </div>
+
+              {/* Card 1: Speech Recognition — Moonshine Tiny */}
+              <div className="bg-[var(--s)] border border-[var(--line)] rounded-3xl p-6 shadow-sm space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="p-2.5 rounded-2xl bg-[var(--ys)] text-[#765700]">
+                      <Mic className="w-5 h-5 text-[var(--y)]" />
+                    </span>
+                    <div>
+                      <b className="text-[15px] text-[var(--t)] block">Speech Recognition — Moonshine Tiny</b>
+                      <small className="text-[11.5px] text-[var(--m)]">
+                        Local dictation & call speech recognition · v{moonshineVersion} · ~45 MB
+                      </small>
+                    </div>
+                  </div>
+                  <span className={`text-[11px] font-mono px-3 py-1 rounded-full font-bold ${
+                    sttModelStatus.state === 'ready' ? 'bg-[#e6f7ed] text-[#14844d]'
+                    : sttModelStatus.state === 'downloading' || sttModelStatus.state === 'loading' ? 'bg-[var(--ys)] text-[#765700]'
+                    : sttModelStatus.state === 'error' ? 'bg-rose-50 dark:bg-rose-950/30 text-rose-600'
+                    : 'bg-[var(--s2)] text-[var(--m)]'
+                  }`}>
+                    {sttModelStatus.state === 'ready' ? 'DOWNLOADED'
+                      : sttModelStatus.state === 'downloading' ? 'DOWNLOADING'
+                      : sttModelStatus.state === 'loading' ? 'LOADING'
+                      : sttModelStatus.state === 'error' ? 'ERROR'
+                      : sttModelStatus.state === 'listening' ? 'ACTIVE'
+                      : 'NOT DOWNLOADED'}
+                  </span>
+                </div>
+
+                {(sttModelStatus.state === 'downloading' || sttModelStatus.state === 'loading') && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-[11.5px] text-[var(--m)]">
+                      <span>{sttModelStatus.message}</span>
+                      <span className="font-mono font-bold">{Math.round(sttModelStatus.progress * 100)}%</span>
+                    </div>
+                    <div className="w-full h-2 bg-[var(--line)] rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-[var(--y)] rounded-full transition-all duration-300"
+                        style={{ width: String(Math.round(sttModelStatus.progress * 100)) + '%' }}
+                      ></div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => preloadSttModel().catch(() => {})}
+                    disabled={sttModelStatus.state === 'downloading' || sttModelStatus.state === 'loading'}
+                    className="h-10 px-4 rounded-2xl bg-[#171717] dark:bg-[#f2eee7] text-white dark:text-[#171717] text-[12px] font-bold flex items-center gap-2 transition-opacity disabled:opacity-50 cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Download</span>
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setMicTestMsg(null);
+                      const r = await testMicrophone();
+                      setMicTestMsg({ ok: r.ok, msg: r.message });
+                      setTimeout(() => setMicTestMsg(null), 4000);
+                    }}
+                    className="h-10 px-4 rounded-2xl bg-[var(--s2)] hover:bg-[var(--line)] text-[12px] font-semibold text-[var(--t)] border border-[var(--line)] flex items-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <Mic className="w-4 h-4" />
+                    <span>Test mic</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (window.confirm('Delete local speech model? Will re-download on next use.')) {
+                        deleteSttModel();
+                      }
+                    }}
+                    disabled={sttModelStatus.state === 'idle'}
+                    className="h-10 p-3 rounded-2xl hover:bg-red-50 dark:hover:bg-red-950/30 text-red-500 transition-colors disabled:opacity-40 cursor-pointer"
+                    title="Delete model"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {micTestMsg && (
+                  <div className={`p-3 rounded-2xl text-[12px] font-medium flex items-center gap-2 ${micTestMsg.ok ? 'bg-[#e6f7ed] text-[#14844d] border border-emerald-300' : 'bg-rose-50 dark:bg-rose-950/30 text-rose-600 border border-rose-300'}`}>
+                    {micTestMsg.ok ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+                    <span>{micTestMsg.msg}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Card 2: TTS — Moonshine */}
+              <div className="bg-[var(--s)] border border-[var(--line)] rounded-3xl p-6 shadow-sm space-y-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="p-2.5 rounded-2xl bg-[var(--bs)] text-[#1e40af]">
+                      <Volume2 className="w-5 h-5 text-[var(--b)]" />
+                    </span>
+                    <div>
+                      <b className="text-[15px] text-[var(--t)] block">Text-to-Speech — Moonshine</b>
+                      <small className="text-[11.5px] text-[var(--m)]">
+                        Local speech synthesis · v{moonshineVersion} · ~65 MB
+                      </small>
+                    </div>
+                  </div>
+                  <span className={`text-[11px] font-mono px-3 py-1 rounded-full font-bold ${
+                    ttsModelStatus.state === 'ready' ? 'bg-[#e6f7ed] text-[#14844d]'
+                      : ttsModelStatus.state === 'downloading' || ttsModelStatus.state === 'loading' ? 'bg-[var(--ys)] text-[#765700]'
+                      : ttsModelStatus.state === 'error' ? 'bg-rose-50 dark:bg-rose-950/30 text-rose-600'
+                      : ttsModelStatus.state === 'speaking' ? 'bg-[#e6f7ed] text-[#14844d]'
+                      : 'bg-[var(--s2)] text-[var(--m)]'
+                  }`}>
+                    {ttsModelStatus.state === 'ready' ? 'DOWNLOADED'
+                      : ttsModelStatus.state === 'downloading' ? 'DOWNLOADING'
+                      : ttsModelStatus.state === 'loading' ? 'LOADING'
+                      : ttsModelStatus.state === 'error' ? 'ERROR'
+                      : ttsModelStatus.state === 'speaking' ? 'PLAYING'
+                      : 'NOT DOWNLOADED'}
+                  </span>
+                </div>
+
+                {(ttsModelStatus.state === 'downloading' || ttsModelStatus.state === 'loading') && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-[11.5px] text-[var(--m)]">
+                      <span>{ttsModelStatus.message}</span>
+                      <span className="font-mono font-bold">{Math.round(ttsModelStatus.progress * 100)}%</span>
+                    </div>
+                    <div className="w-full h-2 bg-[var(--line)] rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-[var(--b)] rounded-full transition-all duration-300"
+                        style={{ width: String(Math.round(ttsModelStatus.progress * 100)) + '%' }}
+                      ></div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => preloadTtsModel().catch(() => {})}
+                    disabled={ttsModelStatus.state === 'downloading' || ttsModelStatus.state === 'loading'}
+                    className="h-10 px-4 rounded-2xl bg-[#171717] dark:bg-[#f2eee7] text-white dark:text-[#171717] text-[12px] font-bold flex items-center gap-2 transition-opacity disabled:opacity-50 cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Download</span>
+                  </button>
+                  {previewingVoice && (
+                    <button
+                      onClick={() => { stopSpeaking(); setPreviewingVoice(null); }}
+                      className="h-10 px-4 rounded-2xl bg-[var(--s2)] hover:bg-[var(--line)] text-[12px] font-semibold text-[var(--t)] border border-[var(--line)] flex items-center gap-2 transition-colors cursor-pointer"
+                    >
+                      <StopCircle className="w-4 h-4" />
+                      <span>Stop preview</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      if (window.confirm('Delete local TTS model? Will re-download on next use.')) {
+                        deleteTtsModel();
+                      }
+                    }}
+                    disabled={ttsModelStatus.state === 'idle'}
+                    className="h-10 p-3 ml-auto rounded-2xl hover:bg-red-50 dark:hover:bg-red-950/30 text-red-500 transition-colors disabled:opacity-40 cursor-pointer"
+                    title="Delete model"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Voice Selection Grid (Task 7 inline) */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                    <b className="text-[13px] text-[var(--t)] block">Voices</b>
+                    <small className="text-[11px] text-[var(--m)]">
+                      Preview and set your default TTS voice
+                    </small>
+                  </div>
+                  </div>
+                  {voiceListLoading ? (
+                    <div className="text-[12px] text-[var(--m)]">Loading voices…</div>
+                  ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {displayVoices.map((voice) => {
+                          const id = voice.id || voice.name || '';
+                          const name = voice.name || id;
+                          const isDefault = getDefaultVoice() === id || getDefaultVoice().toLowerCase() === name.toLowerCase();
+                          const isPreviewing = previewingVoice === id;
+                          const gender = (voice as any).gender;
+                          const avatarColor =
+                            gender === 'female'
+                              ? 'from-rose-200 to-pink-300'
+                              : gender === 'male'
+                              ? 'from-sky-200 to-blue-300'
+                              : 'from-amber-200 to-orange-300';
+                          const initials = name.slice(0, 2).toUpperCase();
+                          const style = (voice as any).style || 'Sample voice';
+                          return (
+                            <div
+                              key={id}
+                              className={`group relative rounded-2xl border p-4 transition-all ${
+                                isDefault ? 'border-[var(--y)]/60 bg-[var(--y)]/5' : 'border-[var(--line)] bg-[var(--s2)] hover:border-[var(--t)]/10'
+                              }`}
+                            >
+                              {isDefault && (
+                                <span className="absolute top-2 right-2 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-[var(--y)] text-[#171717]">
+                                  DEFAULT
+                                </span>
+                              )}
+                              <div className="flex items-center gap-3">
+                                <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${avatarColor} flex items-center justify-center font-bold text-[var(--t)] shadow-xs`}>
+                                  <span>{initials}</span>
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <b className="text-[13px] text-[var(--t)] block truncate">{name}</b>
+                                  <small className="text-[10.5px] text-[var(--m)] block truncate">{style}</small>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 mt-3">
+                                <button
+                                  onClick={async () => {
+                                    if (isPreviewing) {
+                                      stopSpeaking();
+                                      setPreviewingVoice(null);
+                                      return;
+                                    }
+                                    setPreviewingVoice(id);
+                                    try {
+                                      await previewTtsVoice(id);
+                                    } finally {
+                                      setPreviewingVoice((cur) => (cur === id ? null : cur));
+                                    }
+                                  }}
+                                  className="h-8 px-3 rounded-xl bg-[var(--s)] hover:bg-[var(--line)] text-[11px] font-semibold text-[var(--t)] border border-[var(--line)] flex items-center gap-1.5 transition-colors cursor-pointer"
+                                >
+                                  {isPreviewing ? <StopCircle className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                                  <span>{isPreviewing ? 'Stop' : 'Play sample'}</span>
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setDefaultVoice(id);
+                                  }}
+                                  disabled={isDefault}
+                                  className={`h-8 px-3 rounded-xl text-[11px] font-bold disabled:opacity-50 transition-all cursor-pointer ${
+                                    isDefault
+                                      ? 'bg-[var(--y)] text-[#171717]'
+                                      : 'bg-[#171717] dark:bg-[#f2eee7] text-white dark:text-[#171717] hover:opacity-90'
+                                  }`}
+                                >
+                                  {isDefault ? 'Default' : 'Set as default'}
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                </div>
+              </div>
+
+              {/* Card 3: Alternative TTS — Chatterbox Nano */}
+              <div className="bg-[var(--s)] border border-[var(--line)] rounded-3xl p-6 shadow-sm opacity-90">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="p-2.5 rounded-2xl bg-[var(--s2)] text-[var(--m)]">
+                      <Volume2 className="w-5 h-5" />
+                    </span>
+                    <div>
+                      <b className="text-[15px] text-[var(--t)] block">Alternative TTS — Chatterbox Nano</b>
+                      <small className="text-[11.5px] text-[var(--m)]">
+                        Ultra-compact local voice · Coming soon
+                      </small>
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-mono px-3 py-1 rounded-full font-bold bg-[var(--s2)] text-[var(--m)]">
+                    NOT AVAILABLE
+                  </span>
+                </div>
+                <p className="text-[12px] text-[var(--m)] leading-relaxed mt-4 mb-4">
+                  A second ultra-lightweight local voice option. We're benchmarking Chatterbox Nano against Moonshine for quality, speed, and memory. It will appear here once it meets our quality bar.
+                </p>
+                <button
+                  disabled
+                  className="h-10 px-4 rounded-2xl bg-[var(--s2)] text-[var(--m)] text-[12px] font-bold opacity-60 border border-[var(--line)] flex items-center gap-2 cursor-not-allowed"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Download (soon)</span>
+                </button>
+              </div>
+
+              <div className="pt-2 border-t border-[var(--line)] flex items-center justify-between">
+                <div>
+                  <b className="text-[12.5px] text-[var(--t)] block">Memory management</b>
+                  <small className="text-[11px] text-[var(--m)]">
+                    Unload models from RAM when not in use to save memory on this 8GB device.
+                  </small>
+                </div>
+                <button
+                  onClick={() => unloadVoiceModels()}
+                  className="h-10 px-4 rounded-2xl bg-[var(--s2)] hover:bg-[var(--line)] text-[12px] font-semibold text-[var(--t)] border border-[var(--line)] flex items-center gap-2 transition-colors cursor-pointer"
+                >
+                  <HardDrive className="w-4 h-4" />
+                  <span>Unload all voice models from memory</span>
                 </button>
               </div>
             </div>

@@ -1,29 +1,32 @@
 import { VoiceConfig } from './types';
 
+export const MODEL_LOAD_TIMEOUT_MS = 90000;
+export const MAX_CALL_IDLE_MS = 60000;
+export const SILENCE_TIMEOUT_MS = 1500;
+export const MIC_START_TIMEOUT_MS = 8000;
+export const STT_FINALIZE_TIMEOUT_MS = 10000;
+export const TTS_GENERATE_TIMEOUT_MS = 15000;
+export const FIRST_AUDIO_TIMEOUT_MS = 10000;
+
+export const DEFAULT_VOICE_KEY = 'bob_voice_default_v1';
+
 export const DEFAULT_VOICE_CONFIG: VoiceConfig = {
   enabled: true,
   defaultVoice: 'Kore',
-  speechStartThreshold: 14, // sensitive audio energy threshold (0-255 average)
-  speechEndSilenceDurationMs: 1500, // natural conversational pause
-  promptSilenceDurationMs: 10000, // dictation: long pause before the draft settles
-  callSilenceDurationMs: 1500, // call: Bob answers ~1.5s after you stop
-  minimumSpeechDurationMs: 250, // ignore tiny clicks
-  maximumTurnDurationMs: 60000, // session-safety cap, not a usage limit
-  idleNoSpeechTimeoutMs: 20000, // never listen forever with no speech at all
+  speechStartThreshold: 14,
+  speechEndSilenceDurationMs: 1500,
+  promptSilenceDurationMs: 1500,
+  callSilenceDurationMs: 1500,
+  minimumSpeechDurationMs: 250,
+  maximumTurnDurationMs: 60000,
+  idleNoSpeechTimeoutMs: 20000,
   ttsRate: 1.0,
   ttsPitch: 1.0,
   ttsVolume: 1.0,
   maxQueueLength: 20,
   continuous: true,
-  liveEnabled: true,
-  // Order matters: current stable Live model first, then the legacy preview that
-  // is known to connect today, then extended-thinking (same family as the first,
-  // so if that family is gated for this key it would fail too — hence last).
-  liveModels: [
-    'gemini-3.8-live',
-    'gemini-live-2.5-flash-preview',
-    'gemini-3.8-live-extended-thinking',
-  ],
+  liveEnabled: false,
+  liveModels: [],
   liveVoice: 'Kore',
   liveConnectTimeoutMs: 12000,
   ttsMaxCharsPerRequest: 600,
