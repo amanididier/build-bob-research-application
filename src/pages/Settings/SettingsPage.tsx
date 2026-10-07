@@ -42,7 +42,7 @@ export const SettingsPage: React.FC = () => {
   const [isTestingKey, setIsTestingKey] = useState(false);
   const [keyTestFeedback, setKeyTestFeedback] = useState<{ ok: boolean; message: string } | null>(null);
 
-  const [installedVersion, setInstalledVersion] = useState<string>('1.0.29');
+  const [installedVersion, setInstalledVersion] = useState<string>('—');
 
   // Auto updater state
   const [updaterState, setUpdaterState] = useState<{
@@ -52,8 +52,7 @@ export const SettingsPage: React.FC = () => {
     message?: string;
   }>({
     status: 'idle',
-    version: '1.0.29',
-    message: 'Up to date'
+    message: 'Loading release status…'
   });
 
   const [hardware] = useState(() => detectSystemHardware());
@@ -102,8 +101,8 @@ export const SettingsPage: React.FC = () => {
         }).catch(() => {});
       }
 
-      if ((window as any).bob.getUpdateStatus) {
-        (window as any).bob.getUpdateStatus().then((st: any) => {
+      if ((window as any).bob.getUpdateState) {
+        (window as any).bob.getUpdateState().then((st: any) => {
           if (st && st.status) setUpdaterState(st);
         }).catch(() => {});
       }
@@ -207,23 +206,18 @@ export const SettingsPage: React.FC = () => {
   };
 
   const handleCheckForUpdates = async () => {
+    const updater = typeof window !== 'undefined' ? (window as any).bob : undefined;
+    if (!updater?.checkForUpdates) {
+      setUpdaterState({ status: 'error', message: 'Update checks are available in the installed desktop app.' });
+      return;
+    }
     setUpdaterState((prev) => ({ ...prev, status: 'checking', message: 'Checking for latest releases...' }));
-    if (typeof window !== 'undefined' && (window as any).bob?.checkForUpdates) {
-      try {
-        const res = await (window as any).bob.checkForUpdates();
-        setUpdaterState(res || { status: 'latest', message: 'You are on the latest version (v1.0.18)' });
-      } catch (err: any) {
-        setUpdaterState({ status: 'error', message: err?.message || 'Update check failed.' });
-      }
-    } else {
-      // Web fallback
-      setTimeout(() => {
-        setUpdaterState({
-          status: 'latest',
-          version: '1.0.18',
-          message: 'Running latest production build (v1.0.18)'
-        });
-      }, 700);
+    try {
+      const res = await updater.checkForUpdates();
+      if (res?.status) setUpdaterState(res);
+      else setUpdaterState({ status: 'error', message: 'The updater did not return a status.' });
+    } catch (err: any) {
+      setUpdaterState({ status: 'error', message: err?.message || 'Update check failed.' });
     }
   };
 
@@ -498,6 +492,10 @@ export const SettingsPage: React.FC = () => {
                         ? 'DOWNLOADING'
                         : updaterState.status === 'available'
                         ? `UPDATE v${updaterState.version || ''} AVAILABLE`
+                        : updaterState.status === 'error'
+                        ? 'CHECK FAILED'
+                        : updaterState.status === 'checking'
+                        ? 'CHECKING'
                         : 'UP TO DATE'}
                     </span>
                   </span>
@@ -526,8 +524,13 @@ export const SettingsPage: React.FC = () => {
                       <button
                         onClick={async () => {
                           setUpdaterState(prev => ({ ...prev, status: 'downloading', percent: 0 }));
-                          if (typeof window !== 'undefined' && (window as any).bob?.downloadUpdate) {
-                            await (window as any).bob.downloadUpdate();
+                          try {
+                            const result = await (window as any).bob.downloadUpdate();
+                            if (result?.status === 'error') {
+                              setUpdaterState({ status: 'error', message: result.message || 'Update download failed.' });
+                            }
+                          } catch (err: any) {
+                            setUpdaterState({ status: 'error', message: err?.message || 'Update download failed.' });
                           }
                         }}
                         className="h-10 px-5 rounded-2xl bg-[var(--y)] hover:bg-[#e6ac15] text-[#171717] text-[12px] font-bold shadow-md transition-all active:scale-95 cursor-pointer"
