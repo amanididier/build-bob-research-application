@@ -3,14 +3,6 @@
 // Features: direct 16kHz PCM Float32 execution (zero audio decoding overhead),
 // real-time download progress tracking, and crash-proof fallback.
 
-import { pipeline, env } from '@huggingface/transformers';
-
-// Configure transformers environment for client-side execution
-if (typeof window !== 'undefined') {
-  env.allowLocalModels = false;
-  env.useBrowserCache = true;
-}
-
 export interface ModelDownloadProgress {
   status: 'idle' | 'downloading' | 'ready' | 'error';
   progress: number; // 0 to 100
@@ -103,6 +95,13 @@ class LocalVoiceManager {
     }
 
     try {
+      // Dynamic import to prevent bundler failure when building offline packages
+      const { pipeline, env } = await import('@huggingface/transformers');
+      if (typeof window !== 'undefined') {
+        env.allowLocalModels = false;
+        env.useBrowserCache = true;
+      }
+
       const fileProgressMap = new Map<string, { loaded: number; total: number }>();
 
       this.transcriber = await pipeline(
