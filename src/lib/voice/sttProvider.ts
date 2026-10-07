@@ -1,30 +1,24 @@
-import { STTEvent, STTResult } from './types';
+import { STTEvent } from './types';
 import { micManager } from './microphoneManager';
 import { bobAi } from '../aiEngine';
-import { voiceDiagnostics } from './diagnostics';
+import { localVoiceManager } from './localVoiceManager';
+import { pcmRecorder } from './pcmRecorder';
 
 export interface STTProvider {
   start: (onTranscript: (event: STTEvent) => void, onError: (err: string) => void) => Promise<void>;
   stop: () => void;
   isListening: () => boolean;
+  flush: () => Promise<string>;
 }
-
-/** Transcription models, tried in order. Bounded — never an infinite retry loop. */
-const STT_MODELS = ['gemini-3.5-transcribe', 'gemini-3.5-transcribe-live'];
-const MIN_BLOB_BYTES = 500;
 
 export class DualEngineSTTProvider implements STTProvider {
   private recognition: any = null;
   private active = false;
   private fullTranscript = '';
-  private mediaRecorder: MediaRecorder | null = null;
-  private audioChunks: Blob[] = [];
-  private chunkIntervalId: any = null;
   private onTranscriptCallback?: (event: STTEvent) => void;
   private onErrorCallback?: (err: string) => void;
   private isProcessingChunk = false;
-  private abortController: AbortController | null = null;
-  private webSpeechAlive = false;
+  private lastTranscribedTurn = '';
 
   constructor() {
     this.initWebSpeech();
@@ -42,20 +36,10 @@ export class DualEngineSTTProvider implements STTProvider {
           this.recognition.maxAlternatives = 1;
           this.recognition.lang = navigator.language || 'en-US';
         } catch (e) {
-          console.warn('SpeechRecognition initialization error:', e);
+          console.warn('[DualEngineSTT] SpeechRecognition initialization warning:', e);
         }
       }
     }
-  }
-
-  /** Browser SpeechRecognition is free (no Gemini usage) — prefer it when present. */
-  public hasWebSpeech(): boolean {
-    return Boolean(this.recognition);
-  }
-
-  public getEngine(): 'webspeech' | 'gemini' | 'none' {
-    if (this.webSpeechAlive) return 'webspeech';
-    return this.hasWebSpeech() || bobAi.hasGeminiKey() ? 'gemini' : 'none';
   }
 
   public async start(
@@ -65,30 +49,26 @@ export class DualEngineSTTProvider implements STTProvider {
     if (this.active) return;
 
     this.active = true;
-    this.webSpeechAlive = false;
     this.fullTranscript = '';
-    this.audioChunks = [];
+    this.lastTranscribedTurn = '';
     this.onTranscriptCallback = onTranscript;
     this.onErrorCallback = onError;
 
+    const stream = micManager.getStream();
+    if (stream) {
+      // Start pristine 16kHz PCM audio recording buffer
+      pcmRecorder.start(stream);
+    }
+
+    // 1. Try browser WebSpeech first for real-time zero-latency streaming
     if (this.recognition) {
       try {
         this.setupRecognitionListeners();
         this.recognition.start();
-        this.webSpeechAlive = true;
       } catch (err: any) {
-        console.warn('WebSpeech start failed, using audio recorder engine:', err?.message);
-        this.webSpeechAlive = false;
+        console.warn('[DualEngineSTT] WebSpeech start warning:', err?.message);
       }
     }
-
-    voiceDiagnostics.set({
-      stt: this.webSpeechAlive ? 'browser (WebSpeech)' : 'Gemini transcription',
-    });
-
-    // Recorder runs alongside WebSpeech: it is the only engine in Electron,
-    // and the safety net if WebSpeech dies mid-session.
-    this.startMediaRecorderChunking();
   }
 
   private setupRecognitionListeners() {
@@ -108,305 +88,178 @@ export class DualEngineSTTProvider implements STTProvider {
       }
 
       if (final.trim()) {
-        if (!this.fullTranscript.endsWith(final.trim())) {
-          this.fullTranscript += (this.fullTranscript ? ' ' : '') + final.trim();
+        const trimmed = final.trim();
+        if (!this.fullTranscript.endsWith(trimmed)) {
+          this.fullTranscript += (this.fullTranscript ? ' ' : '') + trimmed;
         }
-        voiceDiagnostics.mark('sttEnd');
-        this.onTranscriptCallback?.({
-          transcript: this.fullTranscript,
-          isFinal: true,
-          engine: 'webspeech',
-        });
+        this.lastTranscribedTurn = this.fullTranscript;
+        this.onTranscriptCallback?.({ transcript: this.fullTranscript, isFinal: true });
+        // Reset PCM turn since speech recognition captured it accurately
+        pcmRecorder.resetTurn();
       } else if (interim.trim()) {
         const live = this.fullTranscript ? `${this.fullTranscript} ${interim.trim()}` : interim.trim();
-        this.onTranscriptCallback?.({ transcript: live, isFinal: false, engine: 'webspeech' });
+        this.onTranscriptCallback?.({ transcript: live, isFinal: false });
       }
     };
 
     this.recognition.onerror = (e: any) => {
       const error = e.error || '';
-      if (error === 'no-speech' || error === 'aborted') return;
-
-      console.warn('[bob] WebSpeech error:', error);
-      if (error === 'network' || error === 'not-allowed' || error === 'service-not-allowed') {
-        // WebSpeech is unavailable here — Gemini transcription takes over.
-        this.webSpeechAlive = false;
-        voiceDiagnostics.set({ stt: 'Gemini transcription (WebSpeech unavailable)' });
-        if (!bobAi.hasGeminiKey()) {
-          this.onErrorCallback?.('Gemini API key required for voice transcription.');
-        }
-        return;
+      if (error === 'no-speech' || error === 'aborted') {
+        return; // Standard pauses between words
       }
-      this.onErrorCallback?.(error);
+
+      console.warn('[DualEngineSTT] WebSpeech error:', error);
+      if (error === 'not-allowed') {
+        this.onErrorCallback?.('Microphone access was denied. Please allow microphone permissions.');
+      }
+      // On 'network' or other WebSpeech browser errors, we do NOT crash.
+      // The PCM recorder + Gemini / Local Whisper fallback takes over seamlessly!
     };
 
     this.recognition.onend = () => {
-      if (this.active && this.recognition) {
-        try {
-          this.recognition.start();
-        } catch {
-          this.webSpeechAlive = false;
-        }
+      // If still active, attempt polite restart with backoff
+      if (this.active) {
+        setTimeout(() => {
+          if (this.active && this.recognition) {
+            try {
+              this.recognition.start();
+            } catch {}
+          }
+        }, 150);
       }
     };
   }
 
-  private startMediaRecorderChunking() {
-    const stream = micManager.getStream();
-    if (!stream) {
-      voiceDiagnostics.set({ stt: 'no microphone stream' });
-      return;
+  /**
+   * Called by VAD on speech pause to finalize this turn immediately.
+   * If WebSpeech already captured the text, returns it instantly.
+   * If WebSpeech was silent or missed the phrase, dispatches to Gemini or Local Whisper.
+   */
+  public async flush(): Promise<string> {
+    if (!this.active || this.isProcessingChunk) {
+      return this.fullTranscript;
     }
 
-    try {
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : MediaRecorder.isTypeSupported('audio/webm')
-        ? 'audio/webm'
-        : 'audio/mp4';
-
-      this.mediaRecorder = new MediaRecorder(stream, { mimeType });
-      this.audioChunks = [];
-
-      this.mediaRecorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) {
-          this.audioChunks.push(e.data);
-        }
-      };
-
-      this.mediaRecorder.start(2000); // 2-second timeslices
-
-      // Long sessions: detach and transcribe roughly once a minute.
-      this.chunkIntervalId = setInterval(() => {
-        if (this.active && this.audioChunks.length > 0 && !this.webSpeechAlive) {
-          void this.detachAndTranscribeChunk();
-        }
-      }, 55000);
-    } catch (err) {
-      console.warn('MediaRecorder chunking error:', err);
-      voiceDiagnostics.set({ stt: 'recorder unavailable' });
+    // If WebSpeech already yielded transcript for this turn, return it directly
+    if (this.fullTranscript.trim() && this.fullTranscript === this.lastTranscribedTurn) {
+      pcmRecorder.resetTurn();
+      return this.fullTranscript;
     }
-  }
 
-  private async detachAndTranscribeChunk(): Promise<STTResult> {
-    if (this.isProcessingChunk || this.audioChunks.length === 0) {
-      return { text: '' };
+    const recorded = pcmRecorder.getRecordedAudio();
+    if (!recorded || recorded.durationMs < 350 || recorded.samples.length < 4000) {
+      return this.fullTranscript;
     }
+
     this.isProcessingChunk = true;
-
     try {
-      const currentBlob = new Blob(this.audioChunks, {
-        type: this.mediaRecorder?.mimeType || 'audio/webm',
-      });
-      this.audioChunks = [];
-
-      const result = await this.transcribeDetailed(currentBlob);
-      if (!this.active) return result; // session ended while the request was in flight
-
-      const text = result.text.trim();
-      if (text && !this.fullTranscript.includes(text)) {
-        this.fullTranscript += (this.fullTranscript ? ' ' : '') + text;
-        voiceDiagnostics.mark('sttEnd');
-        this.onTranscriptCallback?.({
-          transcript: this.fullTranscript,
-          isFinal: true,
-          engine: 'gemini',
-        });
-      } else if (!text && result.error && !this.webSpeechAlive) {
-        // Sole engine failed — never fail silently.
-        this.onErrorCallback?.(result.error.message);
+      const fallbackText = await this.transcribeAudioFallback(recorded.blob, recorded.samples);
+      if (fallbackText && fallbackText.trim()) {
+        const clean = fallbackText.trim();
+        if (!this.fullTranscript.includes(clean)) {
+          this.fullTranscript += (this.fullTranscript ? ' ' : '') + clean;
+          this.lastTranscribedTurn = this.fullTranscript;
+          this.onTranscriptCallback?.({ transcript: this.fullTranscript, isFinal: true });
+        }
       }
-      return result;
-    } catch (e) {
-      console.warn('Background chunk transcription failed:', e);
-      return { text: '', error: { code: 'STT_FAILED', message: 'Voice transcription failed. Try again.' } };
+    } catch (e: any) {
+      console.warn('[DualEngineSTT] Fallback transcription warning:', e);
     } finally {
       this.isProcessingChunk = false;
+      pcmRecorder.resetTurn();
     }
+
+    return this.fullTranscript;
   }
 
   /**
-   * Force-finalize everything captured so far. Called on speech end so a result
-   * doesn't wait for the ~55s chunk boundary (WebSpeech is absent in Electron,
-   * which is what made both modes appear to listen forever).
+   * Safe Multi-Tier Fallback Engine:
+   * Tier 1: Real-time WebSpeech (zero latency, zero RAM)
+   * Tier 2: Cloud Gemini ('gemini-3.5-transcribe' or 'gemini-flash-latest') via 16kHz WAV
+   * Tier 3: Local Whisper-tiny on-device execution (direct 16kHz PCM Float32Array)
+   * Tier 4: Graceful degradation (never throw or block user conversation)
    */
-  public async flush(): Promise<void> {
-    if (!this.active || this.audioChunks.length === 0) return;
-    if (this.webSpeechAlive) return; // browser engine is already transcribing for free
-    await this.detachAndTranscribeChunk();
-  }
-
-  /**
-   * End-of-session finalization (Prompt mode "End"): stop the recorder, grab the
-   * tail, and transcribe whatever the free browser engine did not already give us.
-   */
-  public async finalize(): Promise<STTResult> {
-    const already = this.fullTranscript.trim();
-    const tail = await this.collectRemainingAudio();
-    const blobs = [...this.audioChunks, ...(tail ? [tail] : [])];
-    this.audioChunks = [];
-
-    if (already) {
-      return { text: already };
-    }
-    if (blobs.length === 0) {
-      return { text: '', error: { code: 'NO_AUDIO', message: 'No audio was captured.' } };
-    }
-
-    const blob = new Blob(blobs, { type: this.mediaRecorder?.mimeType || 'audio/webm' });
-    if (blob.size < MIN_BLOB_BYTES) {
-      return { text: '', error: { code: 'NO_AUDIO', message: 'No speech was captured.' } };
-    }
-    return this.transcribeDetailed(blob);
-  }
-
-  private collectRemainingAudio(): Promise<Blob | null> {
-    return new Promise((resolve) => {
-      const recorder = this.mediaRecorder;
-      if (!recorder || recorder.state === 'inactive') {
-        resolve(null);
-        return;
-      }
-      const chunks: Blob[] = [];
-      let settled = false;
-      const finish = () => {
-        if (settled) return;
-        settled = true;
-        resolve(
-          chunks.length
-            ? new Blob(chunks, { type: recorder.mimeType || 'audio/webm' })
-            : null
-        );
-      };
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) chunks.push(e.data);
-      };
-      recorder.onstop = () => setTimeout(finish, 0);
+  public async transcribeAudioFallback(wavBlob: Blob, samples: Float32Array): Promise<string> {
+    // 1. Try Local Whisper if model is already active in memory for instant offline results
+    if (localVoiceManager.isReady()) {
       try {
-        recorder.stop();
-      } catch {
-        finish();
-        return;
+        const localText = await localVoiceManager.transcribeSamples(samples);
+        if (localText) return localText;
+      } catch (err) {
+        console.warn('[DualEngineSTT] Local model fallback to cloud:', err);
       }
-      setTimeout(finish, 1500);
-    });
-  }
+    }
 
-  public async transcribeDetailed(blob: Blob): Promise<STTResult> {
+    // 2. Try Google Gemini Multimodal Audio API
     const geminiKey = bobAi.getGeminiKey();
-    if (!geminiKey) {
-      return {
-        text: '',
-        error: { code: 'NO_KEY', message: 'Gemini API key required for voice transcription.' },
-      };
-    }
-    if (blob.size < MIN_BLOB_BYTES) {
-      return { text: '', error: { code: 'NO_AUDIO', message: 'No audio was captured.' } };
-    }
-
-    voiceDiagnostics.stage('stt', 'Sending audio to STT');
-    voiceDiagnostics.set({ stt: 'request sent' });
-
-    let base64Data = '';
-    try {
-      base64Data = await this.toBase64(blob);
-    } catch {
-      return { text: '', error: { code: 'STT_FAILED', message: 'Could not read the recorded audio.' } };
-    }
-
-    let lastError: STTResult['error'];
-    for (const model of STT_MODELS) {
-      this.abortController = new AbortController();
+    if (geminiKey) {
       try {
-        const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
-            signal: this.abortController.signal,
-            body: JSON.stringify({
-              contents: [
-                {
-                  parts: [
-                    { text: 'Transcribe this spoken audio exactly into plain text. Do not add commentary.' },
-                    { inlineData: { mimeType: blob.type || 'audio/webm', data: base64Data } },
-                  ],
-                },
-              ],
-            }),
+        const base64Wav = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const res = (reader.result as string || '').split(',')[1] || '';
+            resolve(res);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(wavBlob);
+        });
+
+        // Use official Gemini transcription models
+        const candidateModels = ['gemini-3.5-transcribe', 'gemini-flash-latest', 'gemini-3.8-flash'];
+        for (const model of candidateModels) {
+          try {
+            const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
+            const res = await fetch(endpoint, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [
+                  {
+                    parts: [
+                      { text: 'Transcribe this spoken audio verbatim into plain text. Return ONLY the transcribed words with no commentary.' },
+                      {
+                        inlineData: {
+                          mimeType: 'audio/wav',
+                          data: base64Wav,
+                        },
+                      },
+                    ],
+                  },
+                ],
+              }),
+            });
+
+            if (res.ok) {
+              const data = await res.json();
+              const candidateText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+              if (candidateText.trim()) {
+                return candidateText.trim();
+              }
+            } else if (res.status === 429) {
+              console.warn('[DualEngineSTT] Gemini quota hit (429). Falling back to local offline model.');
+              break;
+            }
+          } catch (modelErr) {
+            console.warn(`[DualEngineSTT] Model ${model} request error:`, modelErr);
           }
-        );
-
-        const data = await res.json().catch(() => null);
-
-        if (res.ok) {
-          const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-          voiceDiagnostics.set({ stt: text ? 'transcript received' : 'empty transcript' });
-          voiceDiagnostics.mark('sttEnd');
-          if (!text.trim()) {
-            return {
-              text: '',
-              error: { code: 'STT_EMPTY', message: 'Bob heard audio but got an empty transcript.' },
-            };
-          }
-          return { text };
         }
-
-        const apiMessage: string = data?.error?.message || `Gemini rejected the request (HTTP ${res.status}).`;
-        // Never log or surface the key — only the API message.
-        console.warn(`[bob] STT ${model} failed: HTTP ${res.status} ${apiMessage.slice(0, 160)}`);
-        lastError = {
-          code: res.status === 404 || res.status === 400 ? 'STT_REJECTED' : 'STT_FAILED',
-          message: `Gemini transcription failed: ${apiMessage.slice(0, 160)}`,
-        };
-        // Only try the next model when this one is unknown/unsupported.
-        if (res.status !== 404 && res.status !== 400) break;
-      } catch (err: any) {
-        if (err?.name === 'AbortError') {
-          return { text: '', error: { code: 'NETWORK', message: 'Voice transcription cancelled.' } };
-        }
-        console.warn(`[bob] STT ${model} network error:`, String(err?.message || err).slice(0, 160));
-        lastError = {
-          code: 'NETWORK',
-          message: 'Voice transcription failed: network unreachable.',
-        };
-        break;
+      } catch (cloudErr: any) {
+        console.warn('[DualEngineSTT] Gemini cloud audio transcription failed:', cloudErr);
       }
     }
 
-    this.abortController = null;
-    voiceDiagnostics.set({ stt: 'failed' });
-    return { text: '', error: lastError || { code: 'STT_FAILED', message: 'Voice transcription failed. Try again.' } };
-  }
+    // 3. Fallback to Local Whisper if ready or can transcribe
+    if (localVoiceManager.isReady()) {
+      try {
+        return await localVoiceManager.transcribeSamples(samples);
+      } catch {}
+    }
 
-  /** Kept for compatibility with earlier callers. */
-  public async transcribeAudioBlob(blob: Blob): Promise<string> {
-    const result = await this.transcribeDetailed(blob);
-    return result.text;
-  }
-
-  private toBase64(blob: Blob): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(String(reader.result || '').split(',')[1] || '');
-      reader.onerror = () => reject(new Error('FileReader failed'));
-      reader.readAsDataURL(blob);
-    });
+    return '';
   }
 
   public stop(): void {
     this.active = false;
-    this.webSpeechAlive = false;
-
-    if (this.chunkIntervalId) {
-      clearInterval(this.chunkIntervalId);
-      this.chunkIntervalId = null;
-    }
-
-    if (this.abortController) {
-      try { this.abortController.abort(); } catch {}
-      this.abortController = null;
-    }
 
     if (this.recognition) {
       try {
@@ -414,16 +267,8 @@ export class DualEngineSTTProvider implements STTProvider {
       } catch {}
     }
 
-    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
-      try {
-        this.mediaRecorder.stop();
-      } catch {}
-      this.mediaRecorder = null;
-    }
-
-    this.audioChunks = [];
+    pcmRecorder.stop();
     this.isProcessingChunk = false;
-    voiceDiagnostics.set({ stt: 'idle' });
   }
 
   public isListening(): boolean {

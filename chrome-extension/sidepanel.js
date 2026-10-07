@@ -490,15 +490,7 @@
     if (window.renderBobResponse && typeof window.renderBobResponse === 'function') {
       const rendered = window.renderBobResponse(text, citations, {
         onSaveNotes: (raw) => {
-          send({
-            type: 'SAVE_NOTE',
-            data: {
-              text: raw,
-              pageTitle: state.tab ? state.tab.title : document.title,
-              url: state.tab ? state.tab.url : location.href,
-              origin: 'side-panel',
-            },
-          });
+          saveNote(raw, state.tab ? state.tab.url : '');
         },
         onCreateTask: (raw) => {
           const firstLine = raw.split('\n')[0].replace(/^#+\s*/, '').slice(0, 70);
@@ -1635,15 +1627,22 @@
           };
 
           recognition.onerror = (event) => {
+            if (event.error === 'no-speech' || event.error === 'aborted') {
+              return; // Natural conversational pause
+            }
             console.warn('[bob] speech error:', event.error);
             isListening = false;
             btnVoice.classList.remove('listening');
-            if (event.error !== 'no-speech') {
-              toast('Dictation: ' + event.error);
-            }
+            toast('Dictation: ' + event.error);
           };
 
           recognition.onend = () => {
+            if (isListening) {
+              try {
+                recognition.start();
+                return;
+              } catch {}
+            }
             isListening = false;
             btnVoice.classList.remove('listening');
           };
@@ -1730,14 +1729,6 @@
   async function init() {
     wireEvents();
     syncComposerSize();
-
-    // Show the installed extension version so the user can confirm the build.
-    try {
-      const verChip = $('ext-version-chip');
-      if (verChip && typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getManifest) {
-        verChip.textContent = 'v' + chrome.runtime.getManifest().version;
-      }
-    } catch {}
 
     // Check desktop bridge immediately and set periodic sync
     await checkBridgeStatus();
