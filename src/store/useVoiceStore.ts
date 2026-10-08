@@ -1,7 +1,8 @@
 import { create } from 'zustand';
-import { VoiceMode, VoiceState } from '../lib/voice/types';
+import { VoiceMode, VoiceState, VoiceProfile } from '../lib/voice/types';
 import { voiceController } from '../lib/voice/voiceController';
-import { voiceDiagnostics, VoiceDiagnosticsSnapshot } from '../lib/voice/diagnostics';
+import { localVoiceManager, ModelDownloadProgress } from '../lib/voice/localVoiceManager';
+import { tts, CHATGPT_VOICES } from '../lib/voice/ttsProvider';
 
 interface VoiceStoreState {
   voiceState: VoiceState;
@@ -10,22 +11,28 @@ interface VoiceStoreState {
   lastUserSpeech: string;
   lastBobReply: string;
   errorMessage: string | null;
-  provider: string;
-  notice: string | null;
-  isSpeaking: boolean;
-  speakingSource: 'call' | 'read-aloud' | null;
-  diagnostics: VoiceDiagnosticsSnapshot;
+  activeVoiceId: string;
+  voices: VoiceProfile[];
+  
+  // Model install card state
+  isInstallCardOpen: boolean;
+  installCardType: 'stt' | 'tts' | null;
+  modelProgress: ModelDownloadProgress;
+  isWhisperInstalled: boolean;
+
   setVoiceMode: (mode: VoiceMode) => void;
   startVoiceMode: (mode?: VoiceMode) => Promise<boolean>;
   stopVoiceMode: () => void;
-  endDictation: () => Promise<string>;
   interrupt: () => void;
-  speakText: (text: string) => number;
-  stopSpeaking: () => void;
-  clearNotice: () => void;
+  setActiveVoiceId: (voiceId: string) => void;
+  previewVoice: (voiceId: string) => Promise<void>;
+  openInstallCard: (type: 'stt' | 'tts') => void;
+  closeInstallCard: () => void;
+  downloadWhisperModel: () => Promise<boolean>;
 }
 
-export const useVoiceStore = create<VoiceStoreState>((set) => {
+export const useVoiceStore = create<VoiceStoreState>((set, get) => {
+  // Subscribe to controller state changes
   voiceController.subscribe((state, data) => {
     set({
       voiceState: state,
@@ -33,20 +40,15 @@ export const useVoiceStore = create<VoiceStoreState>((set) => {
       currentTranscript: data?.transcript || '',
       lastBobReply: data?.aiReply || '',
       errorMessage: data?.error || null,
-      provider: data?.provider || '',
     });
   });
 
-  voiceController.addSpeakingListener((info) => {
-    set({ isSpeaking: info.speaking, speakingSource: info.source });
-  });
-
-  voiceController.addNoticeListener((message) => {
-    set({ notice: message });
-  });
-
-  voiceDiagnostics.subscribe((snapshot) => {
-    set({ diagnostics: snapshot });
+  // Subscribe to local voice manager download progress
+  localVoiceManager.subscribe((progress) => {
+    set({
+      modelProgress: progress,
+      isWhisperInstalled: localVoiceManager.isModelInstalled(),
+    });
   });
 
   return {
@@ -56,11 +58,13 @@ export const useVoiceStore = create<VoiceStoreState>((set) => {
     lastUserSpeech: '',
     lastBobReply: '',
     errorMessage: null,
-    provider: '',
-    notice: null,
-    isSpeaking: false,
-    speakingSource: null,
-    diagnostics: voiceDiagnostics.get(),
+    activeVoiceId: tts.getActiveVoiceId(),
+    voices: CHATGPT_VOICES,
+
+    isInstallCardOpen: false,
+    installCardType: null,
+    modelProgress: localVoiceManager.getStatus(),
+    isWhisperInstalled: localVoiceManager.isModelInstalled(),
 
     setVoiceMode: (mode: VoiceMode) => {
       voiceController.setMode(mode);
@@ -70,6 +74,13 @@ export const useVoiceStore = create<VoiceStoreState>((set) => {
     startVoiceMode: async (mode?: VoiceMode) => {
       const targetMode = mode || voiceController.getMode();
       set({ voiceMode: targetMode });
+
+      // If local Whisper is not installed, prompt with the clean white card!
+      if (!localVoiceManager.isModelInstalled()) {
+        set({ isInstallCardOpen: true, installCardType: 'stt' });
+        return false;
+      }
+
       return voiceController.startVoiceMode(targetMode);
     },
 
@@ -77,18 +88,37 @@ export const useVoiceStore = create<VoiceStoreState>((set) => {
       voiceController.stopVoiceMode();
     },
 
-    endDictation: () => voiceController.endDictation(),
-
     interrupt: () => {
       voiceController.interrupt();
     },
 
-    speakText: (text: string) => voiceController.speakText(text, 'read-aloud'),
-
-    stopSpeaking: () => {
-      voiceController.stopSpeaking();
+    setActiveVoiceId: (voiceId: string) => {
+      tts.setActiveVoiceId(voiceId);
+      set({ activeVoiceId: voiceId });
     },
 
-    clearNotice: () => set({ notice: null }),
+    previewVoice: async (voiceId: string) => {
+      await tts.previewVoice(voiceId);
+    },
+
+    openInstallCard: (type: 'stt' | 'tts') => {
+      set({ isInstallCardOpen: true, installCardType: type });
+    },
+
+    closeInstallCard: () => {
+      set({ isInstallCardOpen: false, installCardType: null });
+    },
+
+    downloadWhisperModel: async () => {
+      const ok = await localVoiceManager.downloadModel(false);
+      set({ isWhisperInstalled: localVoiceManager.isModelInstalled() });
+      if (ok) {
+        // If download succeeded and card was open, close it and auto-start if in flow
+        const currentMode = get().voiceMode;
+        set({ isInstallCardOpen: false, installCardType: null });
+        await voiceController.startVoiceMode(currentMode);
+      }
+      return ok;
+    },
   };
 });

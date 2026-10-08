@@ -575,7 +575,9 @@ function startBridge() {
     if (pathname === '/events/desktop-update') {
       if (body && body.action === 'install') {
         if (autoUpdater) {
-          setTimeout(() => autoUpdater.quitAndInstall(false, true), 300)
+          // isSilent: true avoids launching the full NSIS installation wizard/progress bar
+          // isForceRunAfter: true immediately launches the updated Bob app
+          setTimeout(() => autoUpdater.quitAndInstall(true, true), 300)
           return send(200, { ok: true, restarting: true })
         }
       }
@@ -1043,7 +1045,8 @@ function registerIpc() {
 
   ipcMain.handle('bob:installUpdate', () => {
     if (autoUpdater) {
-      autoUpdater.quitAndInstall(false, true)
+      // isSilent: true restarts Bob seamlessly without opening the NSIS setup wizard dialog
+      autoUpdater.quitAndInstall(true, true)
     }
   })
 

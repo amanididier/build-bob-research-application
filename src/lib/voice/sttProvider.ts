@@ -1,6 +1,5 @@
 import { STTEvent } from './types';
 import { micManager } from './microphoneManager';
-import { bobAi } from '../aiEngine';
 import { localVoiceManager } from './localVoiceManager';
 import { pcmRecorder } from './pcmRecorder';
 
@@ -173,89 +172,37 @@ export class DualEngineSTTProvider implements STTProvider {
   }
 
   /**
-   * Safe Multi-Tier Fallback Engine:
-   * Tier 1: Real-time WebSpeech (zero latency, zero RAM)
-   * Tier 2: Cloud Gemini ('gemini-3.5-transcribe' or 'gemini-flash-latest') via 16kHz WAV
-   * Tier 3: Local Whisper-tiny on-device execution (direct 16kHz PCM Float32Array)
-   * Tier 4: Graceful degradation (never throw or block user conversation)
+   * Local-First Speech-to-Text:
+   * Tier 1: Real-time browser speech recognition for zero-latency interim streaming
+   * Tier 2: On-device quantized Whisper-tiny for 100% offline accurate transcription
+   * Zero Gemini voice dependencies, 0 cloud credits, 0 quota failures.
    */
-  public async transcribeAudioFallback(wavBlob: Blob, samples: Float32Array): Promise<string> {
-    // 1. Try Local Whisper if model is already active in memory for instant offline results
+  public async transcribeAudioFallback(_wavBlob: Blob, samples: Float32Array): Promise<string> {
+    // 1. If local Whisper is active in memory, transcribe instantly
     if (localVoiceManager.isReady()) {
       try {
         const localText = await localVoiceManager.transcribeSamples(samples);
-        if (localText) return localText;
+        if (localText && localText.trim()) return localText.trim();
       } catch (err) {
-        console.warn('[DualEngineSTT] Local model fallback to cloud:', err);
+        console.warn('[LocalSTT] Whisper sample transcription error:', err);
       }
     }
 
-    // 2. Try Google Gemini Multimodal Audio API
-    const geminiKey = bobAi.getGeminiKey();
-    if (geminiKey) {
+    // 2. If local Whisper is installed in browser cache, initialize and transcribe
+    if (localVoiceManager.isModelInstalled()) {
       try {
-        const base64Wav = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            const res = (reader.result as string || '').split(',')[1] || '';
-            resolve(res);
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(wavBlob);
-        });
-
-        // Use official Gemini transcription models
-        const candidateModels = ['gemini-3.5-transcribe', 'gemini-flash-latest', 'gemini-3.8-flash'];
-        for (const model of candidateModels) {
-          try {
-            const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
-            const res = await fetch(endpoint, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [
-                  {
-                    parts: [
-                      { text: 'Transcribe this spoken audio verbatim into plain text. Return ONLY the transcribed words with no commentary.' },
-                      {
-                        inlineData: {
-                          mimeType: 'audio/wav',
-                          data: base64Wav,
-                        },
-                      },
-                    ],
-                  },
-                ],
-              }),
-            });
-
-            if (res.ok) {
-              const data = await res.json();
-              const candidateText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-              if (candidateText.trim()) {
-                return candidateText.trim();
-              }
-            } else if (res.status === 429) {
-              console.warn('[DualEngineSTT] Gemini quota hit (429). Falling back to local offline model.');
-              break;
-            }
-          } catch (modelErr) {
-            console.warn(`[DualEngineSTT] Model ${model} request error:`, modelErr);
-          }
+        const loaded = await localVoiceManager.ensureReady();
+        if (loaded) {
+          const localText = await localVoiceManager.transcribeSamples(samples);
+          if (localText && localText.trim()) return localText.trim();
         }
-      } catch (cloudErr: any) {
-        console.warn('[DualEngineSTT] Gemini cloud audio transcription failed:', cloudErr);
+      } catch (err) {
+        console.warn('[LocalSTT] Whisper warmup failed:', err);
       }
     }
 
-    // 3. Fallback to Local Whisper if ready or can transcribe
-    if (localVoiceManager.isReady()) {
-      try {
-        return await localVoiceManager.transcribeSamples(samples);
-      } catch {}
-    }
-
-    return '';
+    // Return any captured words from interim/final without falling back to cloud
+    return this.fullTranscript.trim();
   }
 
   public stop(): void {

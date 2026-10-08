@@ -15,7 +15,7 @@ import {
   Volume2,
   VolumeX
 } from 'lucide-react';
-import { voiceController } from '../../lib/voice/voiceController';
+import { bobVoice } from '../../lib/voiceAgent';
 
 export const ChatView: React.FC = () => {
   const { 
@@ -40,28 +40,24 @@ export const ChatView: React.FC = () => {
   const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
 
   React.useEffect(() => {
-    const unsub = voiceController.addSpeakingListener((info) => {
-      if (!info.speaking) {
+    const unsub = bobVoice.subscribe((speaking) => {
+      if (!speaking) {
         setSpeakingMsgId(null);
       }
     });
-    return () => {
-      unsub();
-      // Read Aloud must not keep talking after the chat disappears.
-      voiceController.stopSpeaking();
-    };
+    return unsub;
   }, []);
 
   const handleSpeakMessage = (id: string, text: string) => {
     if (speakingMsgId === id) {
-      voiceController.stopSpeaking();
+      bobVoice.stopSpeaking();
       setSpeakingMsgId(null);
-      return;
+    } else {
+      setSpeakingMsgId(id);
+      bobVoice.speak(text, () => {
+        setSpeakingMsgId(null);
+      });
     }
-    setSpeakingMsgId(id);
-    // Chunked Gemini TTS through the shared queue: audio starts on the first
-    // sentence, and any older Read Aloud/Call audio is invalidated first.
-    voiceController.speakText(text, 'read-aloud');
   };
 
   const project = projects.find((p) => p.id === activeResearchId) || projects[0];
@@ -266,7 +262,7 @@ export const ChatView: React.FC = () => {
           if (msg.role === 'user') {
             return (
               <div key={msg.id} className="flex gap-3 items-start justify-end">
-                <div className="max-w-[80%] bg-[var(--user-pill-bg)] text-[var(--user-pill-text)] px-4 py-3 rounded-[18px] text-[13px] leading-relaxed shadow-sm">
+                <div className="max-w-[80%] bg-[var(--bs)] text-[#1e3a8a] dark:text-[#bfdbfe] px-4 py-3 rounded-[18px] text-[13px] leading-relaxed shadow-sm">
                   {msg.text}
                 </div>
               </div>
@@ -375,14 +371,14 @@ export const ChatView: React.FC = () => {
                             ? 'text-amber-500 bg-[var(--s2)] font-semibold'
                             : 'hover:bg-[var(--s2)] text-[var(--m)] hover:text-[var(--t)]'
                         }`}
-                        title={speakingMsgId === msg.id ? 'Stop Read Aloud' : 'Listen with Bob humanistic voice'}
+                        title={speakingMsgId === msg.id ? 'Pause voice' : 'Listen with Bob humanistic voice'}
                       >
                         {speakingMsgId === msg.id ? (
                           <VolumeX className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
                         ) : (
                           <Volume2 className="w-3.5 h-3.5" />
                         )}
-                        <span>{speakingMsgId === msg.id ? 'Stop' : 'Read Aloud'}</span>
+                        <span>{speakingMsgId === msg.id ? 'Speaking' : 'Read Aloud'}</span>
                       </button>
 
                       <span className="flex-1" />

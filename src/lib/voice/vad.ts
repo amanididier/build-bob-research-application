@@ -6,13 +6,12 @@ export interface VADCallbacks {
   onEnergyChange?: (energy: number) => void;
 }
 
-export interface VADOptions {
-  /** Per-session end-of-turn silence window (call: ~1.5s, dictation: longer). */
-  silenceMs?: number;
-  threshold?: number;
+export interface VADProvider {
+  start: (stream: MediaStream, callbacks: VADCallbacks, silenceDurationMs?: number) => void;
+  stop: () => void;
 }
 
-export class VoiceActivityDetector {
+export class VoiceActivityDetector implements VADProvider {
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private sourceNode: MediaStreamAudioSourceNode | null = null;
@@ -22,14 +21,11 @@ export class VoiceActivityDetector {
   private lastSpeechTime = 0;
   private silenceTimer: any = null;
   private isRunning = false;
-  private silenceMs = DEFAULT_VOICE_CONFIG.speechEndSilenceDurationMs;
-  private threshold = DEFAULT_VOICE_CONFIG.speechStartThreshold;
 
-  public start(stream: MediaStream, callbacks: VADCallbacks, options?: VADOptions): void {
+  public start(stream: MediaStream, callbacks: VADCallbacks, customSilenceMs?: number): void {
     if (this.isRunning) return;
 
-    this.silenceMs = options?.silenceMs ?? DEFAULT_VOICE_CONFIG.speechEndSilenceDurationMs;
-    this.threshold = options?.threshold ?? DEFAULT_VOICE_CONFIG.speechStartThreshold;
+    const silenceMs = customSilenceMs || DEFAULT_VOICE_CONFIG.speechEndSilenceDurationMs || 1500;
 
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
@@ -56,7 +52,7 @@ export class VoiceActivityDetector {
         callbacks.onEnergyChange?.(energy);
 
         const now = Date.now();
-        const threshold = this.threshold;
+        const threshold = DEFAULT_VOICE_CONFIG.speechStartThreshold;
 
         if (energy > threshold) {
           if (!this.isSpeaking) {
@@ -79,7 +75,7 @@ export class VoiceActivityDetector {
                 callbacks.onSpeechEnd();
               }
               this.silenceTimer = null;
-            }, this.silenceMs);
+            }, silenceMs);
           }
         }
 
@@ -126,22 +122,6 @@ export class VoiceActivityDetector {
       } catch {}
       this.audioContext = null;
     }
-  }
-  public isDetecting(): boolean {
-    return this.isRunning;
-  }
-
-  public inSpeech(): boolean {
-    return this.isSpeaking;
-  }
-
-  /** Re-arm end-of-turn detection without touching the audio graph. */
-  public resetSpeech(): void {
-    if (this.silenceTimer) {
-      clearTimeout(this.silenceTimer);
-      this.silenceTimer = null;
-    }
-    this.isSpeaking = false;
   }
 }
 

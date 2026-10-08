@@ -1,52 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { bobAi, ModelDownloadStatus, AiSynthesisResponse } from '../lib/aiEngine';
-import { getGeminiKey } from '../lib/ai/keyManager';
 import { localMemoryBank, MemoryBankStats } from '../lib/researchMemory';
 import { voiceController } from '../lib/voice/voiceController';
 import { researchOrchestrator } from '../lib/research/researchOrchestrator';
-
-// Ask Gemini for a concise, relevant research title. Returns null on any
-// failure (no key, network, parse) so callers can fall back to a local guess.
-async function generateResearchTitle(promptText: string): Promise<string | null> {
-  const key = (getGeminiKey() || '').trim();
-  if (!key) return null;
-
-  const models = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.0-flash'];
-  const instruction =
-    'Write a short title for a research session, maximum 5 words, ' +
-    'title case, no quotes, no trailing punctuation, no leading emoji. ' +
-    'Base it only on this first message:\n\n' + promptText.slice(0, 600);
-
-  for (const model of models) {
-    try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: instruction }] }],
-            generationConfig: { temperature: 0.4, maxOutputTokens: 24 },
-          }),
-        }
-      );
-      if (!res.ok) continue;
-      const data = await res.json();
-      const raw: string =
-        data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      const title = raw
-        .replace(/^["'`\s]+|["'`\s]+$/g, '')
-        .replace(/\s*[-–—].*$/m, '')
-        .split('\n')[0]
-        .trim()
-        .slice(0, 48);
-      if (title && title.split(/\s+/).length <= 8) return title;
-    } catch {
-      // try the next model
-    }
-  }
-  return null;
-}
 
 export type AppPage =
   | 'home'
@@ -333,9 +289,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isAiGenerating, setIsAiGenerating] = useState(false);
 
   const createNewResearchSession = (): string => {
-    // Unique id (time + random) so a new session can never collide with, and
-    // therefore resurface, an existing session's stored messages.
-    const newId = `session-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const newId = `session-${Date.now()}`;
     const newSession: ResearchProjectItem = {
       id: newId,
       title: 'New research',
@@ -356,7 +310,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return updated;
     });
 
-    // Explicitly start this session with an empty message bucket.
     setSessionMessages((prev) => ({
       ...prev,
       [newId]: [],
@@ -392,7 +345,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Automatic session title and priority color generation (like ChatGPT / Gemini)
     if (isNewSession) {
-      const sid = activeResearchId;
       const cleanWords = promptText
         .replace(/^(hey bob|bob|can you|please|i want to|tell me about|how to|what is|find me|summarize|explain)\s+/i, '')
         .replace(/[^\w\s-]/g, '')
@@ -401,7 +353,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         .slice(0, 4)
         .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
         .join(' ');
-      const fallbackTitle = cleanWords || 'Research exploration';
+      const newTitle = cleanWords || 'Research exploration';
 
       const lower = promptText.toLowerCase();
       let dotColor = '#4385f5'; // blue (analysis/study)
@@ -413,29 +365,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         dotColor = '#10b981'; // green (verified/complete)
       }
 
-      // Apply an instant local title so the UI stays responsive, then upgrade
-      // it with a Gemini-generated name without blocking the reply.
-      const applyTitle = (title: string) => {
-        setProjects((prev) => {
-          const updated = prev.map((p) =>
-            p.id === sid ? { ...p, title, dotColor } : p
-          );
-          if (typeof window !== 'undefined') {
-            try {
-              localStorage.setItem('bob_research_sessions_v3', JSON.stringify(updated));
-            } catch {}
+      setProjects((prev) => {
+        const updated = prev.map((p) => {
+          if (p.id === activeResearchId) {
+            return { ...p, title: newTitle, dotColor };
           }
-          return updated;
+          return p;
         });
-      };
-
-      applyTitle(fallbackTitle);
-
-      generateResearchTitle(promptText)
-        .then((gemTitle) => {
-          if (gemTitle) applyTitle(gemTitle);
-        })
-        .catch(() => {});
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('bob_research_sessions_v3', JSON.stringify(updated));
+          } catch {}
+        }
+        return updated;
+      });
     }
 
     const isFirstConversation = (sessionMessages[activeResearchId] || []).filter((m) => m.role === 'assistant').length === 0;
@@ -482,17 +425,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsAiGenerating(true);
 
     try {
-      const useVoiceStream = voiceController.isCallActive() && !voiceController.isLive();
-      const response: AiSynthesisResponse = useVoiceStream
-        ? await bobAi.streamResearchAnswer(promptText, activeResearchId, (_accumulated, delta) => {
-            voiceController.feedAIStreamChunk(delta);
-          })
-        : await bobAi.generateResearchAnswer(promptText, activeResearchId);
+      const response: AiSynthesisResponse = await bobAi.generateResearchAnswer(
+        promptText,
+        activeResearchId
+      );
 
-      // Voice Call speaks sentences as they stream in; close the final chunk now.
-      if (useVoiceStream) {
-        voiceController.finalizeAIResponse(response.answer);
-      }
+      // Feed into voice system for progressive speech playback
+      voiceController.feedAIStreamChunk(response.answer);
+      voiceController.finalizeAIResponse(response.answer);
 
       const assistantMsg: ChatMessage = {
         id: `a-${Date.now()}`,
@@ -563,63 +503,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setIsAiGenerating(false);
     }
   };
-
-  // Gemini Live already spoke both sides of the turn — persist without a second request.
-  const appendVoiceExchange = (userText: string, bobText: string) => {
-    const newMessages: ChatMessage[] = [];
-    if (userText.trim()) {
-      newMessages.push({
-        id: `u-${Date.now()}`,
-        role: 'user',
-        text: userText.trim(),
-        timestamp: 'Just now',
-      });
-    }
-    if (bobText.trim()) {
-      newMessages.push({
-        id: `a-${Date.now() + 1}`,
-        role: 'assistant',
-        text: bobText.trim(),
-        timestamp: 'Just now',
-        modelTier: 'gemini-live',
-      });
-    }
-    if (newMessages.length === 0) return;
-
-    setSessionMessages((prev) => {
-      const existing = prev[activeResearchId] || [];
-      const updated = { ...prev, [activeResearchId]: [...existing, ...newMessages] };
-      if (typeof window !== 'undefined') {
-        try {
-          localStorage.setItem('bob_session_messages_v3', JSON.stringify(updated));
-        } catch {}
-      }
-      return updated;
-    });
-
-    const bob = typeof window !== 'undefined' ? (window as any).bob : null;
-    if (bob?.add) {
-      newMessages.forEach((m, i) => {
-        bob
-          .add('messages', {
-            id: m.id,
-            role: m.role,
-            text: m.text,
-            projectId: activeResearchId,
-            origin: 'desktop',
-            at: Date.now() + i,
-          })
-          .catch(() => {});
-      });
-    }
-  };
-
-  useEffect(() => {
-    voiceController.registerHandlers({
-      onVoiceExchange: appendVoiceExchange,
-      onGetVoiceContext: () => bobAi.getVoiceContext(activeResearchId),
-    });
-  }, [activeResearchId]);
 
   const clearChat = () => {
     setSessionMessages((prev) => {
@@ -728,11 +611,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 let changed = false;
 
                 for (const m of deskStore.messages) {
-                  // Only mirror messages explicitly addressed to a session.
-                  // Falling back to the active session here is what made a
-                  // brand-new "New research" inherit another session's chats.
-                  const pid = m.projectId;
-                  if (!pid) continue;
+                  const pid = m.projectId || activeResearchId;
                   if (!next[pid]) next[pid] = [];
 
                   const exists = next[pid].some(

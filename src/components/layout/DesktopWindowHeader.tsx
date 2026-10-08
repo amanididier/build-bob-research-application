@@ -70,17 +70,14 @@ export const DesktopWindowHeader: React.FC = () => {
   const handleStartDownload = async () => {
     if (typeof window !== 'undefined' && (window as any).bob?.downloadUpdate) {
       setUpdateInfo((prev) => ({ ...prev, status: 'downloading', percent: 0 }));
-      const result = await (window as any).bob.downloadUpdate();
-      if (result?.status === 'error') {
-        setUpdateInfo((prev) => ({ ...prev, status: 'error', message: result.message || 'Update download failed.' }));
-      }
+      await (window as any).bob.downloadUpdate();
     }
   };
 
   const handleCheckAgain = async () => {
-    if (typeof window !== 'undefined' && (window as any).bob?.checkForUpdates) {
+    if (typeof window !== 'undefined' && (window as any).bob?.checkUpdates) {
       setUpdateInfo((prev) => ({ ...prev, status: 'checking', message: 'Checking for updates...' }));
-      const res = await (window as any).bob.checkForUpdates();
+      const res = await (window as any).bob.checkUpdates();
       if (res && res.status) setUpdateInfo(res);
     }
   };
@@ -160,7 +157,7 @@ export const DesktopWindowHeader: React.FC = () => {
                 className="flex items-center gap-1.5 px-3.5 py-1 rounded-full !bg-[#0080f5] hover:!bg-[#006dd4] !text-white text-[12px] font-semibold tracking-tight shadow-sm transition-all active:scale-95 cursor-pointer"
                 title="Update downloaded! Click to restart Bob and apply update."
               >
-                <span className="font-semibold !text-white">Restart to finish update</span>
+                <span className="font-semibold !text-white">Restart to finish</span>
                 <span className="text-[12px] leading-none !text-white">→</span>
               </button>
             )}
@@ -173,7 +170,7 @@ export const DesktopWindowHeader: React.FC = () => {
                 className="flex items-center gap-1.5 px-3.5 py-1 rounded-full !bg-[#fffc00] hover:!bg-[#ebd200] !text-[#171717] text-[12px] font-bold tracking-tight shadow-xs transition-all active:scale-95 cursor-pointer"
                 title={`Click to download and install Update v${updateInfo.version || ''}`}
               >
-                <span className="font-bold !text-[#171717]">Update to v{updateInfo.version || 'new version'}</span>
+                <span className="font-bold !text-[#171717]">Update Available</span>
                 <span className="text-[12px] leading-none !text-[#171717]">→</span>
               </button>
             )}

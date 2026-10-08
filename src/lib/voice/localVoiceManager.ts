@@ -73,6 +73,25 @@ class LocalVoiceManager {
   }
 
   /**
+   * Returns true if model is compiled in memory or marked installed in local cache.
+   */
+  public isModelInstalled(): boolean {
+    if (this.isReady()) return true;
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('bob_local_whisper_ready') === 'true';
+    }
+    return false;
+  }
+
+  /**
+   * Ensures the local Whisper model is downloaded and loaded in memory.
+   */
+  public async ensureReady(): Promise<boolean> {
+    if (this.isReady()) return true;
+    return await this.downloadModel(false);
+  }
+
+  /**
    * Downloads and initializes the lightweight local voice model (~39 MB quantized Whisper-tiny)
    * Tracks download bytes, files, and percentage in real-time.
    */

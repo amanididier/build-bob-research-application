@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useVoiceStore } from '../../store/useVoiceStore';
-import { micManager } from '../../lib/voice/microphoneManager';
-import { PhoneOff, Mic, MicOff, MessageSquare, Volume2, Sparkles, Brain, AlertCircle, Activity } from 'lucide-react';
+import { PhoneOff, Mic, MicOff, MessageSquare, Volume2, Sparkles, Brain } from 'lucide-react';
 import { AudioWaveVisualizer } from './AudioWaveVisualizer';
 
 interface VoiceCallOverlayProps {
@@ -17,33 +16,24 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({ onClose }) =
     lastBobReply,
     stopVoiceMode,
     interrupt,
-    errorMessage,
-    notice,
-    provider,
-    diagnostics,
   } = useVoiceStore();
 
   const [isMuted, setIsMuted] = useState(false);
   const [isAvatarHovered, setIsAvatarHovered] = useState(false);
-  const [showDebug, setShowDebug] = useState(false);
 
   const isBobTurn = voiceState === 'SPEAKING' || voiceState === 'THINKING';
-  const isLive = provider.startsWith('Gemini Live');
   const isUserTurn = voiceState === 'USER_SPEAKING' || voiceState === 'LISTENING';
+
+  const handleEndCall = () => {
+    stopVoiceMode();
+    onClose();
+  };
 
   const handleToggleMute = () => {
     if (isBobTurn) {
       interrupt();
     }
-    const next = !isMuted;
-    micManager.setMuted(next);
-    setIsMuted(next);
-  };
-
-  const handleEndCall = () => {
-    micManager.setMuted(false);
-    stopVoiceMode();
-    onClose();
+    setIsMuted(!isMuted);
   };
 
   return (
@@ -55,43 +45,17 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({ onClose }) =
           <span className="text-[13px] font-bold tracking-wide uppercase text-neutral-400">
             Live Call with Bob
           </span>
-          <span
-            className={`px-2.5 py-0.5 rounded-full border text-[11px] font-semibold ${
-              voiceState === 'CONNECTING'
-                ? 'bg-sky-500/15 border-sky-500/30 text-sky-300'
-                : isLive
-                ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
-                : 'bg-amber-500/15 border-amber-500/30 text-amber-300'
-            }`}
-          >
-            {voiceState === 'CONNECTING'
-              ? 'Connecting to Bob...'
-              : isLive
-              ? 'Live voice connected'
-              : 'Backup voice active'}
+          <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[11px] font-semibold text-emerald-400">
+            Natural Voice Mode
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowDebug((v) => !v)}
-            title="Voice diagnostics"
-            className={`text-[12px] font-semibold px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
-              showDebug
-                ? 'text-white bg-neutral-800 border-neutral-700'
-                : 'text-neutral-400 hover:text-white border-transparent hover:border-neutral-800 hover:bg-neutral-900'
-            }`}
-          >
-            <Activity className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />
-            Debug
-          </button>
-          <button
-            onClick={handleEndCall}
-            className="text-[12px] font-semibold text-neutral-400 hover:text-white px-3 py-1.5 rounded-xl hover:bg-neutral-900 border border-transparent hover:border-neutral-800 transition-all cursor-pointer"
-          >
-            Exit to text
-          </button>
-        </div>
+        <button
+          onClick={handleEndCall}
+          className="text-[12px] font-semibold text-neutral-400 hover:text-white px-3 py-1.5 rounded-xl hover:bg-neutral-900 border border-transparent hover:border-neutral-800 transition-all cursor-pointer"
+        >
+          Exit to text
+        </button>
       </div>
 
       {/* Central Interactive Avatar Area */}
@@ -184,38 +148,10 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({ onClose }) =
                 <span>Bob is replying... (talk to interrupt)</span>
               </>
             )}
-            {voiceState === 'CONNECTING' && (
-              <>
-                <span className="w-2 h-2 rounded-full bg-sky-400 animate-ping" />
-                <span>Connecting to Bob...</span>
-              </>
-            )}
-            {voiceState === 'TRANSCRIBING' && (
-              <>
-                <Sparkles className="w-3.5 h-3.5 text-violet-400 animate-pulse" />
-                <span>Transcribing your voice...</span>
-              </>
-            )}
-            {voiceState === 'FALLBACK' && (
-              <>
-                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                <span>Switching to backup voice...</span>
-              </>
-            )}
-            {voiceState === 'ERROR' && (
-              <>
-                <AlertCircle className="w-3.5 h-3.5 text-red-400" />
-                <span>Voice stopped</span>
-              </>
-            )}
           </div>
 
           <span className="text-[11px] text-neutral-400">
-            {isBobTurn
-              ? isLive
-                ? 'Realtime Gemini Live voice'
-                : 'Natural voice (chunked streaming)'
-              : 'Bob answers ~1.5s after you stop talking'}
+            {isBobTurn ? 'Bob is speaking (talk to interrupt anytime)' : '1.5s natural conversational pause to answer'}
           </span>
         </div>
 
@@ -257,54 +193,6 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({ onClose }) =
           )}
         </div>
       </div>
-
-      {/* Errors and provider notices are always visible — never silent */}
-      {(errorMessage || notice) && (
-        <div className="w-full max-w-lg mb-3 flex justify-center px-4">
-          <div
-            className={`px-3.5 py-2 rounded-2xl border text-[12px] font-medium flex items-start gap-2 ${
-              errorMessage
-                ? 'bg-red-500/10 border-red-500/30 text-red-200'
-                : 'bg-amber-500/10 border-amber-500/30 text-amber-200'
-            }`}
-          >
-            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-            <span className="leading-relaxed">{errorMessage || notice}</span>
-          </div>
-        </div>
-      )}
-
-      {showDebug && (
-        <div className="w-full max-w-lg mb-3 px-4">
-          <div className="p-3 rounded-2xl bg-neutral-900/90 border border-neutral-800 font-mono text-[10.5px] leading-relaxed text-neutral-300 max-h-[220px] overflow-y-auto">
-            <div className="text-[11px] font-bold text-neutral-100 mb-1.5 tracking-wide">VOICE DEBUG</div>
-            <div>Mode: {diagnostics.mode}</div>
-            <div>Provider: {diagnostics.provider}</div>
-            <div>Model: {diagnostics.model}</div>
-            <div>Connection: {diagnostics.connection}</div>
-            <div>Microphone: {diagnostics.microphone}</div>
-            <div>VAD: {diagnostics.vad}</div>
-            <div>STT: {diagnostics.stt}</div>
-            <div>TTS: {diagnostics.tts}</div>
-            <div>Audio: {diagnostics.audio}</div>
-            <div>Stage: {diagnostics.stage}</div>
-            <div className="mt-1.5">Last event: {diagnostics.lastEvent}</div>
-            {diagnostics.lastError && (
-              <div className="mt-1 text-red-300">
-                ERROR: {diagnostics.lastError.code} — {diagnostics.lastError.message}
-              </div>
-            )}
-            {Object.keys(diagnostics.latency).length > 0 && (
-              <div className="mt-1.5 text-sky-300">
-                Latency:{' '}
-                {Object.entries(diagnostics.latency)
-                  .map(([k, v]) => `${k} ${v}ms`)
-                  .join(' · ')}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Bottom Floating Call Control Bar */}
       <div className="w-full max-w-md pb-4 flex items-center justify-center gap-4">
