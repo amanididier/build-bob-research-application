@@ -7,8 +7,19 @@ export interface STTProvider {
   start: (onTranscript: (event: STTEvent) => void, onError: (err: string) => void) => Promise<void>;
   stop: () => void;
   isListening: () => boolean;
-  flush: () => Promise<string>;
+  flush: (reason?: 'release' | 'vad') => Promise<string>;
+  abort: () => void;
+  isTranscribing: () => boolean;
 }
+
+const SAMPLE_RATE = 16000;
+/** Rolling partials: transcribe a new slice of the hold every ~1.4s. */
+const ROLL_INTERVAL_MS = 1400;
+/** A slice shorter than this is not worth a Whisper pass (~0.9s of audio). */
+const MIN_CHUNK_SAMPLES = Math.round(SAMPLE_RATE * 0.9);
+/** Hard ceiling so transcription can never hang "forever". */
+const FLUSH_TIMEOUT_MS = 20000;
+const CHUNK_TIMEOUT_MS = 12000;
 
 export class DualEngineSTTProvider implements STTProvider {
   private recognition: any = null;
@@ -17,7 +28,11 @@ export class DualEngineSTTProvider implements STTProvider {
   private onTranscriptCallback?: (event: STTEvent) => void;
   private onErrorCallback?: (err: string) => void;
   private isProcessingChunk = false;
-  private lastTranscribedTurn = '';
+  private transcribing = false;
+  private committedSampleCount = 0;
+  private rollTimer: any = null;
+  private webSpeechProducedText = false;
+  private hasWhisper = false;
 
   constructor() {
     this.initWebSpeech();
@@ -49,17 +64,32 @@ export class DualEngineSTTProvider implements STTProvider {
 
     this.active = true;
     this.fullTranscript = '';
-    this.lastTranscribedTurn = '';
+    this.committedSampleCount = 0;
+    this.webSpeechProducedText = false;
     this.onTranscriptCallback = onTranscript;
     this.onErrorCallback = onError;
 
     const stream = micManager.getStream();
     if (stream) {
-      // Start pristine 16kHz PCM audio recording buffer
       pcmRecorder.start(stream);
     }
 
-    // 1. Try browser WebSpeech first for real-time zero-latency streaming
+    // Warm the on-device model now so the first release does not pay the load cost.
+    this.hasWhisper = localVoiceManager.isReady();
+    if (!this.hasWhisper && localVoiceManager.isModelInstalled()) {
+      void localVoiceManager.ensureReady().then((ok) => {
+        this.hasWhisper = ok;
+      });
+    }
+
+    if (!this.recognition && !localVoiceManager.isModelInstalled()) {
+      onError(
+        'No speech engine available. Install the on-device transcription model from Settings → Voice Models.'
+      );
+    }
+
+    // 1. Browser WebSpeech gives free zero-latency live words where it exists
+    //    (Chrome). Electron has no SpeechRecognition, so Whisper does the work.
     if (this.recognition) {
       try {
         this.setupRecognitionListeners();
@@ -68,6 +98,95 @@ export class DualEngineSTTProvider implements STTProvider {
         console.warn('[DualEngineSTT] WebSpeech start warning:', err?.message);
       }
     }
+
+    // 2. Rolling on-device transcription while the user is still holding to talk.
+    this.startRollingTranscription();
+  }
+
+  private startRollingTranscription(): void {
+    this.clearRollTimer();
+    this.rollTimer = setInterval(() => {
+      void this.transcribePendingSlice(false);
+    }, ROLL_INTERVAL_MS);
+  }
+
+  private clearRollTimer(): void {
+    if (this.rollTimer) {
+      clearInterval(this.rollTimer);
+      this.rollTimer = null;
+    }
+  }
+
+  /**
+   * Transcribes everything recorded since the last committed sample and appends
+   * it to the live transcript. Used both for rolling partials while holding and
+   * for the final tail on release.
+   */
+  private async transcribePendingSlice(isFinal: boolean): Promise<string> {
+    if (!this.active) return '';
+    if (this.isProcessingChunk) return '';
+    // Where the browser streams live words for free, let it own the transcript —
+    // running Whisper in parallel would duplicate every phrase. Whisper only takes
+    // over on release if WebSpeech came back empty (and always in Electron).
+    if (this.webSpeechProducedText) return '';
+    if (!isFinal && this.recognition) return '';
+    if (!this.hasWhisper) {
+      this.hasWhisper = localVoiceManager.isReady();
+      if (!this.hasWhisper) return '';
+    }
+
+    const recorded = pcmRecorder.getRecordedAudio();
+    if (!recorded) return '';
+
+    const pending = recorded.samples.subarray(this.committedSampleCount);
+    if (pending.length < MIN_CHUNK_SAMPLES) return '';
+
+    this.isProcessingChunk = true;
+    this.transcribing = true;
+    try {
+      const slice = new Float32Array(pending);
+      const text = await this.withTimeout(
+        localVoiceManager.transcribeSamples(slice),
+        isFinal ? FLUSH_TIMEOUT_MS : CHUNK_TIMEOUT_MS
+      );
+      this.committedSampleCount += slice.length;
+
+      const clean = (text || '').trim();
+      if (clean) {
+        this.fullTranscript += (this.fullTranscript ? ' ' : '') + clean;
+        this.onTranscriptCallback?.({ transcript: this.fullTranscript, isFinal });
+      }
+      return clean;
+    } catch (e: any) {
+      if (e?.message === 'timeout') {
+        this.onErrorCallback?.(
+          'Transcription is taking too long on this device. Try a shorter recording.'
+        );
+      } else {
+        console.warn('[DualEngineSTT] Transcription warning:', e);
+        this.onErrorCallback?.('On-device transcription failed. Please try again.');
+      }
+      return '';
+    } finally {
+      this.isProcessingChunk = false;
+      this.transcribing = false;
+    }
+  }
+
+  private withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('timeout')), ms);
+      promise.then(
+        (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        (err) => {
+          clearTimeout(timer);
+          reject(err);
+        }
+      );
+    });
   }
 
   private setupRecognitionListeners() {
@@ -88,13 +207,9 @@ export class DualEngineSTTProvider implements STTProvider {
 
       if (final.trim()) {
         const trimmed = final.trim();
-        if (!this.fullTranscript.endsWith(trimmed)) {
-          this.fullTranscript += (this.fullTranscript ? ' ' : '') + trimmed;
-        }
-        this.lastTranscribedTurn = this.fullTranscript;
+        this.fullTranscript += (this.fullTranscript ? ' ' : '') + trimmed;
+        this.webSpeechProducedText = true;
         this.onTranscriptCallback?.({ transcript: this.fullTranscript, isFinal: true });
-        // Reset PCM turn since speech recognition captured it accurately
-        pcmRecorder.resetTurn();
       } else if (interim.trim()) {
         const live = this.fullTranscript ? `${this.fullTranscript} ${interim.trim()}` : interim.trim();
         this.onTranscriptCallback?.({ transcript: live, isFinal: false });
@@ -111,12 +226,11 @@ export class DualEngineSTTProvider implements STTProvider {
       if (error === 'not-allowed') {
         this.onErrorCallback?.('Microphone access was denied. Please allow microphone permissions.');
       }
-      // On 'network' or other WebSpeech browser errors, we do NOT crash.
-      // The PCM recorder + Gemini / Local Whisper fallback takes over seamlessly!
+      // On 'network' or other WebSpeech browser errors we do NOT crash:
+      // the PCM recorder + on-device Whisper take over seamlessly.
     };
 
     this.recognition.onend = () => {
-      // If still active, attempt polite restart with backoff
       if (this.active) {
         setTimeout(() => {
           if (this.active && this.recognition) {
@@ -130,83 +244,60 @@ export class DualEngineSTTProvider implements STTProvider {
   }
 
   /**
-   * Called by VAD on speech pause to finalize this turn immediately.
-   * If WebSpeech already captured the text, returns it instantly.
-   * If WebSpeech was silent or missed the phrase, dispatches to Gemini or Local Whisper.
+   * Finalizes the current turn: transcribes whatever is still uncommitted and
+   * returns the complete transcript. Always terminates — bounded by FLUSH_TIMEOUT_MS.
+   * `reason` distinguishes an explicit release (worth reporting silence) from a
+   * background VAD pause (silence is normal there, so stay quiet).
    */
-  public async flush(): Promise<string> {
-    if (!this.active || this.isProcessingChunk) {
-      return this.fullTranscript;
+  public async flush(reason: 'release' | 'vad' = 'release'): Promise<string> {
+    if (!this.active) return this.fullTranscript.trim();
+
+    this.clearRollTimer();
+
+    // Wait for an in-flight rolling slice instead of racing it.
+    const waitedStart = Date.now();
+    while (this.isProcessingChunk && Date.now() - waitedStart < CHUNK_TIMEOUT_MS) {
+      await new Promise((r) => setTimeout(r, 60));
     }
 
-    // If WebSpeech already yielded transcript for this turn, return it directly
-    if (this.fullTranscript.trim() && this.fullTranscript === this.lastTranscribedTurn) {
-      pcmRecorder.resetTurn();
-      return this.fullTranscript;
-    }
+    await this.transcribePendingSlice(true);
 
-    const recorded = pcmRecorder.getRecordedAudio();
-    if (!recorded || recorded.durationMs < 350 || recorded.samples.length < 4000) {
-      return this.fullTranscript;
-    }
-
-    this.isProcessingChunk = true;
-    try {
-      const fallbackText = await this.transcribeAudioFallback(recorded.blob, recorded.samples);
-      if (fallbackText && fallbackText.trim()) {
-        const clean = fallbackText.trim();
-        if (!this.fullTranscript.includes(clean)) {
-          this.fullTranscript += (this.fullTranscript ? ' ' : '') + clean;
-          this.lastTranscribedTurn = this.fullTranscript;
-          this.onTranscriptCallback?.({ transcript: this.fullTranscript, isFinal: true });
-        }
+    if (reason === 'release' && !this.fullTranscript.trim()) {
+      if (!this.hasWhisper && !this.recognition) {
+        this.onErrorCallback?.(
+          'The on-device transcription model is still loading. Give it a moment, then hold and speak again.'
+        );
+      } else {
+        this.onErrorCallback?.(
+          'No speech was detected in that recording. Hold and speak a little closer to the microphone.'
+        );
       }
-    } catch (e: any) {
-      console.warn('[DualEngineSTT] Fallback transcription warning:', e);
-    } finally {
-      this.isProcessingChunk = false;
-      pcmRecorder.resetTurn();
     }
 
-    return this.fullTranscript;
+    this.committedSampleCount = 0;
+    pcmRecorder.resetTurn();
+    this.startRollingTranscription();
+
+    return this.fullTranscript.trim();
   }
 
-  /**
-   * Local-First Speech-to-Text:
-   * Tier 1: Real-time browser speech recognition for zero-latency interim streaming
-   * Tier 2: On-device quantized Whisper-tiny for 100% offline accurate transcription
-   * Zero Gemini voice dependencies, 0 cloud credits, 0 quota failures.
-   */
-  public async transcribeAudioFallback(_wavBlob: Blob, samples: Float32Array): Promise<string> {
-    // 1. If local Whisper is active in memory, transcribe instantly
-    if (localVoiceManager.isReady()) {
-      try {
-        const localText = await localVoiceManager.transcribeSamples(samples);
-        if (localText && localText.trim()) return localText.trim();
-      } catch (err) {
-        console.warn('[LocalSTT] Whisper sample transcription error:', err);
-      }
-    }
+  /** Discards the current turn without transcribing (used when voice mode stops). */
+  public abort(): void {
+    this.clearRollTimer();
+    this.isProcessingChunk = false;
+    this.transcribing = false;
+    this.committedSampleCount = 0;
+    this.fullTranscript = '';
+    pcmRecorder.resetTurn();
+  }
 
-    // 2. If local Whisper is installed in browser cache, initialize and transcribe
-    if (localVoiceManager.isModelInstalled()) {
-      try {
-        const loaded = await localVoiceManager.ensureReady();
-        if (loaded) {
-          const localText = await localVoiceManager.transcribeSamples(samples);
-          if (localText && localText.trim()) return localText.trim();
-        }
-      } catch (err) {
-        console.warn('[LocalSTT] Whisper warmup failed:', err);
-      }
-    }
-
-    // Return any captured words from interim/final without falling back to cloud
-    return this.fullTranscript.trim();
+  public isTranscribing(): boolean {
+    return this.transcribing;
   }
 
   public stop(): void {
     this.active = false;
+    this.clearRollTimer();
 
     if (this.recognition) {
       try {
@@ -216,6 +307,8 @@ export class DualEngineSTTProvider implements STTProvider {
 
     pcmRecorder.stop();
     this.isProcessingChunk = false;
+    this.transcribing = false;
+    this.committedSampleCount = 0;
   }
 
   public isListening(): boolean {

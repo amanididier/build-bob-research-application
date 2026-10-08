@@ -247,7 +247,8 @@ class BobAiManager {
    */
   public async generateResearchAnswer(
     query: string,
-    projectId: string = 'urugendo'
+    projectId: string = 'urugendo',
+    onDelta?: (chunkText: string) => void
   ): Promise<AiSynthesisResponse> {
     const startTime = performance.now();
     const memory = localMemoryBank.buildPromptContext(query, projectId);
@@ -279,17 +280,33 @@ ${memory.contextText}`;
       for (const model of candidateModels) {
         try {
           const ai = new GoogleGenAI({ apiKey: geminiKey });
-          const result = await ai.models.generateContent({
+          const request = {
             model,
             contents: [
               { role: 'user', parts: [{ text: `${systemPrompt}\n\nUser Question: ${query}` }] }
             ]
-          });
+          };
 
-          if (result && result.text) {
+          // Stream real deltas so speech and the chat bubble start before the
+          // whole answer exists, instead of waiting for the final token.
+          let streamed = '';
+          if (onDelta) {
+            const stream = await ai.models.generateContentStream(request);
+            for await (const chunk of stream) {
+              const piece = chunk.text;
+              if (piece) {
+                streamed += piece;
+                onDelta(piece);
+              }
+            }
+          }
+
+          const answerText = streamed || (await ai.models.generateContent(request)).text;
+
+          if (answerText) {
             const latencyMs = Math.round(performance.now() - startTime);
             return {
-              answer: result.text,
+              answer: answerText,
               sources: citations,
               tokensPerSec: 72,
               latencyMs,

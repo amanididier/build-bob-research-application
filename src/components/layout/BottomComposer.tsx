@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Plus, Sparkles, Mic, MicOff, Send, Volume2, Square, Chrome, Phone, AlertCircle, Check } from 'lucide-react';
+import { Plus, Sparkles, Mic, MicOff, Send, Volume2, Square, Chrome, Phone, AlertCircle, Check, Hand } from 'lucide-react';
 import { useVoiceStore } from '../../store/useVoiceStore';
 import { voiceController } from '../../lib/voice/voiceController';
 import { VoiceCallOverlay, VoiceWaveform } from '../voice/VoiceCallOverlay';
@@ -22,6 +22,7 @@ export const BottomComposer: React.FC = () => {
   const [prompt, setPrompt] = useState('');
   const [micMenuOpen, setMicMenuOpen] = useState(false);
   const [launcherToast, setLauncherToast] = useState<string | null>(null);
+  const [holdSeconds, setHoldSeconds] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const {
@@ -32,7 +33,66 @@ export const BottomComposer: React.FC = () => {
     voiceMode,
     setVoiceMode,
     errorMessage,
+    beginPushToTalk,
+    endPushToTalk,
   } = useVoiceStore();
+
+  const holdingRef = useRef(false);
+  const holdTickerRef = useRef<any>(null);
+  const callOverlayActiveRef = useRef(false);
+
+  const startHold = useCallback(async () => {
+    if (holdingRef.current) return;
+    holdingRef.current = true;
+    setHoldSeconds(0);
+    holdTickerRef.current = setInterval(() => setHoldSeconds((s) => s + 1), 1000);
+    await beginPushToTalk('prompt');
+  }, [beginPushToTalk]);
+
+  const endHold = useCallback(() => {
+    if (!holdingRef.current) return;
+    holdingRef.current = false;
+    if (holdTickerRef.current) {
+      clearInterval(holdTickerRef.current);
+      holdTickerRef.current = null;
+    }
+    setHoldSeconds(0);
+    void endPushToTalk();
+  }, [endPushToTalk]);
+
+  // Hold Space to talk: press = record, release = transcribe. Text fields keep the space bar.
+  useEffect(() => {
+    const isTypingTarget = (target: EventTarget | null) => {
+      const node = target as HTMLElement | null;
+      if (!node || !node.tagName) return false;
+      const tag = node.tagName.toLowerCase();
+      return tag === 'input' || tag === 'textarea' || tag === 'select' || node.isContentEditable === true;
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (isTypingTarget(e.target)) return;
+      if (callOverlayActiveRef.current) return; // the call overlay owns the space bar
+      e.preventDefault();
+      void startHold();
+    };
+
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code !== 'Space') return;
+      if (callOverlayActiveRef.current) return;
+      endHold();
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', endHold);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', endHold);
+      if (holdTickerRef.current) clearInterval(holdTickerRef.current);
+    };
+  }, [startHold, endHold]);
 
   const handleSend = useCallback(async (textToSend?: string) => {
     const text = (textToSend || prompt).trim();
@@ -142,6 +202,9 @@ export const BottomComposer: React.FC = () => {
 
   const isVoiceActive = voiceState !== 'IDLE' && voiceState !== 'ERROR' && voiceState !== 'STOPPING';
   const isExpanded = Boolean(prompt.trim()) || isVoiceActive;
+  callOverlayActiveRef.current = isVoiceActive && voiceMode === 'call';
+  const isRecording = holdingRef.current || voiceState === 'USER_SPEAKING';
+  const isBusy = voiceState === 'TRANSCRIBING' || voiceState === 'SUBMITTING' || voiceState === 'THINKING';
 
   if (isVoiceActive && voiceMode === 'call') {
     return <VoiceCallOverlay onClose={() => stopVoiceMode()} />;
@@ -197,11 +260,13 @@ export const BottomComposer: React.FC = () => {
                 : 'Call connected... speak naturally...'
               : voiceState === 'USER_SPEAKING'
               ? 'Listening to your speech...'
+              : voiceState === 'TRANSCRIBING'
+              ? 'Transcribing your recording…'
               : voiceState === 'TRANSCRIPT_READY'
               ? 'Dictation transcribed. Review and send when ready.'
               : voiceState === 'SPEAKING'
               ? 'Bob is speaking (click mic or talk to interrupt)...'
-              : 'Message Bob...'
+              : 'Message Bob... (hold Space to talk)'
           }
           className="w-full min-h-[38px] max-h-[120px] resize-none border-0 outline-none focus:outline-none bg-transparent px-2.5 py-1 text-[13.5px] text-[var(--t)] leading-normal placeholder:text-[var(--m)]"
           rows={1}
@@ -280,6 +345,51 @@ export const BottomComposer: React.FC = () => {
               <Square className="w-2.5 h-2.5 text-blue-500 fill-current ml-0.5" />
             </button>
           )}
+
+          {isBusy && (
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-violet-500/15 border border-violet-500/40 animate-in fade-in duration-150 mr-1 shadow-xs">
+              <Sparkles className="w-3.5 h-3.5 text-violet-500 animate-pulse" />
+              <span className="text-[11.5px] font-semibold text-violet-600 dark:text-violet-300 select-none">
+                {voiceState === 'THINKING' ? 'Bob is thinking…' : 'Transcribing…'}
+              </span>
+              <button
+                onClick={() => stopVoiceMode()}
+                title="Stop and discard"
+                className="ml-0.5 grid place-items-center w-4 h-4 rounded-full bg-violet-500/25 hover:bg-violet-500/40 transition-colors cursor-pointer"
+              >
+                <Square className="w-2 h-2 text-violet-600 dark:text-violet-200 fill-current" />
+              </button>
+            </div>
+          )}
+
+          {/* Hold to talk: press-and-hold with the pointer, or hold the space bar */}
+          <button
+            onPointerDown={(e) => {
+              e.preventDefault();
+              void startHold();
+            }}
+            onPointerUp={endHold}
+            onPointerLeave={endHold}
+            onPointerCancel={endHold}
+            title="Hold to record, release to transcribe (or hold the space bar)"
+            className={`h-8 px-3 rounded-full flex items-center gap-1.5 text-[11px] font-bold transition-all select-none touch-none cursor-pointer border ${
+              isRecording
+                ? 'bg-[#e5484d] border-[#e5484d] text-white shadow-md scale-105'
+                : 'bg-[var(--s2)] border-[var(--line)] text-[var(--t)] hover:bg-[var(--line)]/60'
+            }`}
+          >
+            {isRecording ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                <span>{holdSeconds > 0 ? `Recording ${holdSeconds}s — release` : 'Recording — release'}</span>
+              </>
+            ) : (
+              <>
+                <Hand className="w-3.5 h-3.5" strokeWidth={2} />
+                <span>Hold to talk</span>
+              </>
+            )}
+          </button>
 
           {/* Voice button + mode pill */}
           <div className="relative">

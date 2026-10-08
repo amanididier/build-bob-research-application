@@ -23,6 +23,11 @@ export interface VoiceProfile {
   personality: string;
   language: string;
   previewText: string;
+  /** Gemini prebuilt studio voice used when the user has connected their own key. */
+  geminiVoice?: string;
+  /** Fallback tuning so on-device SAPI5 voices still sound distinct per character. */
+  pitch?: number;
+  rate?: number;
 }
 
 export interface VoiceConfig {

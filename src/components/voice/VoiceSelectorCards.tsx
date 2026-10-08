@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useVoiceStore } from '../../store/useVoiceStore';
+import { voiceController } from '../../lib/voice/voiceController';
 import { Play, Square, Check, Volume2 } from 'lucide-react';
 
 export const VoiceSelectorCards: React.FC = () => {
@@ -9,6 +10,7 @@ export const VoiceSelectorCards: React.FC = () => {
   const handlePreview = async (e: React.MouseEvent, voiceId: string) => {
     e.stopPropagation();
     if (playingVoiceId === voiceId) {
+      voiceController.stopSpeaking();
       setPlayingVoiceId(null);
       return;
     }
@@ -22,7 +24,12 @@ export const VoiceSelectorCards: React.FC = () => {
   };
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+    <div className="space-y-3">
+      <p className="text-[11.5px] text-[var(--m)] leading-relaxed">
+        Each character is a distinct voice. With your Gemini key connected, Bob uses natural studio
+        voices; without it, he falls back to fully on-device system voices tuned per character.
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
       {voices.map((voice) => {
         const isSelected = activeVoiceId === voice.id;
         const isPlaying = playingVoiceId === voice.id;
@@ -95,6 +102,7 @@ export const VoiceSelectorCards: React.FC = () => {
           </div>
         );
       })}
+      </div>
     </div>
   );
 };

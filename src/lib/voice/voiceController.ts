@@ -5,7 +5,7 @@ import { stt } from './sttProvider';
 import { tts } from './ttsProvider';
 import { audioQueue } from './audioQueue';
 import { ResponseTextChunker } from './textChunker';
-import { SILENCE_TIMEOUT_MS, MAX_CALL_IDLE_MS } from './voiceConfig';
+import { SILENCE_TIMEOUT_MS, MAX_CALL_IDLE_MS, DEFAULT_VOICE_CONFIG } from './voiceConfig';
 
 const SILENCE_MS: Record<VoiceMode, number> = {
   // WhisperFlow dictation: finalize live words into composer after ~1.5s silence
@@ -13,6 +13,9 @@ const SILENCE_MS: Record<VoiceMode, number> = {
   // Call mode: handoff turn to Bob after ~1.5s natural pause
   call: SILENCE_TIMEOUT_MS,
 };
+
+/** Grace period after a release so the VAD tail cannot re-finalize the same turn. */
+const PTT_COOLDOWN_MS = 900;
 
 export class VoiceController {
   private state: VoiceState = 'IDLE';
@@ -27,6 +30,9 @@ export class VoiceController {
   private isSubmitting = false;
   private callIdleTimer: any = null;
   private transcriptReadyTimer: any = null;
+  private pttActive = false;
+  private pttHoldTimer: any = null;
+  private pttCooldownUntil = 0;
 
   constructor() {
     this.chunker = new ResponseTextChunker((chunk) => {
@@ -181,10 +187,95 @@ export class VoiceController {
     }
   }
 
+  /**
+   * Push-to-talk: hold to record. Starts voice mode on demand so the space bar
+   * works from a completely idle app. Noise in the room no longer matters —
+   * the turn ends the moment the user lets go.
+   */
+  public async beginPushToTalk(targetMode?: VoiceMode): Promise<boolean> {
+    if (targetMode) this.setMode(targetMode);
+    if (this.pttActive) return true;
+
+    if (!this.isVoiceModeActive) {
+      const ok = await this.startVoiceMode(this.mode);
+      if (!ok) return false;
+    }
+
+    // Cut Bob off mid-sentence without the INTERRUPTING→LISTENING state dance,
+    // which would otherwise overwrite the recording state 120ms later.
+    audioQueue.interrupt();
+    tts.stop();
+    this.chunker.reset();
+    this.pttActive = true;
+    this.pttCooldownUntil = 0;
+    this.currentTranscript = '';
+    this.setState('USER_SPEAKING');
+
+    // Never "forever": auto-release at the configured maximum turn length.
+    this.clearPttHoldTimer();
+    this.pttHoldTimer = setTimeout(() => {
+      if (this.pttActive) void this.endPushToTalk();
+    }, DEFAULT_VOICE_CONFIG.maximumTurnDurationMs);
+
+    return true;
+  }
+
+  /** Release: transcribe what was held, then hand it to the composer or to Bob. */
+  public async endPushToTalk(): Promise<string> {
+    if (!this.pttActive) return '';
+    this.pttActive = false;
+    this.clearPttHoldTimer();
+    this.pttCooldownUntil = Date.now() + PTT_COOLDOWN_MS;
+
+    this.setState('TRANSCRIBING');
+    let text = '';
+    try {
+      text = (await stt.flush('release')).trim();
+    } catch (err) {
+      console.warn('[VoiceController] Push-to-talk flush error:', err);
+    }
+
+    if (!this.isVoiceModeActive) return text;
+
+    if (this.mode === 'prompt') {
+      if (!text) {
+        this.setState('LISTENING');
+        return text;
+      }
+      this.currentTranscript = text;
+      this.onTranscriptUpdate?.(text, true);
+      this.setState('TRANSCRIPT_READY');
+      if (this.transcriptReadyTimer) clearTimeout(this.transcriptReadyTimer);
+      this.transcriptReadyTimer = setTimeout(() => {
+        if (this.isVoiceModeActive && this.mode === 'prompt') this.setState('LISTENING');
+      }, 1200);
+    } else if (text) {
+      void this.handleFinalTranscript(text);
+    } else {
+      this.setState('LISTENING');
+      this.armCallIdleTimer();
+    }
+
+    return text;
+  }
+
+  public isPushToTalkActive(): boolean {
+    return this.pttActive;
+  }
+
+  private clearPttHoldTimer(): void {
+    if (this.pttHoldTimer) {
+      clearTimeout(this.pttHoldTimer);
+      this.pttHoldTimer = null;
+    }
+  }
+
   public stopVoiceMode(): void {
     this.isVoiceModeActive = false;
     this.setState('STOPPING');
 
+    this.pttActive = false;
+    this.clearPttHoldTimer();
     this.clearCallIdleTimer();
     if (this.transcriptReadyTimer) {
       clearTimeout(this.transcriptReadyTimer);
@@ -219,10 +310,13 @@ export class VoiceController {
 
   private async handleSpeechEnd(): Promise<void> {
     if (!this.isVoiceModeActive) return;
+    // While holding to talk (or just after a release) the user owns turn
+    // boundaries; the silence VAD must not finalize behind them.
+    if (this.pttActive || Date.now() < this.pttCooldownUntil) return;
 
     // 1.5s silence reached: finalize this speech turn rapidly
     if (typeof (stt as any).flush === 'function') {
-      const flushedText = await (stt as any).flush();
+      const flushedText = await (stt as any).flush('vad');
       if (this.mode === 'prompt') {
         if (flushedText && flushedText.trim()) {
           this.onTranscriptUpdate?.(flushedText.trim(), true);
@@ -250,26 +344,22 @@ export class VoiceController {
     if (!cleanText || this.isSubmitting) return;
 
     this.isSubmitting = true;
-    this.setState('TRANSCRIBING');
-
-    setTimeout(async () => {
-      this.setState('SUBMITTING');
-      try {
-        if (this.onSubmitMessage) {
-          this.setState('THINKING');
-          this.currentTranscript = '';
-          await this.onSubmitMessage(cleanText);
-        }
-      } catch (err) {
-        console.warn('[VoiceController] Submit message error:', err);
-      } finally {
-        this.isSubmitting = false;
-        if (!audioQueue.isPlaying() && this.isVoiceModeActive) {
-          this.setState('LISTENING');
-          this.armCallIdleTimer();
-        }
+    this.setState('SUBMITTING');
+    try {
+      if (this.onSubmitMessage) {
+        this.setState('THINKING');
+        this.currentTranscript = '';
+        await this.onSubmitMessage(cleanText);
       }
-    }, 150);
+    } catch (err) {
+      console.warn('[VoiceController] Submit message error:', err);
+    } finally {
+      this.isSubmitting = false;
+      if (!audioQueue.isPlaying() && this.isVoiceModeActive) {
+        this.setState('LISTENING');
+        this.armCallIdleTimer();
+      }
+    }
   }
 
   public feedAIStreamChunk(chunkText: string): void {

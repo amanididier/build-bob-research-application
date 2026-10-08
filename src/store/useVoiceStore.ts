@@ -19,16 +19,25 @@ interface VoiceStoreState {
   installCardType: 'stt' | 'tts' | null;
   modelProgress: ModelDownloadProgress;
   isWhisperInstalled: boolean;
+  isPushToTalk: boolean;
 
   setVoiceMode: (mode: VoiceMode) => void;
   startVoiceMode: (mode?: VoiceMode) => Promise<boolean>;
   stopVoiceMode: () => void;
   interrupt: () => void;
+  beginPushToTalk: (mode?: VoiceMode) => Promise<boolean>;
+  endPushToTalk: () => Promise<string>;
   setActiveVoiceId: (voiceId: string) => void;
   previewVoice: (voiceId: string) => Promise<void>;
   openInstallCard: (type: 'stt' | 'tts') => void;
   closeInstallCard: () => void;
   downloadWhisperModel: () => Promise<boolean>;
+}
+
+/** Chrome exposes SpeechRecognition; Electron does not, so it needs the local model. */
+function hasBrowserSpeechRecognition(): boolean {
+  if (typeof window === 'undefined') return false;
+  return Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
 }
 
 export const useVoiceStore = create<VoiceStoreState>((set, get) => {
@@ -65,6 +74,7 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => {
     installCardType: null,
     modelProgress: localVoiceManager.getStatus(),
     isWhisperInstalled: localVoiceManager.isModelInstalled(),
+    isPushToTalk: false,
 
     setVoiceMode: (mode: VoiceMode) => {
       voiceController.setMode(mode);
@@ -75,8 +85,8 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => {
       const targetMode = mode || voiceController.getMode();
       set({ voiceMode: targetMode });
 
-      // If local Whisper is not installed, prompt with the clean white card!
-      if (!localVoiceManager.isModelInstalled()) {
+      // If no speech engine exists on this device, prompt with the clean white card.
+      if (!localVoiceManager.isModelInstalled() && !hasBrowserSpeechRecognition()) {
         set({ isInstallCardOpen: true, installCardType: 'stt' });
         return false;
       }
@@ -86,10 +96,28 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => {
 
     stopVoiceMode: () => {
       voiceController.stopVoiceMode();
+      set({ isPushToTalk: false });
     },
 
     interrupt: () => {
       voiceController.interrupt();
+    },
+
+    beginPushToTalk: async (mode?: VoiceMode) => {
+      const targetMode = mode || voiceController.getMode();
+      if (!localVoiceManager.isModelInstalled() && !hasBrowserSpeechRecognition()) {
+        set({ voiceMode: targetMode, isInstallCardOpen: true, installCardType: 'stt' });
+        return false;
+      }
+      set({ voiceMode: targetMode });
+      const ok = await voiceController.beginPushToTalk(targetMode);
+      set({ isPushToTalk: ok });
+      return ok;
+    },
+
+    endPushToTalk: async () => {
+      set({ isPushToTalk: false });
+      return voiceController.endPushToTalk();
     },
 
     setActiveVoiceId: (voiceId: string) => {

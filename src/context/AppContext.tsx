@@ -424,18 +424,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setIsAiGenerating(true);
 
+    const assistantId = `a-${Date.now()}`;
+    let streamedText = '';
+    let streamInserted = false;
+
+    // Show the answer as it is generated instead of waiting for the last token.
+    const renderStreamText = (full: string) => {
+      const isFirst = !streamInserted;
+      streamInserted = true;
+      setSessionMessages((prev) => {
+        const existing = prev[activeResearchId] || [];
+        const list = isFirst
+          ? [
+              ...existing,
+              { id: assistantId, role: 'assistant', text: full, timestamp: 'Just now' } as ChatMessage
+            ]
+          : existing.map((m) => (m.id === assistantId ? { ...m, text: full } : m));
+        return { ...prev, [activeResearchId]: list };
+      });
+    };
+
     try {
       const response: AiSynthesisResponse = await bobAi.generateResearchAnswer(
         promptText,
-        activeResearchId
+        activeResearchId,
+        (delta: string) => {
+          streamedText += delta;
+          renderStreamText(streamedText);
+          // Speech starts on the first complete sentence, not after the full answer
+          voiceController.feedAIStreamChunk(delta);
+        }
       );
 
-      // Feed into voice system for progressive speech playback
-      voiceController.feedAIStreamChunk(response.answer);
       voiceController.finalizeAIResponse(response.answer);
 
       const assistantMsg: ChatMessage = {
-        id: `a-${Date.now()}`,
+        id: assistantId,
         role: 'assistant',
         text: response.answer,
         timestamp: 'Just now',
@@ -447,7 +471,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       setSessionMessages((prev) => {
         const existing = prev[activeResearchId] || [];
-        const updated = { ...prev, [activeResearchId]: [...existing, assistantMsg] };
+        const list = existing.some((m) => m.id === assistantId)
+          ? existing.map((m) => (m.id === assistantId ? assistantMsg : m))
+          : [...existing, assistantMsg];
+        const updated = { ...prev, [activeResearchId]: list };
         if (typeof window !== 'undefined') {
           try {
             localStorage.setItem('bob_session_messages_v3', JSON.stringify(updated));

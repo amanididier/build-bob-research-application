@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useVoiceStore } from '../../store/useVoiceStore';
-import { PhoneOff, Mic, MicOff, MessageSquare, Volume2, Sparkles, Brain } from 'lucide-react';
+import { PhoneOff, Mic, MicOff, MessageSquare, Volume2, Sparkles, Brain, Hand } from 'lucide-react';
 import { AudioWaveVisualizer } from './AudioWaveVisualizer';
 
 interface VoiceCallOverlayProps {
@@ -16,13 +16,64 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({ onClose }) =
     lastBobReply,
     stopVoiceMode,
     interrupt,
+    beginPushToTalk,
+    endPushToTalk,
   } = useVoiceStore();
 
   const [isMuted, setIsMuted] = useState(false);
   const [isAvatarHovered, setIsAvatarHovered] = useState(false);
+  const [holdSeconds, setHoldSeconds] = useState(0);
+  const holdingRef = useRef(false);
+  const tickerRef = useRef<any>(null);
+
+  const startHold = useCallback(() => {
+    if (holdingRef.current) return;
+    holdingRef.current = true;
+    setHoldSeconds(0);
+    tickerRef.current = setInterval(() => setHoldSeconds((s) => s + 1), 1000);
+    void beginPushToTalk('call');
+  }, [beginPushToTalk]);
+
+  const endHold = useCallback(() => {
+    if (!holdingRef.current) return;
+    holdingRef.current = false;
+    if (tickerRef.current) {
+      clearInterval(tickerRef.current);
+      tickerRef.current = null;
+    }
+    setHoldSeconds(0);
+    void endPushToTalk();
+  }, [endPushToTalk]);
+
+  // Hold Space to talk during a call — release and Bob thinks, no silence guessing.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+      const node = e.target as HTMLElement | null;
+      const tag = node?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || node?.isContentEditable === true) return;
+      e.preventDefault();
+      startHold();
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code !== 'Space') return;
+      endHold();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', endHold);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', endHold);
+      if (tickerRef.current) clearInterval(tickerRef.current);
+    };
+  }, [startHold, endHold]);
 
   const isBobTurn = voiceState === 'SPEAKING' || voiceState === 'THINKING';
   const isUserTurn = voiceState === 'USER_SPEAKING' || voiceState === 'LISTENING';
+  const isRecording = holdingRef.current || voiceState === 'USER_SPEAKING';
+  const isTranscribing = voiceState === 'TRANSCRIBING' || voiceState === 'SUBMITTING';
 
   const handleEndCall = () => {
     stopVoiceMode();
@@ -133,7 +184,13 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({ onClose }) =
             {voiceState === 'USER_SPEAKING' && (
               <>
                 <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-                <span>Hearing you...</span>
+                <span>{isRecording ? `Hearing you… ${holdSeconds > 0 ? `${holdSeconds}s` : ''}` : 'Hearing you...'}</span>
+              </>
+            )}
+            {isTranscribing && (
+              <>
+                <Sparkles className="w-3.5 h-3.5 text-violet-400 animate-pulse" />
+                <span>Transcribing your turn…</span>
               </>
             )}
             {voiceState === 'THINKING' && (
@@ -151,7 +208,9 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({ onClose }) =
           </div>
 
           <span className="text-[11px] text-neutral-400">
-            {isBobTurn ? 'Bob is speaking (talk to interrupt anytime)' : '1.5s natural conversational pause to answer'}
+            {isBobTurn
+              ? 'Bob is speaking (talk to interrupt anytime)'
+              : 'Hold Space or the button to talk — release and Bob answers'}
           </span>
         </div>
 
@@ -207,6 +266,35 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({ onClose }) =
           }`}
         >
           {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+        </button>
+
+        {/* Hold to talk */}
+        <button
+          onPointerDown={(e) => {
+            e.preventDefault();
+            startHold();
+          }}
+          onPointerUp={endHold}
+          onPointerLeave={endHold}
+          onPointerCancel={endHold}
+          title="Hold to record your turn, release so Bob can answer"
+          className={`h-12 px-5 rounded-full font-bold text-[12.5px] flex items-center gap-2 transition-all select-none touch-none cursor-pointer border ${
+            isRecording
+              ? 'bg-amber-500 border-amber-400 text-neutral-950 shadow-lg shadow-amber-900/40 scale-105'
+              : 'bg-neutral-900 border-neutral-800 text-neutral-200 hover:text-white hover:bg-neutral-800'
+          }`}
+        >
+          {isRecording ? (
+            <>
+              <span className="w-2 h-2 rounded-full bg-neutral-950 animate-ping" />
+              <span>{holdSeconds > 0 ? `Listening ${holdSeconds}s` : 'Listening…'}</span>
+            </>
+          ) : (
+            <>
+              <Hand className="w-4 h-4" strokeWidth={2.2} />
+              <span>Hold to talk</span>
+            </>
+          )}
         </button>
 
         {/* Big End Call Button */}
