@@ -52,7 +52,7 @@ export const SettingsPage: React.FC = () => {
   const [isTestingKey, setIsTestingKey] = useState(false);
   const [keyTestFeedback, setKeyTestFeedback] = useState<{ ok: boolean; message: string } | null>(null);
 
-  const [installedVersion, setInstalledVersion] = useState<string>('1.0.29');
+  const [installedVersion, setInstalledVersion] = useState<string>('1.0.53');
 
   // Auto updater state
   const [updaterState, setUpdaterState] = useState<{
@@ -62,8 +62,8 @@ export const SettingsPage: React.FC = () => {
     message?: string;
   }>({
     status: 'idle',
-    version: '1.0.29',
-    message: 'Up to date'
+    version: '1.0.53',
+    message: 'Up to date (v1.0.53)'
   });
 
   const [hardware] = useState(() => detectSystemHardware());
@@ -237,13 +237,33 @@ export const SettingsPage: React.FC = () => {
     }
   };
 
-  const handleInstallUpdate = () => {
+  const handleInstallUpdate = async () => {
+    setUpdaterState((prev) => ({ ...prev, message: 'Restarting Bob to finish update…' }));
     if (typeof window !== 'undefined' && (window as any).bob?.installUpdate) {
-      (window as any).bob.installUpdate();
+      try {
+        await (window as any).bob.installUpdate();
+      } catch (err) {
+        console.warn('Update restart error, reloading:', err);
+        window.location.reload();
+      }
+    } else {
+      setTimeout(() => {
+        window.location.reload();
+      }, 600);
     }
   };
 
-  const { modelProgress, isWhisperInstalled, downloadWhisperModel } = useVoiceStore();
+  const {
+    modelProgress,
+    isWhisperInstalled,
+    downloadWhisperModel,
+    isKokoroInstalled,
+    kokoroProgress,
+    downloadKokoroModel,
+    deleteKokoroModel,
+    activeVoiceId,
+    previewVoice,
+  } = useVoiceStore();
 
   const handleDownloadModel = async () => {
     await downloadWhisperModel();
@@ -629,13 +649,97 @@ export const SettingsPage: React.FC = () => {
                 )}
               </div>
 
+              {/* Speech Synthesis Model: Kokoro 82M Neural TTS */}
+              <div className="bg-[var(--s)] border border-[var(--line)] rounded-3xl p-7 shadow-sm space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
+                      <Volume2 className="w-6 h-6 text-blue-500" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <b className="text-[16px] text-[var(--t)]">Kokoro 82M Natural Voice (ONNX)</b>
+                        <span className={`text-[10.5px] font-bold px-2.5 py-0.5 rounded-full border ${
+                          kokoroProgress.status === 'downloading'
+                            ? 'bg-amber-500/15 border-amber-500/30 text-amber-600 dark:text-amber-400'
+                            : isKokoroInstalled
+                            ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+                            : 'bg-neutral-100 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700 text-neutral-500'
+                        }`}>
+                          {kokoroProgress.status === 'downloading'
+                            ? 'DOWNLOADING'
+                            : isKokoroInstalled
+                            ? 'INSTALLED & READY'
+                            : 'OPTIONAL (FALLBACK ACTIVE)'}
+                        </span>
+                      </div>
+                      <small className="text-[11.5px] text-[var(--m)] block mt-0.5">
+                        ~82 MB · WebGPU/WASM ONNX · Expressive Near-Human Voice Synthesis for Call Mode
+                      </small>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex items-center gap-2">
+                    {isKokoroInstalled ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => previewVoice(activeVoiceId)}
+                          className="px-4 py-2 rounded-xl text-[12px] font-semibold bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-[var(--t)] transition-colors cursor-pointer flex items-center gap-1.5"
+                        >
+                          <Volume2 className="w-3.5 h-3.5" />
+                          <span>Preview</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={deleteKokoroModel}
+                          className="px-3.5 py-2 rounded-xl text-[12px] font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 border border-red-200/80 dark:border-red-900/60 transition-colors cursor-pointer flex items-center gap-1.5"
+                          title="Remove Kokoro from local cache and use fast system voices"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Delete</span>
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={downloadKokoroModel}
+                        disabled={kokoroProgress.status === 'downloading'}
+                        className="px-5 py-2.5 rounded-xl text-[12px] font-bold text-white bg-blue-600 hover:bg-blue-500 transition-all cursor-pointer flex items-center gap-2 shadow-xs"
+                      >
+                        <Download className="w-4 h-4" />
+                        <span>{kokoroProgress.status === 'downloading' ? 'Downloading…' : 'Download Kokoro (~82 MB)'}</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Kokoro Download Progress Bar */}
+                {kokoroProgress.status === 'downloading' && (
+                  <div className="space-y-2 pt-2 border-t border-[var(--line)]">
+                    <div className="flex items-center justify-between text-[11.5px] text-[var(--m)]">
+                      <span className="truncate max-w-[300px]">{kokoroProgress.file || 'Fetching Kokoro 82M weights…'}</span>
+                      <span className="font-mono font-bold text-blue-500">{kokoroProgress.progress}%</span>
+                    </div>
+                    <div className="w-full h-2 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-blue-600 to-indigo-500 transition-all duration-200 rounded-full"
+                        style={{ width: `${Math.max(5, kokoroProgress.progress)}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Voice Selector Section: ChatGPT-Style Cards */}
               <div className="bg-[var(--s)] border border-[var(--line)] rounded-3xl p-7 shadow-sm space-y-5">
                 <div className="flex items-center justify-between border-b border-[var(--line)] pb-4">
                   <div>
                     <b className="text-[16px] text-[var(--t)] block">Voice Personalities (ChatGPT-Style)</b>
                     <small className="text-[11.5px] text-[var(--m)]">
-                      Choose Bob's conversational voice for Call mode and Read Aloud. Natural studio voices use your connected Gemini key; falls back to on-device speech offline.
+                      Choose Bob's conversational voice for Call mode and Read Aloud. 100% offline neural speech.
                     </small>
                   </div>
                   <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">

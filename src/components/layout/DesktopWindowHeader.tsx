@@ -60,10 +60,19 @@ export const DesktopWindowHeader: React.FC = () => {
     }
   };
 
-  const handleRestartToUpdate = () => {
+  const handleRestartToUpdate = async () => {
+    setUpdateInfo((prev) => ({ ...prev, message: 'Restarting Bob to finish update…' }));
     if (typeof window !== 'undefined' && (window as any).bob?.installUpdate) {
-      setUpdateInfo((prev) => ({ ...prev, message: 'Restarting Bob to finish update…' }));
-      (window as any).bob.installUpdate();
+      try {
+        await (window as any).bob.installUpdate();
+      } catch (err) {
+        console.warn('Update restart error, reloading:', err);
+        window.location.reload();
+      }
+    } else {
+      setTimeout(() => {
+        window.location.reload();
+      }, 600);
     }
   };
 

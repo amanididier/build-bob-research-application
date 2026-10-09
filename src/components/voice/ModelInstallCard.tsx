@@ -8,20 +8,38 @@ export const ModelInstallCard: React.FC = () => {
     installCardType,
     closeInstallCard,
     downloadWhisperModel,
+    downloadKokoroModel,
     modelProgress,
+    kokoroProgress,
   } = useVoiceStore();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isInstallCardOpen) return null;
 
-  const isDownloading = modelProgress.status === 'downloading' || isSubmitting;
-  const isReady = modelProgress.status === 'ready';
+  const isTTS = installCardType === 'tts';
+  const activeProgress = isTTS
+    ? {
+        status: kokoroProgress.status,
+        progress: kokoroProgress.progress,
+        fileName: kokoroProgress.file,
+        error: kokoroProgress.error,
+        bytesTotal: 82 * 1024 * 1024,
+        bytesLoaded: (kokoroProgress.progress / 100) * 82 * 1024 * 1024,
+      }
+    : modelProgress;
+
+  const isDownloading = activeProgress.status === 'downloading' || isSubmitting;
+  const isReady = activeProgress.status === 'ready';
 
   const handleDownload = async () => {
     setIsSubmitting(true);
     try {
-      await downloadWhisperModel();
+      if (isTTS) {
+        await downloadKokoroModel();
+      } else {
+        await downloadWhisperModel();
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -52,13 +70,13 @@ export const ModelInstallCard: React.FC = () => {
           </div>
           <div>
             <h3 className="text-[17px] font-bold text-neutral-900 dark:text-neutral-100 leading-snug">
-              {installCardType === 'tts'
-                ? 'Bob needs a local voice'
-                : 'Bob Voice needs one small local model'}
+              {isTTS
+                ? 'Download Kokoro 82M Neural Voice'
+                : 'Bob Voice needs Whisper Tiny'}
             </h3>
             <p className="text-[12.5px] text-neutral-500 dark:text-neutral-400 mt-0.5">
-              {installCardType === 'tts'
-                ? 'High-fidelity offline voice synthesis.'
+              {isTTS
+                ? 'High-fidelity offline voice synthesis for Bob Call Mode.'
                 : 'Whisper Tiny is required for offline speech recognition.'}
             </p>
           </div>
@@ -68,7 +86,9 @@ export const ModelInstallCard: React.FC = () => {
         <div className="space-y-2.5 my-4 bg-neutral-50 dark:bg-neutral-900/60 p-3.5 rounded-2xl border border-neutral-200/60 dark:border-neutral-800/80 text-[12px]">
           <div className="flex items-center justify-between text-neutral-700 dark:text-neutral-300">
             <span className="text-neutral-500 dark:text-neutral-400">Download Size</span>
-            <span className="font-semibold text-neutral-900 dark:text-neutral-100">~39 MB (one-time)</span>
+            <span className="font-semibold text-neutral-900 dark:text-neutral-100">
+              {isTTS ? '~82 MB (one-time)' : '~39 MB (one-time)'}
+            </span>
           </div>
           <div className="flex items-center justify-between text-neutral-700 dark:text-neutral-300">
             <span className="text-neutral-500 dark:text-neutral-400">Execution</span>
@@ -83,34 +103,36 @@ export const ModelInstallCard: React.FC = () => {
         </div>
 
         <p className="text-[12px] text-neutral-500 dark:text-neutral-400 leading-relaxed mb-5">
-          It runs directly on your computer inside Bob. Your speech is never sent to any cloud transcription server, ensuring 100% privacy and zero quota limits.
+          {isTTS
+            ? 'Kokoro 82M runs locally on your computer via ONNX (WebGPU/WASM). Your speech is never sent over the network, giving you crystal-clear human voice synthesis.'
+            : 'It runs directly on your computer inside Bob. Your speech is never sent to any cloud transcription server, ensuring 100% privacy and zero quota limits.'}
         </p>
 
         {/* Real Progress Bar */}
         {isDownloading && (
           <div className="space-y-2 mb-5 animate-in fade-in duration-200">
             <div className="flex items-center justify-between text-[11.5px] font-medium text-neutral-600 dark:text-neutral-400">
-              <span className="truncate max-w-[240px]">{modelProgress.fileName || 'Downloading model files…'}</span>
-              <span className="font-mono font-bold text-amber-600 dark:text-amber-400">{modelProgress.progress}%</span>
+              <span className="truncate max-w-[240px]">{activeProgress.fileName || 'Downloading model files…'}</span>
+              <span className="font-mono font-bold text-amber-600 dark:text-amber-400">{activeProgress.progress}%</span>
             </div>
             <div className="w-full h-2 rounded-full bg-neutral-200 dark:bg-neutral-800 overflow-hidden">
               <div
                 className="h-full bg-gradient-to-r from-amber-500 to-yellow-400 transition-all duration-200 rounded-full"
-                style={{ width: `${Math.max(5, modelProgress.progress)}%` }}
+                style={{ width: `${Math.max(5, activeProgress.progress)}%` }}
               />
             </div>
-            {modelProgress.bytesTotal > 0 && (
+            {activeProgress.bytesTotal > 0 && (
               <div className="text-[10.5px] text-neutral-400 text-right font-mono">
-                {(modelProgress.bytesLoaded / (1024 * 1024)).toFixed(1)} MB / {(modelProgress.bytesTotal / (1024 * 1024)).toFixed(1)} MB
+                {(activeProgress.bytesLoaded / (1024 * 1024)).toFixed(1)} MB / {(activeProgress.bytesTotal / (1024 * 1024)).toFixed(1)} MB
               </div>
             )}
           </div>
         )}
 
-        {modelProgress.status === 'error' && (
+        {activeProgress.status === 'error' && (
           <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 text-[11.5px] mb-4">
             <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{modelProgress.error || 'Download failed. Please check internet connection.'}</span>
+            <span>{activeProgress.error || 'Download failed. Please check internet connection.'}</span>
           </div>
         )}
 

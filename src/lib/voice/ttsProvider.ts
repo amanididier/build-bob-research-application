@@ -1,6 +1,5 @@
 import { VoiceProfile } from './types';
 import { DEFAULT_VOICE_KEY } from './voiceConfig';
-import { bobAi } from '../aiEngine';
 
 export interface TTSProvider {
   speak: (
@@ -20,143 +19,115 @@ export interface TTSProvider {
   previewVoice: (voiceId: string) => Promise<void>;
 }
 
-/** Natural-voice models, tried in order. Bounded — no retry loops. */
-const TTS_MODELS = ['gemini-3.8-flash-lite-tts', 'gemini-3.8-flash-tts'];
-const TTS_TIMEOUT_MS = 20000;
-const DEFAULT_TTS_SAMPLE_RATE = 24000;
-/**
- * Gemini TTS degrades to the robotic on-device voice when a single request is
- * too long to synthesise inside the timeout, so long messages (Read Aloud) are
- * split on sentence boundaries and spoken in order.
- */
-const MAX_TTS_CHARS = 1000;
-export const DEFAULT_VOICE_ID = 'Noah';
-
-function splitForSpeech(text: string, max: number): string[] {
-  if (text.length <= max) return [text];
-  const pieces: string[] = [];
-  let current = '';
-  const sentences = text.match(/[^.!?;:\n]+[.!?;:]*\s*/g) || [text];
-  for (const sentence of sentences) {
-    if ((current + sentence).length > max && current.trim()) {
-      pieces.push(current.trim());
-      current = '';
-    }
-    current += sentence;
-    while (current.length > max) {
-      pieces.push(current.slice(0, max));
-      current = current.slice(max);
-    }
-  }
-  if (current.trim()) pieces.push(current.trim());
-  return pieces;
-}
-
-/**
- * Four genuinely distinct characters. Each one maps to a different Gemini
- * prebuilt studio voice, and to its own pitch/rate pair so the on-device
- * fallback still sounds like a different person rather than one robotic voice.
- */
 export const CHATGPT_VOICES: VoiceProfile[] = [
   {
-    id: 'Noah',
-    name: 'Noah',
-    gender: 'male',
-    personality: 'Upbeat male · Energetic · Quick',
-    language: 'English (US)',
-    geminiVoice: 'Fenrir',
-    pitch: 1.1,
-    rate: 1.18,
-    previewText: "Noah here! Fast answers, sharp summaries, and zero wasted words. Let's get moving."
-  },
-  {
-    id: 'Aria',
-    name: 'Aria',
+    id: 'Breeze',
+    name: 'Breeze',
     gender: 'female',
-    personality: 'Smooth female · Expressive · Storyteller',
+    personality: 'Warm & Animated · Conversational · Friendly',
     language: 'English (US)',
-    geminiVoice: 'Aoede',
-    pitch: 1.0,
-    rate: 0.96,
-    previewText: "I'm Aria. I like to walk you through findings as a story, so the insight lands clearly."
+    previewText: "Hi there! I'm Breeze. I love exploring new questions, summarizing articles, and making research feel effortless."
   },
   {
-    id: 'Leo',
-    name: 'Leo',
+    id: 'Cove',
+    name: 'Cove',
     gender: 'male',
-    personality: 'Deep male · Narrator · Documentary',
+    personality: 'Deep Baritone · Composed · Grounded',
     language: 'English (US)',
-    geminiVoice: 'Orus',
-    pitch: 0.78,
-    rate: 0.94,
-    previewText: "This is Leo. Measured, precise narration for long research briefings and deep dives."
+    previewText: "Hello. I'm Cove. I take a steady, methodical approach to analyzing complex topics and documents."
   },
   {
-    id: 'Nova',
-    name: 'Nova',
-    gender: 'female',
-    personality: 'Soft female · Curious · Gentle',
+    id: 'Ember',
+    name: 'Ember',
+    gender: 'male',
+    personality: 'Confident · Dynamic · Thoughtful',
     language: 'English (US)',
-    geminiVoice: 'Leda',
-    pitch: 1.24,
-    rate: 1.0,
-    previewText: "Hi, I'm Nova. A gentle voice for late-night reading and long study sessions."
+    previewText: "Hey! I'm Ember. Let's dig into your research data, discover patterns, and build strong insights."
+  },
+  {
+    id: 'Juniper',
+    name: 'Juniper',
+    gender: 'female',
+    personality: 'Bright · Expressive · Energetic',
+    language: 'English (US)',
+    previewText: "Hi! I'm Juniper. I bring energy and clarity to your ideas so we can brainstorm and iterate quickly."
+  },
+  {
+    id: 'Sky',
+    name: 'Sky',
+    gender: 'female',
+    personality: 'Calm · Soothing · Mindful',
+    language: 'English (US)',
+    previewText: "Hello. I'm Sky. Take your time, and together we can organize your thoughts and craft thoughtful summaries."
+  },
+  {
+    id: 'Sol',
+    name: 'Sol',
+    gender: 'male',
+    personality: 'Charismatic · Articulate · Punchy',
+    language: 'English (US)',
+    previewText: "Greetings! I'm Sol. I focus on actionable takeaways, sharp logic, and clear executive summaries."
+  },
+  {
+    id: 'Alex',
+    name: 'Alex',
+    gender: 'male',
+    personality: 'Natural · Balanced · Everyday companion',
+    language: 'English (US)',
+    previewText: "Hey! I'm Alex. I'm ready to help you analyze research, brainstorm ideas, and organize your work."
+  },
+  {
+    id: 'Maya',
+    name: 'Maya',
+    gender: 'female',
+    personality: 'Empathetic · Polished · Articulate',
+    language: 'English (US)',
+    previewText: "Hi! I'm Maya. Let's look over your findings and find the most important details."
   }
 ];
 
-function parseSampleRate(mimeType: string | undefined): number {
-  const match = /rate=(\d+)/i.exec(mimeType || '');
-  return match ? Number(match[1]) : DEFAULT_TTS_SAMPLE_RATE;
-}
+export const VOICE_PROFILES_ACOUSTICS: Record<string, { pitch: number; rate: number; gender: 'male' | 'female' }> = {
+  Breeze: { pitch: 1.15, rate: 1.10, gender: 'female' },
+  Cove: { pitch: 0.82, rate: 0.94, gender: 'male' },
+  Ember: { pitch: 0.98, rate: 1.06, gender: 'male' },
+  Juniper: { pitch: 1.28, rate: 1.12, gender: 'female' },
+  Sky: { pitch: 1.06, rate: 0.98, gender: 'female' },
+  Sol: { pitch: 0.92, rate: 1.08, gender: 'male' },
+  Alex: { pitch: 1.02, rate: 1.05, gender: 'male' },
+  Maya: { pitch: 1.20, rate: 1.04, gender: 'female' },
+  James: { pitch: 0.84, rate: 0.95, gender: 'male' },
+  Emma: { pitch: 1.30, rate: 1.12, gender: 'female' }
+};
 
-/**
- * Gemini TTS returns headerless 16-bit PCM (audio/L16;rate=24000). An <audio>
- * element cannot decode raw PCM, so wrap it in a WAV container before playback.
- */
-function pcmToWavBlob(pcm: Uint8Array<ArrayBuffer>, sampleRate: number): Blob {
-  const header = new ArrayBuffer(44);
-  const view = new DataView(header);
-  const writeText = (offset: number, text: string) => {
-    for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i));
-  };
-  writeText(0, 'RIFF');
-  view.setUint32(4, 36 + pcm.byteLength, true);
-  writeText(8, 'WAVE');
-  writeText(12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true); // PCM
-  view.setUint16(22, 1, true); // mono
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * 2, true);
-  view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
-  writeText(36, 'data');
-  view.setUint32(40, pcm.byteLength, true);
-  return new Blob([header, pcm], { type: 'audio/wav' });
-}
+export const KOKORO_VOICES: Record<string, string> = {
+  Breeze: 'af_bella',
+  Cove: 'am_adam',
+  Ember: 'am_michael',
+  Juniper: 'af_heart',
+  Sky: 'af_sarah',
+  Sol: 'bm_george',
+  Alex: 'am_michael',
+  Maya: 'bf_emma',
+  James: 'am_adam',
+  Emma: 'bf_emma',
+};
 
 export class LocalNeuralTTSProvider implements TTSProvider {
   private synth: SpeechSynthesis | null = null;
   private currentUtterance: SpeechSynthesisUtterance | null = null;
   private speaking = false;
   private currentAudioElement: HTMLAudioElement | null = null;
-  private currentObjectUrl: string | null = null;
-  private abortController: AbortController | null = null;
-  private activeVoiceId = DEFAULT_VOICE_ID;
+  private activeVoiceId = 'Alex';
   private cachedVoices: SpeechSynthesisVoice[] = [];
-  private lastEngine: 'gemini-tts' | 'browser-synthesis' | 'none' = 'none';
-  /** Bumped by stop(); in-flight synthesis from an older epoch is discarded. */
-  private epoch = 0;
+  private kokoro: any = null;
+  private isKokoroLoading = false;
+  private isKokoroReady = false;
 
   constructor() {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem(DEFAULT_VOICE_KEY);
       if (saved && CHATGPT_VOICES.some((v) => v.id === saved)) {
         this.activeVoiceId = saved;
-      } else if (saved) {
-        // Persisted id from a removed voice (Alex/James/Maya/Emma): reset it so
-        // Read Aloud and call mode don't fall back to an unknown profile.
-        localStorage.setItem(DEFAULT_VOICE_KEY, this.activeVoiceId);
       }
 
       if ('speechSynthesis' in window) {
@@ -182,11 +153,6 @@ export class LocalNeuralTTSProvider implements TTSProvider {
     return this.activeVoiceId;
   }
 
-  /** Which engine produced the most recent audio, for honest UI reporting. */
-  public getEngine(): 'gemini-tts' | 'browser-synthesis' | 'none' {
-    return this.lastEngine;
-  }
-
   public setActiveVoiceId(voiceId: string): void {
     if (CHATGPT_VOICES.some((v) => v.id === voiceId)) {
       this.activeVoiceId = voiceId;
@@ -196,7 +162,14 @@ export class LocalNeuralTTSProvider implements TTSProvider {
     }
   }
 
-  private resolveSystemVoice(profile: VoiceProfile): SpeechSynthesisVoice | null {
+  public getSystemVoices(): { name: string; lang: string }[] {
+    if (this.cachedVoices.length === 0) {
+      this.loadVoices();
+    }
+    return this.cachedVoices.map((v) => ({ name: v.name, lang: v.lang }));
+  }
+
+  private resolveSystemVoice(voiceId: string): SpeechSynthesisVoice | null {
     if (!this.synth) return null;
     if (this.cachedVoices.length === 0) {
       this.loadVoices();
@@ -204,26 +177,62 @@ export class LocalNeuralTTSProvider implements TTSProvider {
     const voices = this.cachedVoices;
     if (voices.length === 0) return null;
 
-    const english = voices.filter((v) => (v.lang || '').toLowerCase().startsWith('en'));
-    const pool = english.length > 0 ? english : voices;
+    // Check if voiceId directly matches a system voice name
+    const exactSystemMatch = voices.find((v) => v.name === voiceId);
+    if (exactSystemMatch) return exactSystemMatch;
 
-    // Spread the characters across whatever distinct local voices actually exist
-    // on this machine, instead of chasing Edge-only "Online (Natural)" names that
-    // Electron never exposes (which collapsed everyone onto one robotic voice).
+    const profile = VOICE_PROFILES_ACOUSTICS[voiceId] || VOICE_PROFILES_ACOUSTICS.Alex;
     const isFemale = profile.gender === 'female';
-    const femaleHints = ['zira', 'aria', 'jenny', 'samantha', 'victoria', 'female', 'michelle', 'eva'];
-    const maleHints = ['david', 'guy', 'christopher', 'daniel', 'male', 'george', 'ryan'];
-    const hints = isFemale ? femaleHints : maleHints;
-    const opposite = isFemale ? maleHints : femaleHints;
 
-    const hinted = pool.filter((v) => {
+    // 1. Explicit keyword targeting per character
+    const nameTargets: Record<string, string[]> = {
+      Breeze: ['jenny', 'aria', 'samantha', 'victoria', 'karen', 'female'],
+      Cove: ['ryan', 'george', 'richard', 'guy', 'david', 'male'],
+      Ember: ['christopher', 'guy', 'daniel', 'mark', 'male'],
+      Juniper: ['zira', 'aria', 'jenny', 'hazel', 'susan', 'female'],
+      Sky: ['samantha', 'victoria', 'karen', 'eva', 'female'],
+      Sol: ['david', 'alex', 'george', 'daniel', 'male'],
+      Alex: ['christopher', 'guy', 'daniel', 'alex', 'david', 'male'],
+      Maya: ['jenny', 'aria', 'samantha', 'zira', 'eva', 'female'],
+      James: ['ryan', 'george', 'richard', 'daniel', 'mark', 'david'],
+      Emma: ['aria', 'victoria', 'karen', 'hazel', 'susan', 'female']
+    };
+
+    const targetList = nameTargets[voiceId] || [];
+    for (const kw of targetList) {
+      const match = voices.find((v) => v.name.toLowerCase().includes(kw));
+      if (match) return match;
+    }
+
+    // 2. Separate male and female voice pools if multiple voices exist
+    const femaleVoices = voices.filter((v) => {
       const lower = v.name.toLowerCase();
-      return hints.some((h) => lower.includes(h)) && !opposite.some((h) => lower.includes(h));
+      return lower.includes('female') || lower.includes('woman') || lower.includes('zira') || lower.includes('eva') || lower.includes('jenny') || lower.includes('aria') || lower.includes('samantha') || lower.includes('victoria');
     });
 
-    const candidates = hinted.length > 0 ? hinted : pool;
-    const ordinal = CHATGPT_VOICES.findIndex((v) => v.id === profile.id);
-    return candidates[Math.max(0, ordinal) % candidates.length] || candidates[0] || null;
+    const maleVoices = voices.filter((v) => {
+      const lower = v.name.toLowerCase();
+      return lower.includes('male') || lower.includes('man') || lower.includes('david') || lower.includes('guy') || lower.includes('christopher') || lower.includes('george') || lower.includes('mark');
+    });
+
+    if (isFemale && femaleVoices.length > 0) {
+      // Pick distinct index per character
+      const charIndex = Math.abs(voiceId.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)) % femaleVoices.length;
+      return femaleVoices[charIndex];
+    }
+
+    if (!isFemale && maleVoices.length > 0) {
+      const charIndex = Math.abs(voiceId.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)) % maleVoices.length;
+      return maleVoices[charIndex];
+    }
+
+    // 3. Fallback: distribute across all installed voices to avoid everyone sounding identical
+    if (voices.length > 1) {
+      const charIndex = Math.abs(voiceId.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0)) % voices.length;
+      return voices[charIndex];
+    }
+
+    return voices.find((v) => v.lang.startsWith('en')) || voices[0] || null;
   }
 
   private cleanTextForSpeech(text: string): string {
@@ -255,51 +264,65 @@ export class LocalNeuralTTSProvider implements TTSProvider {
     }
 
     this.stop(); // Stop any active playback immediately for seamless barge-in
-    const myEpoch = this.epoch;
-    const profile =
-      CHATGPT_VOICES.find((v) => v.id === (options.voiceId || this.activeVoiceId)) || CHATGPT_VOICES[0];
-    const apiKey = bobAi.getGeminiKey();
 
-    // Long replies are split at sentence boundaries: one oversized Gemini TTS
-    // request times out and silently falls back to robotic browser synthesis,
-    // which is exactly the voice the user hates. Small pieces stay natural.
-    const pieces = splitForSpeech(cleanText, MAX_TTS_CHARS);
-    for (let i = 0; i < pieces.length; i++) {
-      if (myEpoch !== this.epoch) break;
-      await this.speakPiece(
-        pieces[i],
-        profile,
-        apiKey,
-        { onStart: i === 0 ? options.onStart : undefined, onError: options.onError },
-        myEpoch
-      );
+    const targetVoiceId = options.voiceId || this.activeVoiceId;
+
+    // 1. Try local Kokoro 82M ONNX model via kokoro-js
+    try {
+      const kokoroUrl = await this.synthesizeWithKokoro(cleanText, targetVoiceId);
+      if (kokoroUrl) {
+        return this.playAudioUrl(kokoroUrl, options);
+      }
+    } catch (err) {
+      console.warn('[LocalTTS] Kokoro fallback notice:', err);
     }
 
-    options.onEnd?.();
-  }
-
-  private async speakPiece(
-    piece: string,
-    profile: VoiceProfile,
-    apiKey: string | null,
-    options: { onStart?: () => void; onError?: (err: any) => void },
-    myEpoch: number
-  ): Promise<void> {
-    // Tier 1: Gemini natural studio voices, using the user's own connected key.
-    if (apiKey) {
-      const url = await this.synthesizeWithGemini(piece, profile, apiKey);
-      if (myEpoch !== this.epoch) {
-        if (url) this.revokeObjectUrl(url);
-        return;
-      }
-      if (url) {
-        await this.playAudioUrl(url, options, myEpoch);
-        return;
-      }
+    // 2. High-fidelity Local Neural Speech Synthesis with distinct acoustics fallback
+    if (!this.synth) {
+      options.onEnd?.();
+      return;
     }
 
-    // Tier 2: fully on-device browser synthesis, tuned per character.
-    await this.speakWithBrowserSynthesis(piece, profile, options, myEpoch);
+    return new Promise((resolve) => {
+      const matchedVoice = this.resolveSystemVoice(targetVoiceId);
+      const acoustics = VOICE_PROFILES_ACOUSTICS[targetVoiceId] || VOICE_PROFILES_ACOUSTICS.Alex;
+
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      if (matchedVoice) {
+        utterance.voice = matchedVoice;
+      }
+
+      // ChatGPT conversational acoustic tuning
+      utterance.pitch = acoustics.pitch;
+      utterance.rate = acoustics.rate;
+      utterance.volume = 1.0;
+
+      utterance.onstart = () => {
+        this.speaking = true;
+        options.onStart?.();
+      };
+
+      utterance.onend = () => {
+        this.speaking = false;
+        this.currentUtterance = null;
+        options.onEnd?.();
+        resolve();
+      };
+
+      utterance.onerror = (e) => {
+        this.speaking = false;
+        this.currentUtterance = null;
+        options.onError?.(e);
+        resolve();
+      };
+
+      this.currentUtterance = utterance;
+      if (this.synth) {
+        this.synth.speak(utterance);
+      } else {
+        resolve();
+      }
+    });
   }
 
   public async previewVoice(voiceId: string): Promise<void> {
@@ -308,120 +331,128 @@ export class LocalNeuralTTSProvider implements TTSProvider {
     await this.speak(profile.previewText, { voiceId });
   }
 
-  private async synthesizeWithGemini(
-    text: string,
-    profile: VoiceProfile,
-    apiKey: string
-  ): Promise<string | null> {
-    const controller = new AbortController();
-    this.abortController = controller;
-    const timeout = setTimeout(() => controller.abort(), TTS_TIMEOUT_MS);
+  private kokoroListeners: Array<(progress: { status: 'idle' | 'downloading' | 'ready' | 'error'; progress: number; file?: string; error?: string }) => void> = [];
+  private kokoroProgress = { status: 'idle' as const, progress: 0, file: '' };
 
-    try {
-      for (const model of TTS_MODELS) {
-        if (controller.signal.aborted) break;
-        try {
-          const res = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-              signal: controller.signal,
-              body: JSON.stringify({
-                contents: [{ parts: [{ text }] }],
-                generationConfig: {
-                  responseModalities: ['AUDIO'],
-                  speechConfig: {
-                    voiceConfig: {
-                      prebuiltVoiceConfig: { voiceName: profile.geminiVoice || 'Puck' }
-                    }
-                  }
-                }
-              })
-            }
-          );
-
-          const data = await res.json().catch(() => null);
-          if (!res.ok) continue;
-
-          const inlineData = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData;
-          const base64Audio = inlineData?.data;
-          if (!base64Audio) continue;
-
-          const mime = String(inlineData?.mimeType || '');
-          const binary = atob(base64Audio);
-          const bytes = new Uint8Array(binary.length);
-          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-
-          const isRawPcm = /l16|pcm/i.test(mime) || !/wav|mp3|ogg|aac|flac|webm/i.test(mime);
-          const blob = isRawPcm
-            ? pcmToWavBlob(bytes, parseSampleRate(mime))
-            : new Blob([bytes], { type: mime });
-
-          this.lastEngine = 'gemini-tts';
-          return URL.createObjectURL(blob);
-        } catch (err: any) {
-          if (err?.name === 'AbortError') break;
-        }
-      }
-    } finally {
-      clearTimeout(timeout);
-      if (this.abortController === controller) this.abortController = null;
-    }
-
-    return null;
+  public subscribeKokoro(listener: (progress: any) => void) {
+    this.kokoroListeners.push(listener);
+    listener(this.kokoroProgress);
+    return () => {
+      this.kokoroListeners = this.kokoroListeners.filter((l) => l !== listener);
+    };
   }
 
-  private speakWithBrowserSynthesis(
-    cleanText: string,
-    profile: VoiceProfile,
-    options: {
-      onStart?: () => void;
-      onEnd?: () => void;
-      onError?: (err: any) => void;
-    },
-    myEpoch: number
-  ): Promise<void> {
-    if (!this.synth) {
-      options.onError?.(new Error('No speech engine available on this device'));
-      options.onEnd?.();
-      return Promise.resolve();
+  private notifyKokoro(data: any) {
+    this.kokoroProgress = { ...this.kokoroProgress, ...data };
+    for (const l of this.kokoroListeners) {
+      try {
+        l(this.kokoroProgress);
+      } catch {}
     }
-    const synth = this.synth;
+  }
 
-    return new Promise((resolve) => {
-      const matchedVoice = this.resolveSystemVoice(profile);
-      const utterance = new SpeechSynthesisUtterance(cleanText);
-      if (matchedVoice) {
-        utterance.voice = matchedVoice;
+  public getKokoroStatus() {
+    return this.kokoroProgress;
+  }
+
+  public async initKokoro(): Promise<boolean> {
+    if (this.isKokoroReady && this.kokoro) {
+      this.notifyKokoro({ status: 'ready', progress: 100, file: 'Kokoro 82M Ready' });
+      return true;
+    }
+    if (this.isKokoroLoading) return false;
+    this.isKokoroLoading = true;
+    this.notifyKokoro({ status: 'downloading', progress: 10, file: 'Connecting to Kokoro weights…' });
+
+    try {
+      const { KokoroTTS } = await import('kokoro-js');
+      const device =
+        typeof navigator !== 'undefined' && (navigator as any).gpu ? 'webgpu' : 'wasm';
+      this.kokoro = await KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-v1.0-ONNX', {
+        dtype: 'q8',
+        device,
+        progress_callback: (info: any) => {
+          if (info && typeof info.progress === 'number') {
+            const p = Math.round(info.progress);
+            this.notifyKokoro({
+              status: 'downloading',
+              progress: Math.max(10, p),
+              file: info.file || 'Downloading Kokoro 82M weights…',
+            });
+          }
+        },
+      });
+      this.isKokoroReady = true;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('bob_local_kokoro_ready', 'true');
       }
+      this.notifyKokoro({ status: 'ready', progress: 100, file: 'Kokoro 82M Ready' });
+      return true;
+    } catch (err: any) {
+      console.warn('[KokoroTTS] Init notice:', err);
+      this.notifyKokoro({ status: 'error', progress: 0, error: err?.message || 'Download failed' });
+      return false;
+    } finally {
+      this.isKokoroLoading = false;
+    }
+  }
 
-      utterance.rate = profile.rate ?? 1.08;
-      utterance.pitch = profile.pitch ?? 1.0;
-      utterance.volume = 1.0;
+  public clearKokoro(): void {
+    this.kokoro = null;
+    this.isKokoroReady = false;
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('bob_local_kokoro_ready');
+    }
+    this.notifyKokoro({ status: 'idle', progress: 0, file: '' });
+  }
 
-      const finish = () => {
-        this.speaking = false;
-        this.currentUtterance = null;
-        options.onEnd?.();
-        resolve();
-      };
+  public isKokoroInstalled(): boolean {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('bob_local_kokoro_ready') === 'true' || this.isKokoroReady;
+    }
+    return this.isKokoroReady;
+  }
 
-      utterance.onstart = () => {
-        this.lastEngine = 'browser-synthesis';
-        this.speaking = true;
-        options.onStart?.();
-      };
-      utterance.onend = finish;
-      utterance.onerror = (e) => {
-        options.onError?.(e);
-        finish();
-      };
+  private async synthesizeWithKokoro(text: string, voiceId?: string): Promise<string | null> {
+    const targetVoice = voiceId || this.activeVoiceId;
 
-      this.currentUtterance = utterance;
-      if (myEpoch !== this.epoch) return finish();
-      synth.speak(utterance);
-    });
+    if (!this.kokoro && this.isKokoroInstalled()) {
+      await this.initKokoro();
+    }
+
+    if (this.kokoro) {
+      try {
+        const kokoroVoice = KOKORO_VOICES[targetVoice] || 'af_heart';
+        const audio = await this.kokoro.generate(text, {
+          voice: kokoroVoice,
+        });
+        if (audio && typeof audio.toBlob === 'function') {
+          const blob = audio.toBlob();
+          return URL.createObjectURL(blob);
+        }
+      } catch (err) {
+        console.warn('[KokoroTTS] Synthesis error:', err);
+      }
+    }
+
+    // Secondary fallback: local sidecar service if running on port 5000
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 350);
+      const res = await fetch('http://localhost:5000/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, voice: KOKORO_VOICES[targetVoice] || 'af_heart' }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (res.ok) {
+        const blob = await res.blob();
+        return URL.createObjectURL(blob);
+      }
+    } catch {}
+
+    return null;
   }
 
   private playAudioUrl(
@@ -430,20 +461,12 @@ export class LocalNeuralTTSProvider implements TTSProvider {
       onStart?: () => void;
       onEnd?: () => void;
       onError?: (err: any) => void;
-    },
-    myEpoch: number
+    }
   ): Promise<void> {
     return new Promise((resolve) => {
-      if (myEpoch !== this.epoch) {
-        this.revokeObjectUrl(url);
-        options.onEnd?.();
-        return resolve();
-      }
-
       try {
         const audio = new Audio(url);
         this.currentAudioElement = audio;
-        this.currentObjectUrl = url;
 
         audio.onplay = () => {
           this.speaking = true;
@@ -453,7 +476,6 @@ export class LocalNeuralTTSProvider implements TTSProvider {
         audio.onended = () => {
           this.speaking = false;
           this.currentAudioElement = null;
-          this.revokeObjectUrl(url);
           options.onEnd?.();
           resolve();
         };
@@ -461,7 +483,6 @@ export class LocalNeuralTTSProvider implements TTSProvider {
         audio.onerror = (e) => {
           this.speaking = false;
           this.currentAudioElement = null;
-          this.revokeObjectUrl(url);
           options.onError?.(e);
           resolve();
         };
@@ -469,7 +490,6 @@ export class LocalNeuralTTSProvider implements TTSProvider {
         audio.play().catch((err) => {
           this.speaking = false;
           this.currentAudioElement = null;
-          this.revokeObjectUrl(url);
           options.onError?.(err);
           resolve();
         });
@@ -480,23 +500,8 @@ export class LocalNeuralTTSProvider implements TTSProvider {
     });
   }
 
-  private revokeObjectUrl(url: string): void {
-    if (this.currentObjectUrl === url) this.currentObjectUrl = null;
-    try {
-      URL.revokeObjectURL(url);
-    } catch {}
-  }
-
   public stop(): void {
-    this.epoch += 1;
     this.speaking = false;
-
-    if (this.abortController) {
-      try {
-        this.abortController.abort();
-      } catch {}
-      this.abortController = null;
-    }
 
     if (this.currentAudioElement) {
       try {
@@ -504,10 +509,6 @@ export class LocalNeuralTTSProvider implements TTSProvider {
         this.currentAudioElement.currentTime = 0;
       } catch {}
       this.currentAudioElement = null;
-    }
-
-    if (this.currentObjectUrl) {
-      this.revokeObjectUrl(this.currentObjectUrl);
     }
 
     if (this.synth) {

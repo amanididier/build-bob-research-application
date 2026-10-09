@@ -7,6 +7,8 @@ import { researchOrchestrator } from '../lib/research/researchOrchestrator';
 export type AppPage =
   | 'home'
   | 'research'
+  | 'chat'
+  | 'word'
   | 'notes'
   | 'tasks'
   | 'chrome'
@@ -98,13 +100,22 @@ interface AppContextType {
   isAuthModalOpen: boolean;
   setIsAuthModalOpen: (open: boolean) => void;
 
-  // Onboarding
+  // Onboarding & User Profile
   isOnboardingOpen: boolean;
   setIsOnboardingOpen: (open: boolean) => void;
   startOnboarding: () => void;
   finishOnboarding: () => void;
   userName: string;
   setUserName: (name: string) => void;
+  userEmail: string;
+  setUserEmail: (email: string) => void;
+  userAvatar: string;
+  setUserAvatar: (url: string) => void;
+  bobTastePreference: string;
+  setBobTastePreference: (pref: string) => void;
+  isDocExportOpen: boolean;
+  setIsDocExportOpen: (open: boolean) => void;
+  openDocExport: () => void;
 
   // Focused Subtopic
   activeSubtopic: { open: boolean; title: string; parentId: string } | null;
@@ -168,10 +179,57 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isChromeModalOpen, setIsChromeModalOpen] = useState<boolean>(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
 
-  // Onboarding state
+  // Onboarding & User Profile state
   const [userName, setUserName] = useState<string>(() => {
     return (typeof window !== 'undefined' && localStorage.getItem('bob_user_name')) || 'Amani';
   });
+
+  const [userEmail, setUserEmailState] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('bob_user_email');
+      if (saved) return saved;
+      try {
+        const auth = JSON.parse(localStorage.getItem('bob_auth_user') || '{}');
+        if (auth?.email) return auth.email;
+      } catch {}
+    }
+    return 'ishimweamanid@gmail.com';
+  });
+
+  const setUserEmail = (email: string) => {
+    setUserEmailState(email);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('bob_user_email', email);
+    }
+  };
+
+  const [userAvatar, setUserAvatarState] = useState<string>(() => {
+    return (typeof window !== 'undefined' && localStorage.getItem('bob_user_avatar')) || '';
+  });
+
+  const setUserAvatar = (url: string) => {
+    setUserAvatarState(url);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('bob_user_avatar', url);
+    }
+  };
+
+  const [bobTastePreference, setBobTastePreferenceState] = useState<string>(() => {
+    return (
+      (typeof window !== 'undefined' && localStorage.getItem('bob_taste_preference')) ||
+      'Direct, sharp synthesis, academic and encouraging with clear next steps.'
+    );
+  });
+
+  const setBobTastePreference = (pref: string) => {
+    setBobTastePreferenceState(pref);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('bob_taste_preference', pref);
+    }
+  };
+
+  const [isDocExportOpen, setIsDocExportOpen] = useState(false);
+  const openDocExport = () => setIsDocExportOpen(true);
 
   const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(() => {
     return typeof window !== 'undefined' && localStorage.getItem('bob_onboarding_completed') !== 'true';
@@ -310,14 +368,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return updated;
     });
 
-    setSessionMessages((prev) => ({
-      ...prev,
-      [newId]: [],
-    }));
+    setSessionMessages((prev) => {
+      const updated = {
+        ...prev,
+        [newId]: [],
+      };
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('bob_session_messages_v3', JSON.stringify(updated));
+        } catch {}
+      }
+      return updated;
+    });
 
     setActiveResearchId(newId);
     setCurrentPage('research');
     setResearchSubView('chat');
+    setActiveSubtopic(null);
     return newId;
   };
 
@@ -424,48 +491,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setIsAiGenerating(true);
 
-    const assistantId = `a-${Date.now()}`;
-    let streamedText = '';
-    let streamInserted = false;
-
-    // Show the answer as it is generated instead of waiting for the last token.
-    const renderStreamText = (full: string) => {
-      const isFirst = !streamInserted;
-      streamInserted = true;
-      setSessionMessages((prev) => {
-        const existing = prev[activeResearchId] || [];
-        const list = isFirst
-          ? [
-              ...existing,
-              { id: assistantId, role: 'assistant', text: full, timestamp: 'Just now' } as ChatMessage
-            ]
-          : existing.map((m) => (m.id === assistantId ? { ...m, text: full } : m));
-        return { ...prev, [activeResearchId]: list };
-      });
-    };
-
     try {
       const response: AiSynthesisResponse = await bobAi.generateResearchAnswer(
         promptText,
         activeResearchId,
-        (delta: string) => {
-          streamedText += delta;
-          renderStreamText(streamedText);
-          // Speech starts on the first complete sentence, not after the full answer
-          voiceController.feedAIStreamChunk(delta);
-        }
+        (chunkText) => {
+          // Stream sentences to voice system in real-time as they are produced!
+          voiceController.feedAIStreamChunk(chunkText);
+        },
+        bobTastePreference
       );
 
-      // Safety net: non-streaming engines (REST/Ollama/local) never fire onDelta,
-      // so hand the whole answer to the chunker or call mode would stay silent.
-      if (!streamedText && response.answer) {
-        voiceController.feedAIStreamChunk(response.answer);
-      }
-
+      // Finalize audio stream buffer
       voiceController.finalizeAIResponse(response.answer);
 
       const assistantMsg: ChatMessage = {
-        id: assistantId,
+        id: `a-${Date.now()}`,
         role: 'assistant',
         text: response.answer,
         timestamp: 'Just now',
@@ -477,10 +518,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       setSessionMessages((prev) => {
         const existing = prev[activeResearchId] || [];
-        const list = existing.some((m) => m.id === assistantId)
-          ? existing.map((m) => (m.id === assistantId ? assistantMsg : m))
-          : [...existing, assistantMsg];
-        const updated = { ...prev, [activeResearchId]: list };
+        const updated = { ...prev, [activeResearchId]: [...existing, assistantMsg] };
         if (typeof window !== 'undefined') {
           try {
             localStorage.setItem('bob_session_messages_v3', JSON.stringify(updated));
@@ -644,7 +682,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 let changed = false;
 
                 for (const m of deskStore.messages) {
-                  const pid = m.projectId || activeResearchId;
+                  const pid = m.projectId || 'urugendo';
                   if (!next[pid]) next[pid] = [];
 
                   const exists = next[pid].some(
@@ -949,6 +987,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         finishOnboarding,
         userName,
         setUserName,
+        userEmail,
+        setUserEmail,
+        userAvatar,
+        setUserAvatar,
+        bobTastePreference,
+        setBobTastePreference,
+        isDocExportOpen,
+        setIsDocExportOpen,
+        openDocExport,
         activeSubtopic,
         openSubtopic,
         closeSubtopic,

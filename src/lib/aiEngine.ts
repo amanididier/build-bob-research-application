@@ -248,7 +248,8 @@ class BobAiManager {
   public async generateResearchAnswer(
     query: string,
     projectId: string = 'urugendo',
-    onDelta?: (chunkText: string) => void
+    onChunk?: (chunkText: string) => void,
+    tastePreference?: string
   ): Promise<AiSynthesisResponse> {
     const startTime = performance.now();
     const memory = localMemoryBank.buildPromptContext(query, projectId);
@@ -273,40 +274,61 @@ class BobAiManager {
 Speak naturally, warmly, and clearly like ChatGPT or Gemini.
 When presenting comparisons or structured findings, use clean markdown tables.
 Synthesize the user's research context smoothly without sounding robotic or repetitive.
+${tastePreference ? `User Tone & Personality Preference: "${tastePreference}". Adapt your voice and phrasing strictly to this preference.` : ''}
 Here is the available context:
 ${memory.contextText}`;
 
       // A. Try SDK across candidate models
-      for (const model of candidateModels) {
+      for (const model of uniqueModels) {
         try {
           const ai = new GoogleGenAI({ apiKey: geminiKey });
-          const request = {
+          // If onChunk callback provided (e.g. Call mode TTS), stream chunks immediately!
+          if (onChunk) {
+            try {
+              const responseStream = await ai.models.generateContentStream({
+                model,
+                contents: [
+                  { role: 'user', parts: [{ text: `${systemPrompt}\n\nUser Question: ${query}` }] }
+                ]
+              });
+              let fullText = '';
+              for await (const chunk of responseStream) {
+                const text = chunk.text;
+                if (text) {
+                  fullText += text;
+                  onChunk(text);
+                }
+              }
+              if (fullText.trim()) {
+                const latencyMs = Math.round(performance.now() - startTime);
+                return {
+                  answer: fullText,
+                  sources: citations,
+                  tokensPerSec: 72,
+                  latencyMs,
+                  modelTier: 'cloud-gemini',
+                  modelName: model,
+                  memoryNodesUsed: memory.citedNodes.length,
+                  provider: 'gemini',
+                };
+              }
+            } catch (streamErr) {
+              console.warn(`Gemini streaming (${model}) warning:`, streamErr);
+            }
+          }
+
+          const result = await ai.models.generateContent({
             model,
             contents: [
               { role: 'user', parts: [{ text: `${systemPrompt}\n\nUser Question: ${query}` }] }
             ]
-          };
+          });
 
-          // Stream real deltas so speech and the chat bubble start before the
-          // whole answer exists, instead of waiting for the final token.
-          let streamed = '';
-          if (onDelta) {
-            const stream = await ai.models.generateContentStream(request);
-            for await (const chunk of stream) {
-              const piece = chunk.text;
-              if (piece) {
-                streamed += piece;
-                onDelta(piece);
-              }
-            }
-          }
-
-          const answerText = streamed || (await ai.models.generateContent(request)).text;
-
-          if (answerText) {
+          if (result && result.text) {
+            onChunk?.(result.text);
             const latencyMs = Math.round(performance.now() - startTime);
             return {
-              answer: answerText,
+              answer: result.text,
               sources: citations,
               tokensPerSec: 72,
               latencyMs,
@@ -442,6 +464,7 @@ Would you like me to turn these insights into concrete tasks or format them for 
     }
 
     const elapsed = Math.round(performance.now() - startTime);
+    onChunk?.(answer);
 
     return {
       answer,

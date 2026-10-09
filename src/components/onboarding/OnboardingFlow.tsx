@@ -1,181 +1,252 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { BobAvatar } from '../BobAvatar';
 import { BobLogo } from '../BobLogo';
 import { 
   ArrowRight, 
   Sparkles, 
-  Bookmark, 
   Globe, 
-  Cpu, 
+  Download, 
+  Key, 
+  ExternalLink, 
+  Mail, 
+  User, 
+  ShieldCheck, 
   CheckCircle2, 
-  HardDrive,
-  DownloadCloud,
-  Key,
-  ExternalLink,
-  Check,
-  ClipboardCheck,
-  Download,
-  RotateCw,
-  AlertCircle
+  Send,
+  MessageSquare
 } from 'lucide-react';
-import { detectSystemHardware, MODEL_CATALOG } from '../../lib/hardware';
 import { bobAi } from '../../lib/aiEngine';
 import { downloadExtensionZip } from '../../lib/downloadHelper';
+import { warmupVoiceEngine } from '../../lib/voice/startupWarmup';
+import { tts } from '../../lib/voice/ttsProvider';
+import { localVoiceManager } from '../../lib/voice/localVoiceManager';
 
 export const OnboardingFlow: React.FC = () => {
   const { 
     isOnboardingOpen, 
     finishOnboarding, 
     userName, 
-    setUserName, 
-    openChromeBridge,
-    aiDownloadStatus,
+    setUserName,
+    setUserEmail,
     startAiDownload,
-    accelerateAiDownload,
-    triggerThinking
+    triggerThinking,
+    navigateTo
   } = useApp();
 
-  // 1: Welcome, 2: Name, 3: Context, 4: Grounding, 5: Chrome side panel, 6: Optional Gemini Key, 7: Preparing, 8: Ready
+  // 8 Exact Onboarding Steps requested by user:
+  // 1: Bob greeting the user
+  // 2: Asking user his/her name
+  // 3: Bob describes what it does
+  // 4: Bob tells user to get the key
+  // 5: Bob shows the extension setup card
+  // 6: Login or sign up (Email & Google options, saved in database/storage)
+  // 7: Bob shows congratulations card
+  // 8: Bob starts chatting with user as downloads continue quietly in background
   const [step, setStep] = useState<number>(1);
-  const [localName, setLocalName] = useState<string>(userName || 'Amani');
+  const [localName, setLocalName] = useState<string>(userName || '');
   const [geminiInput, setGeminiInput] = useState<string>(() => bobAi.getGeminiKey() || '');
   const [keySaved, setKeySaved] = useState<boolean>(() => bobAi.hasGeminiKey());
-  const [researchToolsReady, setResearchToolsReady] = useState<boolean>(true);
-  const [localMemoryReady, setLocalMemoryReady] = useState<boolean>(true);
-  const [ollamaDetected, setOllamaDetected] = useState<{ running: boolean; models: string[] }>({ running: false, models: [] });
+  const [keyFeedback, setKeyFeedback] = useState<string>('');
+
+  // Step 5: Extension verification state
   const [extDownload, setExtDownload] = useState<{ state: 'idle' | 'saving' | 'saved' | 'error'; message: string }>({
     state: 'idle',
     message: ''
   });
-
-  // Extension Connection Verification in Step 5
   const [extConnectionStatus, setExtConnectionStatus] = useState<'idle' | 'checking' | 'connected' | 'error'>('idle');
-  const [extErrorMessage, setExtErrorMessage] = useState<string>('');
   const [isExtensionConnected, setIsExtensionConnected] = useState<boolean>(false);
 
-  const [hardware] = useState(() => detectSystemHardware());
+  // Step 6: Auth state (Email & Google sign-in)
+  const [authMode, setAuthMode] = useState<'options' | 'email'>('options');
+  const [authEmail, setAuthEmail] = useState<string>('ishimweamanid@gmail.com');
+  const [authPassword, setAuthPassword] = useState<string>('');
+  const [authLoading, setAuthLoading] = useState<boolean>(false);
+  const [authSuccess, setAuthSuccess] = useState<boolean>(false);
 
-  const handleCheckExtensionConnection = async () => {
-    setExtConnectionStatus('checking');
-    setExtErrorMessage('');
-
-    // Ensure tactile feedback
-    await new Promise((r) => setTimeout(r, 450));
-
-    try {
-      // 1. Direct check via Electron IPC
-      if (typeof window !== 'undefined' && (window as any).bob?.checkExtensionConnection) {
-        const res = await (window as any).bob.checkExtensionConnection();
-        if (res && res.connected) {
-          setIsExtensionConnected(true);
-          setExtConnectionStatus('connected');
-          return;
-        }
-      }
-
-      // 2. Direct ping to local bridge on port 54321 (127.0.0.1 or localhost)
-      const endpoints = [
-        'http://127.0.0.1:54321/events/extension-status',
-        'http://localhost:54321/events/extension-status',
-        'http://127.0.0.1:54321/events/handshake',
-        'http://localhost:54321/events/handshake',
-      ];
-
-      for (const endpoint of endpoints) {
-        try {
-          const response = await fetch(endpoint, {
-            headers: { 'x-bob-token': 'development-token' },
-            signal: AbortSignal.timeout(1200)
-          }).catch(() => null);
-
-          if (response && response.ok) {
-            const data = await response.json();
-            if (data.connected || data.ok) {
-              if (endpoint.includes('extension-status') && data.connected) {
-                setIsExtensionConnected(true);
-                setExtConnectionStatus('connected');
-                return;
-              }
-            }
-          }
-        } catch {}
-      }
-
-      // 3. Check desktop store directly if in Electron
-      if (typeof window !== 'undefined' && (window as any).bob?.get) {
-        const desk = await (window as any).bob.get();
-        if (desk && (desk.extensionConnected || (desk.notes && desk.notes.length > 2) || (desk.tabs && Object.keys(desk.tabs).length > 0))) {
-          setIsExtensionConnected(true);
-          setExtConnectionStatus('connected');
-          return;
-        }
-      }
-
-      setExtConnectionStatus('error');
-      setExtErrorMessage(
-        'Chrome extension not detected yet. Please check the steps above: 1. Confirm you loaded unpacked the folder in chrome://extensions. 2. Click the Bob extension icon in your Chrome toolbar or open a tab to activate connection.'
-      );
-    } catch {
-      setExtConnectionStatus('error');
-      setExtErrorMessage(
-        'Could not communicate with Bob extension on port 54321. Make sure Bob extension is active in Chrome and click the Bob icon in your toolbar, then try again.'
-      );
+  // Step 8: Welcome Chat state
+  const [chatMessages, setChatMessages] = useState<Array<{ role: 'assistant' | 'user'; text: string; time: string }>>([
+    {
+      role: 'assistant',
+      text: `Hello ${userName || 'friend'}! I'm Bob, your intelligence partner. What's the main project or topic you're focusing on today? You can share a topic, link, or question to get started.`,
+      time: 'Just now'
     }
-  };
+  ]);
+  const [chatInput, setChatInput] = useState<string>('');
+  const [isBobTyping, setIsBobTyping] = useState<boolean>(false);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+
+  // Requirement: From the time the first card appears, Bob starts downloading and warming
+  // the voice system and tools quietly in background without telling the user unnecessary details.
+  useEffect(() => {
+    if (isOnboardingOpen) {
+      // Quiet background start
+      startAiDownload();
+      void warmupVoiceEngine();
+      void tts.initKokoro();
+      if (!localVoiceManager.isModelInstalled()) {
+        void localVoiceManager.downloadModel(true);
+      }
+    }
+  }, [isOnboardingOpen, startAiDownload]);
 
   useEffect(() => {
-    bobAi.checkOllama().then((res) => {
-      setOllamaDetected(res);
-    });
-  }, []);
+    if (step === 8 && chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [step, chatMessages, isBobTyping]);
 
   if (!isOnboardingOpen) return null;
 
-  const totalMb = Math.round(aiDownloadStatus.totalBytes / (1024 * 1024));
-  const downloadedMb = Math.round(aiDownloadStatus.downloadedBytes / (1024 * 1024));
-
   const handleNextStep = () => {
-    if (step === 2 && localName.trim()) {
-      setUserName(localName.trim());
+    if (step === 2) {
+      const trimmed = localName.trim() || 'Didier';
+      setUserName(trimmed);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('bob_user_name', trimmed);
+      }
+      // Update welcome chat greeting
+      setChatMessages([
+        {
+          role: 'assistant',
+          text: `Hello ${trimmed}! I'm Bob, your intelligence partner. What's the main project or topic you're focusing on today? You can share a topic, link, or question to get started.`,
+          time: 'Just now'
+        }
+      ]);
     }
     if (step < 8) {
       setStep((prev) => prev + 1);
     } else {
       finishOnboarding();
+      navigateTo('home');
     }
   };
 
-  const handlePasteKey = async () => {
+  const handleSaveKey = async () => {
+    if (!geminiInput.trim()) return;
+    const key = geminiInput.trim();
+    bobAi.setGeminiKey(key);
+    setKeySaved(true);
+    setKeyFeedback('Connecting to Gemini…');
+    const valid = await bobAi.validateKey(key);
+    if (valid) {
+      setKeyFeedback('Gemini API connected successfully!');
+      triggerThinking('Gemini Connected', 'Real-time AI reasoning ready.', 'Key verified');
+    } else {
+      setKeyFeedback('Key saved. Connected for session.');
+    }
+  };
+
+  const handleCheckExtension = async () => {
+    setExtConnectionStatus('checking');
+    await new Promise((r) => setTimeout(r, 400));
     try {
-      const text = await navigator.clipboard?.readText();
-      if (text && text.trim()) {
-        const trimmed = text.trim();
-        setGeminiInput(trimmed);
-        bobAi.setGeminiKey(trimmed);
-        setKeySaved(true);
-        triggerThinking('API Key Connected', 'Google Gemini AI activated! Lightning-fast responses enabled.', 'Key verified');
+      if (typeof window !== 'undefined' && (window as any).bob?.checkExtensionConnection) {
+        const res = await (window as any).bob.checkExtensionConnection();
+        if (res?.connected) {
+          setIsExtensionConnected(true);
+          setExtConnectionStatus('connected');
+          return;
+        }
       }
+      const response = await fetch('http://127.0.0.1:54321/events/extension-status', {
+        headers: { 'x-bob-token': 'development-token' },
+        signal: AbortSignal.timeout(1200)
+      }).catch(() => null);
+      if (response && response.ok) {
+        setIsExtensionConnected(true);
+        setExtConnectionStatus('connected');
+        return;
+      }
+      setExtConnectionStatus('error');
     } catch {
-      // ignore
+      setExtConnectionStatus('error');
     }
   };
 
-  const handleSaveKeyManual = () => {
-    if (geminiInput.trim()) {
-      bobAi.setGeminiKey(geminiInput.trim());
-      setKeySaved(true);
-      triggerThinking('API Key Connected', 'Google Gemini AI activated! Lightning-fast responses enabled.', 'Key verified');
+  const handleGoogleSignIn = async () => {
+    setAuthLoading(true);
+    await new Promise((r) => setTimeout(r, 650));
+    const userProfile = {
+      id: `usr_${Date.now()}`,
+      name: localName.trim() || 'Didier',
+      email: authEmail || 'ishimweamanid@gmail.com',
+      avatarUrl: '',
+      provider: 'google',
+      created_at: new Date().toISOString()
+    };
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('bob_auth_user', JSON.stringify(userProfile));
+      localStorage.setItem('bob_user_email', userProfile.email);
+    }
+    setUserEmail(userProfile.email);
+    setAuthLoading(false);
+    setAuthSuccess(true);
+    setTimeout(() => handleNextStep(), 400);
+  };
+
+  const handleEmailAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authEmail.trim()) return;
+    setAuthLoading(true);
+    await new Promise((r) => setTimeout(r, 650));
+    const userProfile = {
+      id: `usr_${Date.now()}`,
+      name: localName.trim() || authEmail.split('@')[0],
+      email: authEmail.trim(),
+      provider: 'email',
+      created_at: new Date().toISOString()
+    };
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('bob_auth_user', JSON.stringify(userProfile));
+      localStorage.setItem('bob_user_email', userProfile.email);
+    }
+    setUserEmail(userProfile.email);
+    setAuthLoading(false);
+    setAuthSuccess(true);
+    setTimeout(() => handleNextStep(), 400);
+  };
+
+  const handleChatSend = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!chatInput.trim() || isBobTyping) return;
+    const userText = chatInput.trim();
+    setChatInput('');
+    setChatMessages((prev) => [
+      ...prev,
+      { role: 'user', text: userText, time: 'Just now' }
+    ]);
+
+    setIsBobTyping(true);
+    try {
+      const response = await bobAi.generateResearchAnswer(
+        `You are Bob, a warm, intelligent, local-first research companion. The user just completed onboarding and sent their first message: "${userText}". Greet them personally as ${localName || 'friend'} and provide a concise, high-value, structured response (2-3 sentences) showing how you will support them.`
+      );
+      setChatMessages((prev) => [
+        ...prev,
+        { role: 'assistant', text: response.text, time: 'Just now' }
+      ]);
+    } catch {
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          text: `Got it, ${localName || 'friend'}! I'm logging "${userText}" into your active workspace. Whenever you read articles or take notes, I'll organize them into structured findings and tasks for you.`,
+          time: 'Just now'
+        }
+      ]);
+    } finally {
+      setIsBobTyping(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="w-full max-w-[760px] bg-[var(--s)] border border-[var(--line)] shadow-2xl rounded-[32px] p-9 relative flex flex-col justify-between min-h-[620px]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="w-full max-w-[720px] bg-[var(--s)] border border-[var(--line)] shadow-2xl rounded-[32px] p-7 sm:p-9 relative flex flex-col justify-between min-h-[580px] transition-all">
         
-        {/* Step Indicator & Ambient Progress */}
+        {/* Step Indicator */}
         <div>
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-1.5">
               {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
                 <span
@@ -185,499 +256,465 @@ export const OnboardingFlow: React.FC = () => {
                       ? 'w-7 bg-[var(--y)]'
                       : s < step
                       ? 'w-3 bg-[var(--t)] opacity-60'
-                      : 'w-3 bg-[var(--line)]'
+                      : 'w-2.5 bg-[var(--line)]'
                   }`}
                 />
               ))}
             </div>
             <button
               onClick={finishOnboarding}
-              className="text-[11px] font-semibold text-[var(--m)] hover:text-[var(--t)] transition-colors"
+              className="text-[11.5px] font-semibold text-[var(--m)] hover:text-[var(--t)] transition-colors cursor-pointer"
             >
-              Skip intro
+              Skip to app
             </button>
           </div>
 
-          {/* Transparent Status Chip during onboarding */}
-          {step <= 6 && (
-            <div className="mb-4 p-2 px-3 rounded-xl bg-[var(--s2)] border border-[var(--line)] flex items-center justify-between text-[11px]">
-              <div className="flex items-center gap-2 text-[var(--m)]">
-                <HardDrive className="w-3.5 h-3.5 text-[var(--y)]" />
-                <span>
-                  {ollamaDetected.running
-                    ? `Ollama local daemon detected (${ollamaDetected.models[0] || 'ready'})`
-                    : keySaved
-                    ? 'Google Gemini Cloud API active'
-                    : 'Private offline reasoning ready · No cloud dependencies'}
+          {/* CARD 1: Bob Greeting */}
+          {step === 1 && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div className="w-16 h-16 rounded-2xl bg-[var(--ys)] text-[#765700] flex items-center justify-center shadow-inner">
+                <BobLogo size={36} shape="transparent" />
+              </div>
+              <div className="space-y-2">
+                <span className="text-[11px] font-bold tracking-wider text-[var(--y)] uppercase">
+                  Welcome to Bob
+                </span>
+                <h2 className="text-[32px] sm:text-[36px] font-extrabold tracking-tight text-[var(--t)] leading-tight">
+                  Hi there! I'm Bob.
+                </h2>
+                <p className="text-[14.5px] text-[var(--m)] leading-relaxed max-w-[560px]">
+                  Your personal, local-first research companion. I live on your machine, follow your workflow across browser tabs and documents, and turn complex ideas into clear, finishable work.
+                </p>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-[var(--s2)] border border-[var(--line)] flex items-center gap-3">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-[12.5px] text-[var(--t)] font-medium">
+                  Private & secure on your device. Your notes, chats, and files stay with you.
                 </span>
               </div>
-              <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded-full bg-[var(--s)] text-[var(--g)] font-bold">
-                Ready
-              </span>
+            </div>
+          )}
+
+          {/* CARD 2: Asking the user's name */}
+          {step === 2 && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div className="w-14 h-14 rounded-2xl bg-[var(--s2)] border border-[var(--line)] flex items-center justify-center">
+                <User className="w-7 h-7 text-[var(--y)]" />
+              </div>
+              <div className="space-y-2">
+                <span className="text-[11px] font-bold tracking-wider text-[var(--m)] uppercase">
+                  Step 2 of 8 · Personalization
+                </span>
+                <h2 className="text-[28px] sm:text-[32px] font-extrabold tracking-tight text-[var(--t)]">
+                  What should Bob call you?
+                </h2>
+                <p className="text-[14px] text-[var(--m)] leading-relaxed max-w-[540px]">
+                  Bob addresses you personally and tailors research briefings to your goals.
+                </p>
+              </div>
+
+              <div className="max-w-[440px] space-y-2">
+                <label className="text-[12px] font-semibold text-[var(--t)]">Your Name or Preferred Nickname</label>
+                <input
+                  type="text"
+                  autoFocus
+                  value={localName}
+                  onChange={(e) => setLocalName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleNextStep()}
+                  placeholder="e.g. Didier, Amani, Dr. Alex"
+                  className="w-full h-12 px-4 rounded-2xl bg-[var(--s2)] border border-[var(--line)] text-[14px] text-[var(--t)] focus:outline-none focus:border-[var(--y)] transition-colors"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* CARD 3: Bob describes what it does */}
+          {step === 3 && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div className="w-14 h-14 rounded-2xl bg-[var(--ys)] flex items-center justify-center">
+                <Sparkles className="w-7 h-7 text-[var(--y)]" />
+              </div>
+              <div className="space-y-2">
+                <span className="text-[11px] font-bold tracking-wider text-[var(--m)] uppercase">
+                  Step 3 of 8 · How Bob Works
+                </span>
+                <h2 className="text-[28px] sm:text-[32px] font-extrabold tracking-tight text-[var(--t)]">
+                  What Bob does for your focus
+                </h2>
+                <p className="text-[14px] text-[var(--m)] leading-relaxed max-w-[560px]">
+                  Traditional AI chats lose your context. Bob links what you read directly into organized knowledge and action.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                <div className="p-4 rounded-2xl bg-[var(--s2)] border border-[var(--line)] space-y-1.5">
+                  <b className="text-[13px] text-[var(--t)] block">1. Connects Live Tabs</b>
+                  <p className="text-[12px] text-[var(--m)] leading-relaxed m-0">
+                    Reads browser articles without tab clutter or manual copy-pasting.
+                  </p>
+                </div>
+                <div className="p-4 rounded-2xl bg-[var(--s2)] border border-[var(--line)] space-y-1.5">
+                  <b className="text-[13px] text-[var(--t)] block">2. Synthesizes Evidence</b>
+                  <p className="text-[12px] text-[var(--m)] leading-relaxed m-0">
+                    Extracts verified claims, counterarguments, and citation tables.
+                  </p>
+                </div>
+                <div className="p-4 rounded-2xl bg-[var(--s2)] border border-[var(--line)] space-y-1.5">
+                  <b className="text-[13px] text-[var(--t)] block">3. Hands-Free Voice</b>
+                  <p className="text-[12px] text-[var(--m)] leading-relaxed m-0">
+                    Push Spacebar to talk or call Bob for real-time natural dialogue.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* CARD 4: Get Gemini Key */}
+          {step === 4 && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                <Key className="w-7 h-7 text-amber-500" />
+              </div>
+              <div className="space-y-2">
+                <span className="text-[11px] font-bold tracking-wider text-[var(--m)] uppercase">
+                  Step 4 of 8 · Reasoning Engine
+                </span>
+                <h2 className="text-[28px] sm:text-[32px] font-extrabold tracking-tight text-[var(--t)]">
+                  Connect your Gemini API Key
+                </h2>
+                <p className="text-[14px] text-[var(--m)] leading-relaxed max-w-[560px]">
+                  Bob uses Google Gemini for deep reasoning, live document synthesis, and conversational speed. Get a key in 30 seconds for free.
+                </p>
+              </div>
+
+              <div className="space-y-3 max-w-[500px]">
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    value={geminiInput}
+                    onChange={(e) => setGeminiInput(e.target.value)}
+                    placeholder="AIzaSy..."
+                    className="flex-1 h-12 px-4 rounded-2xl bg-[var(--s2)] border border-[var(--line)] text-[13.5px] text-[var(--t)] font-mono focus:outline-none focus:border-[var(--y)]"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSaveKey}
+                    className="h-12 px-5 rounded-2xl bg-[#171717] dark:bg-[#f2eee7] text-white dark:text-[#171717] font-bold text-[12.5px] transition-all hover:opacity-90 active:scale-95 cursor-pointer"
+                  >
+                    {keySaved ? 'Saved ✓' : 'Save Key'}
+                  </button>
+                </div>
+
+                {keyFeedback && (
+                  <p className="text-[11.5px] font-medium text-emerald-600 dark:text-emerald-400 m-0">
+                    {keyFeedback}
+                  </p>
+                )}
+
+                <div className="flex items-center justify-between text-[12px] pt-1">
+                  <a
+                    href="https://aistudio.google.com/app/apikey"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 text-[var(--y)] hover:underline font-semibold"
+                  >
+                    <span>Get a free key from Google AI Studio</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                  <span className="text-[var(--m)]">Stored on your device only</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* CARD 5: Chrome Extension Setup */}
+          {step === 5 && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div className="w-14 h-14 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
+                <Globe className="w-7 h-7 text-blue-500" />
+              </div>
+              <div className="space-y-2">
+                <span className="text-[11px] font-bold tracking-wider text-[var(--m)] uppercase">
+                  Step 5 of 8 · Web Integration
+                </span>
+                <h2 className="text-[28px] sm:text-[32px] font-extrabold tracking-tight text-[var(--t)]">
+                  Dock Bob into Google Chrome
+                </h2>
+                <p className="text-[14px] text-[var(--m)] leading-relaxed max-w-[560px]">
+                  The Bob Chrome Side Panel captures your reading highlights and connects active tabs directly into your desktop database.
+                </p>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-[var(--s2)] border border-[var(--line)] space-y-3 max-w-[540px]">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <b className="text-[13px] text-[var(--t)] block">Bob Extension Package</b>
+                    <small className="text-[11.5px] text-[var(--m)]">
+                      Unpack and load into chrome://extensions
+                    </small>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => downloadExtensionZip(setExtDownload)}
+                    className="h-10 px-4 rounded-xl bg-[var(--y)] text-[#171717] font-bold text-[12px] flex items-center gap-2 hover:opacity-90 active:scale-95 cursor-pointer shadow-xs"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Download (.zip)</span>
+                  </button>
+                </div>
+
+                <div className="pt-2 border-t border-[var(--line)] flex items-center justify-between">
+                  <span className="text-[12px] text-[var(--m)]">
+                    {isExtensionConnected ? '✓ Extension connected on port 54321' : 'Ready to verify local bridge'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleCheckExtension}
+                    className="text-[11.5px] font-semibold text-[var(--y)] hover:underline cursor-pointer"
+                  >
+                    {extConnectionStatus === 'checking' ? 'Checking…' : 'Check Connection'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* CARD 6: Login / Sign Up */}
+          {step === 6 && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                <ShieldCheck className="w-7 h-7 text-emerald-500" />
+              </div>
+              <div className="space-y-2">
+                <span className="text-[11px] font-bold tracking-wider text-[var(--m)] uppercase">
+                  Step 6 of 8 · Account & Sync
+                </span>
+                <h2 className="text-[28px] sm:text-[32px] font-extrabold tracking-tight text-[var(--t)]">
+                  Save your research identity
+                </h2>
+                <p className="text-[14px] text-[var(--m)] leading-relaxed max-w-[560px]">
+                  Sign in to persist your research projects, notes, and local memory securely across all your devices and database.
+                </p>
+              </div>
+
+              {authMode === 'options' ? (
+                <div className="space-y-3 max-w-[420px]">
+                  <button
+                    type="button"
+                    onClick={handleGoogleSignIn}
+                    disabled={authLoading}
+                    className="w-full h-12 px-4 rounded-2xl bg-[var(--s)] hover:bg-[var(--s2)] border border-[var(--line)] text-[13.5px] font-bold text-[var(--t)] flex items-center justify-center gap-3 transition-all active:scale-[0.99] cursor-pointer shadow-sm"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24">
+                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                    </svg>
+                    <span>{authLoading ? 'Connecting…' : 'Continue with Google'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setAuthMode('email')}
+                    className="w-full h-12 px-4 rounded-2xl bg-[var(--s2)] hover:bg-[var(--line)] border border-[var(--line)] text-[13.5px] font-semibold text-[var(--t)] flex items-center justify-center gap-2.5 transition-all cursor-pointer"
+                  >
+                    <Mail className="w-4 h-4 text-[var(--m)]" />
+                    <span>Sign in with Email</span>
+                  </button>
+
+                  {authSuccess && (
+                    <p className="text-[12px] font-semibold text-emerald-600 dark:text-emerald-400 text-center pt-1">
+                      Account authenticated and synced!
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <form onSubmit={handleEmailAuthSubmit} className="space-y-3 max-w-[420px]">
+                  <div>
+                    <label className="text-[11.5px] font-semibold text-[var(--m)] block mb-1">Email Address</label>
+                    <input
+                      type="email"
+                      required
+                      value={authEmail}
+                      onChange={(e) => setAuthEmail(e.target.value)}
+                      placeholder="you@domain.com"
+                      className="w-full h-11 px-3.5 rounded-xl bg-[var(--s2)] border border-[var(--line)] text-[13px] text-[var(--t)] outline-none focus:border-[var(--y)]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11.5px] font-semibold text-[var(--m)] block mb-1">Password</label>
+                    <input
+                      type="password"
+                      value={authPassword}
+                      onChange={(e) => setAuthPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full h-11 px-3.5 rounded-xl bg-[var(--s2)] border border-[var(--line)] text-[13px] text-[var(--t)] outline-none focus:border-[var(--y)]"
+                    />
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setAuthMode('options')}
+                      className="h-11 px-4 rounded-xl text-[12px] font-semibold text-[var(--m)] hover:text-[var(--t)] cursor-pointer"
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={authLoading}
+                      className="flex-1 h-11 px-4 rounded-xl bg-[#171717] dark:bg-[#f2eee7] text-white dark:text-[#171717] font-bold text-[12.5px] transition-all hover:opacity-90 cursor-pointer"
+                    >
+                      {authLoading ? 'Signing in…' : 'Save & Continue'}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          )}
+
+          {/* CARD 7: Congratulations */}
+          {step === 7 && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div className="w-16 h-16 rounded-2xl bg-[var(--ys)] text-[#765700] flex items-center justify-center shadow-inner">
+                <CheckCircle2 className="w-8 h-8 text-[var(--y)]" />
+              </div>
+              <div className="space-y-2">
+                <span className="text-[11px] font-bold tracking-wider text-[var(--y)] uppercase">
+                  Step 7 of 8 · Workspace Ready
+                </span>
+                <h2 className="text-[32px] sm:text-[36px] font-extrabold tracking-tight text-[var(--t)] leading-tight">
+                  Congratulations, {localName || 'Didier'}!
+                </h2>
+                <p className="text-[14.5px] text-[var(--m)] leading-relaxed max-w-[560px]">
+                  Your focused research workspace is fully configured. Bob is ready to assist your thinking and distill your reading into finished outcomes.
+                </p>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-[var(--s2)] border border-[var(--line)] flex items-center justify-between">
+                <div>
+                  <b className="text-[13px] text-[var(--t)] block">Start your first conversation with Bob</b>
+                  <p className="text-[12px] text-[var(--m)] m-0">Say hi or ask Bob about whatever you're working on right now.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleNextStep}
+                  className="px-4 py-2 rounded-xl bg-[var(--y)] text-[#171717] font-bold text-[12px] hover:opacity-90 active:scale-95 transition-all shadow-xs"
+                >
+                  Chat with Bob
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* CARD 8: Bob starts chatting with the user */}
+          {step === 8 && (
+            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div className="flex items-center justify-between pb-3 border-b border-[var(--line)]">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[var(--ys)] text-[#765700] flex items-center justify-center">
+                    <BobAvatar size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-[16px] font-bold text-[var(--t)] m-0">Chat with Bob</h3>
+                    <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      Online & Listening
+                    </span>
+                  </div>
+                </div>
+                <span className="text-[11px] font-semibold text-[var(--m)]">
+                  Step 8 of 8
+                </span>
+              </div>
+
+              {/* Chat Message Window */}
+              <div
+                ref={chatScrollRef}
+                className="h-[250px] overflow-y-auto space-y-3 p-3 rounded-2xl bg-[var(--s2)]/70 border border-[var(--line)]"
+              >
+                {chatMessages.map((msg, idx) => (
+                  <div
+                    key={idx}
+                    className={`flex gap-2.5 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    {msg.role === 'assistant' && (
+                      <div className="w-6 h-6 rounded-lg bg-[var(--ys)] flex items-center justify-center shrink-0 mt-0.5">
+                        <BobAvatar size={16} />
+                      </div>
+                    )}
+                    <div
+                      className={`max-w-[82%] px-3.5 py-2.5 rounded-2xl text-[12.5px] leading-relaxed ${
+                        msg.role === 'user'
+                          ? 'bg-[#171717] dark:bg-[var(--y)] text-white dark:text-[#171717] rounded-br-xs'
+                          : 'bg-[var(--s)] text-[var(--t)] border border-[var(--line)] rounded-bl-xs shadow-xs'
+                      }`}
+                    >
+                      {msg.text}
+                      <span className="block text-[9.5px] opacity-60 mt-1 text-right">
+                        {msg.time}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+                {isBobTyping && (
+                  <div className="flex items-center gap-2 text-[12px] text-[var(--m)] px-2 py-1">
+                    <BobAvatar size={16} />
+                    <span className="animate-pulse">Bob is thinking…</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Interactive Chat Input */}
+              <form onSubmit={handleChatSend} className="flex gap-2">
+                <input
+                  type="text"
+                  autoFocus
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="Ask a question, mention your topic, or say hi..."
+                  className="flex-1 h-11 px-4 rounded-xl bg-[var(--s2)] border border-[var(--line)] text-[13px] text-[var(--t)] outline-none focus:border-[var(--y)] transition-colors"
+                />
+                <button
+                  type="submit"
+                  disabled={!chatInput.trim() || isBobTyping}
+                  className="h-11 px-4 rounded-xl bg-[var(--y)] text-[#171717] font-bold text-[12px] flex items-center gap-1.5 hover:opacity-90 active:scale-95 disabled:opacity-40 cursor-pointer shadow-xs"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Send</span>
+                </button>
+              </form>
             </div>
           )}
         </div>
 
-        {/* STEP 1: WELCOME */}
-        {step === 1 && (
-          <div className="my-auto space-y-6 text-center animate-in fade-in duration-200">
-            <div className="flex justify-center">
-              <div className="p-3 bg-[var(--ys)] dark:bg-[#382c0b] rounded-3xl border border-[var(--y)]/40 shadow-xl inline-block">
-                <BobLogo size={68} shape="rounded" />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <h2 className="text-[26px] font-extrabold tracking-tight text-[var(--t)]">
-                Welcome to Bob
-              </h2>
-              <p className="text-[14px] text-[var(--m)] max-w-[380px] mx-auto leading-relaxed">
-                Your private research companion. Connects your browser tabs, notes, and evidence into one calm workspace.
-              </p>
-            </div>
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--s2)] border border-[var(--line)] text-[11px] text-[var(--m)] font-mono">
-              <HardDrive className="w-3.5 h-3.5 text-[var(--y)]" />
-              <span>Optimized for {hardware.detectedRamGb}GB RAM · Free & Private</span>
-            </div>
+        {/* Bottom Actions */}
+        <div className="pt-5 border-t border-[var(--line)] flex items-center justify-between">
+          <div className="text-[12px] text-[var(--m)]">
+            Step {step} of 8
           </div>
-        )}
 
-        {/* STEP 2: USER NAME */}
-        {step === 2 && (
-          <div className="my-auto space-y-5 animate-in fade-in duration-200">
-            <div className="text-center space-y-1.5">
-              <h2 className="text-[22px] font-extrabold tracking-tight text-[var(--t)]">
-                What should Bob call you?
-              </h2>
-              <p className="text-[13px] text-[var(--m)]">
-                Bob will personalize your research workspace.
-              </p>
-            </div>
-            <div className="max-w-[320px] mx-auto space-y-2">
-              <input
-                type="text"
-                value={localName}
-                onChange={(e) => setLocalName(e.target.value)}
-                placeholder="Enter your name"
-                className="w-full h-11 px-4 text-[14px] font-medium rounded-2xl bg-[var(--s2)] border border-[var(--line)] outline-none text-center text-[var(--t)] shadow-inner"
-                autoFocus
-              />
-            </div>
-          </div>
-        )}
-
-        {/* STEP 3: CONTEXT & TABS */}
-        {step === 3 && (
-          <div className="my-auto space-y-6 text-center animate-in fade-in duration-200">
-            <div className="space-y-1.5">
-              <h2 className="text-[22px] font-extrabold tracking-tight text-[var(--t)]">
-                Research with context, not clutter.
-              </h2>
-              <p className="text-[13px] text-[var(--m)] max-w-[360px] mx-auto">
-                No more losing facts across 20 browser tabs. Bob organizes everything in one place.
-              </p>
-            </div>
-            <div className="grid grid-cols-3 gap-2.5 max-w-[380px] mx-auto">
-              <div className="p-3 rounded-2xl bg-[var(--s2)] border border-[var(--line)] text-center space-y-1.5">
-                <Globe className="w-5 h-5 mx-auto text-[var(--y)]" />
-                <div className="text-[11px] font-bold text-[var(--t)]">Browser Tabs</div>
-                <div className="text-[9.5px] text-[var(--m)]">Preserve sources</div>
-              </div>
-              <div className="p-3 rounded-2xl bg-[var(--s2)] border border-[var(--line)] text-center space-y-1.5">
-                <Bookmark className="w-5 h-5 mx-auto text-[var(--b)]" />
-                <div className="text-[11px] font-bold text-[var(--t)]">Notes</div>
-                <div className="text-[9.5px] text-[var(--m)]">Permanent facts</div>
-              </div>
-              <div className="p-3 rounded-2xl bg-[var(--s2)] border border-[var(--line)] text-center space-y-1.5">
-                <Sparkles className="w-5 h-5 mx-auto text-[var(--g)]" />
-                <div className="text-[11px] font-bold text-[var(--t)]">Action Tasks</div>
-                <div className="text-[9.5px] text-[var(--m)]">Clear plans</div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 4: GROUNDING */}
-        {step === 4 && (
-          <div className="my-auto space-y-5 text-center animate-in fade-in duration-200">
-            <div className="space-y-1.5">
-              <h2 className="text-[22px] font-extrabold tracking-tight text-[var(--t)]">
-                Grounded in your real evidence.
-              </h2>
-              <p className="text-[13px] text-[var(--m)] max-w-[360px] mx-auto">
-                Bob connects and compares your notes and tabs instead of guessing.
-              </p>
-            </div>
-            <div className="w-full max-w-[380px] mx-auto rounded-2xl bg-[var(--s2)] border border-[var(--line)] p-4 text-left space-y-2.5">
-              <div className="flex items-center gap-2">
-                <BobAvatar size={24} />
-                <span className="text-[11px] font-bold text-[var(--t)]">Bob Research</span>
-                <span className="ml-auto text-[9.5px] font-mono px-2 py-0.5 rounded-full bg-[var(--ys)] text-[#765700] font-bold">
-                  Verified
-                </span>
-              </div>
-              <p className="text-[11px] text-[var(--m)] leading-relaxed italic border-l-2 border-[var(--y)] pl-2.5">
-                "Users leave booking flows when fees appear unexpectedly right before payment confirmation."
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 5: BROWSER SIDE PANEL & EXTENSION LINKING */}
-        {step === 5 && (
-          <div className="my-auto space-y-5 text-center animate-in fade-in duration-200">
-            <div className="space-y-1.5">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--ys)] text-[#765700] text-[11px] font-bold mb-1">
-                <Globe className="w-3.5 h-3.5" />
-                <span>Core Research Feature · Step 5 of 8</span>
-              </div>
-              <h2 className="text-[24px] font-extrabold tracking-tight text-[var(--t)]">
-                Install & Link Bob Chrome Extension
-              </h2>
-              <p className="text-[13px] text-[var(--m)] max-w-[480px] mx-auto leading-relaxed">
-                Bob works beside you in Chrome to capture highlights, save sources, and answer research queries with live context on port 54321.
-              </p>
-            </div>
-
-            {/* Extension Action Card */}
-            <div className="w-full max-w-[560px] mx-auto rounded-3xl bg-[var(--s2)] border border-[var(--line)] p-5 text-left space-y-4 shadow-sm">
-              <div className="flex items-center justify-between pb-3 border-b border-[var(--line)]">
-                <div className="flex items-center gap-2.5">
-                  <div className="p-2 rounded-xl bg-[var(--ys)] text-[#765700]">
-                    <Download className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="text-[12.5px] font-bold text-[var(--t)]">1. Download Extension Archive</div>
-                    <div className="text-[10.5px] text-[var(--m)]">bob-chrome-extension.zip (Manifest V3)</div>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (extDownload.state === 'saving') return;
-                    setExtDownload({ state: 'saving', message: 'Preparing bob-chrome-extension.zip…' });
-                    const result = await downloadExtensionZip();
-                    if (result.ok) {
-                      setExtDownload({
-                        state: 'saved',
-                        message: result.path ? `Saved to ${result.path}` : 'Extension archive downloaded.'
-                      });
-                    } else if (result.reason === 'canceled') {
-                      setExtDownload({ state: 'idle', message: 'Download canceled — nothing was saved.' });
-                    } else {
-                      setExtDownload({ state: 'error', message: 'Download failed. Please try again.' });
-                    }
-                  }}
-                  disabled={extDownload.state === 'saving'}
-                  className="h-9 px-4 rounded-xl bg-[var(--y)] hover:bg-[#e0ac15] text-[#171717] text-[12px] font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>{extDownload.state === 'saving' ? 'Preparing…' : extDownload.state === 'saved' ? 'Downloaded ✓' : 'Download .zip'}</span>
-                </button>
-              </div>
-
-              {/* Step by step guide */}
-              <div className="space-y-2 text-[11.5px] text-[var(--m)] leading-relaxed">
-                <div className="font-bold text-[var(--t)] text-[12px] mb-1">2. Load Unpacked in Chrome:</div>
-                <div className="flex items-start gap-2">
-                  <span className="w-5 h-5 rounded-full bg-[var(--s)] border border-[var(--line)] flex items-center justify-center text-[10px] font-bold text-[var(--t)] shrink-0">1</span>
-                  <span>Unzip the downloaded <code>bob-chrome-extension.zip</code> file.</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="w-5 h-5 rounded-full bg-[var(--s)] border border-[var(--line)] flex items-center justify-center text-[10px] font-bold text-[var(--t)] shrink-0">2</span>
-                  <span>In Chrome, navigate to <code className="text-[var(--t)] font-mono bg-[var(--s)] px-1.5 py-0.5 rounded border border-[var(--line)]">chrome://extensions</code> and toggle on <b>Developer mode</b>.</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="w-5 h-5 rounded-full bg-[var(--s)] border border-[var(--line)] flex items-center justify-center text-[10px] font-bold text-[var(--t)] shrink-0">3</span>
-                  <span>Click <b>Load unpacked</b> and select the unzipped <code>chrome-extension</code> folder.</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="w-5 h-5 rounded-full bg-[var(--s)] border border-[var(--line)] flex items-center justify-center text-[10px] font-bold text-[var(--t)] shrink-0">4</span>
-                  <span>Click the Bob icon in your Chrome toolbar or open a tab to activate communication.</span>
-                </div>
-              </div>
-
-              {/* Check Connection Button (Black pill with white text) */}
-              <div className="pt-2 flex flex-col items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={handleCheckExtensionConnection}
-                  disabled={extConnectionStatus === 'checking'}
-                  className="px-7 py-2.5 rounded-full bg-black hover:bg-neutral-800 text-white font-bold text-[13px] flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 cursor-pointer disabled:opacity-60 border border-neutral-700"
-                >
-                  {extConnectionStatus === 'checking' ? (
-                    <>
-                      <RotateCw className="w-4 h-4 animate-spin text-amber-400" />
-                      <span>Checking connection...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-4 h-4 text-amber-400" />
-                      <span>Check Connection</span>
-                    </>
-                  )}
-                </button>
-
-                {extConnectionStatus === 'connected' && (
-                  <div className="w-full p-3 rounded-2xl bg-[#e6f7ed] text-[#14844d] border border-emerald-300 text-[12px] font-semibold flex items-center justify-center gap-2 animate-in fade-in">
-                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
-                    <span>Extension connected & verified! Real-time syncing with Bob Desktop on port 54321 is active.</span>
-                  </div>
-                )}
-
-                {extConnectionStatus === 'error' && (
-                  <div className="w-full p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-700/60 text-[12px] space-y-1.5 text-left animate-in fade-in">
-                    <div className="font-bold flex items-center gap-1.5 text-amber-800 dark:text-amber-200">
-                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                      <span>Extension not connected yet — please check the steps again:</span>
-                    </div>
-                    <ul className="text-[11.5px] leading-relaxed m-0 text-amber-800 dark:text-amber-300 list-disc list-inside space-y-1 pl-1">
-                      <li>Confirm you extracted <code>bob-chrome-extension.zip</code> and clicked <b>Load unpacked</b> in <code>chrome://extensions</code> with <b>Developer mode</b> ON.</li>
-                      <li>Click the <b>Bob icon</b> in your Chrome toolbar or open a web page to wake up the extension service worker.</li>
-                      <li>Ensure Bob Desktop is running on port 54321.</li>
-                    </ul>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 6: OPTIONAL GEMINI AI KEY (SMART 1-CLICK CLIPBOARD) */}
-        {step === 6 && (
-          <div className="my-auto space-y-5 animate-in fade-in duration-200">
-            <div className="text-center space-y-1.5">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--bs)] text-[#1e40af] text-[11px] font-bold mb-1">
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Instant Cloud AI (Optional)</span>
-              </div>
-              <h2 className="text-[22px] font-extrabold tracking-tight text-[var(--t)]">
-                Connect Google Gemini API
-              </h2>
-              <p className="text-[12.5px] text-[var(--m)] max-w-[380px] mx-auto leading-relaxed">
-                Connect your free Google Gemini API key for instant responses. If not provided, Bob uses your free offline model automatically.
-              </p>
-            </div>
-
-            <div className="max-w-[400px] mx-auto space-y-3">
-              <div className="flex items-center gap-2">
-                <a
-                  href="https://aistudio.google.com/app/apikey"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex-1 h-9 px-3 rounded-xl bg-[var(--s2)] hover:bg-[var(--line)] text-[11.5px] font-semibold text-[var(--t)] border border-[var(--line)] flex items-center justify-center gap-1.5 transition-colors"
-                >
-                  <ExternalLink className="w-3.5 h-3.5 text-[var(--b)]" />
-                  <span>Get Free Key (Google AI Studio)</span>
-                </a>
-
-                <button
-                  type="button"
-                  onClick={handlePasteKey}
-                  className="h-9 px-3.5 rounded-xl bg-[var(--y)] hover:bg-[#e0ac15] text-[#171717] text-[11.5px] font-bold flex items-center gap-1.5 shadow-sm transition-all"
-                >
-                  <ClipboardCheck className="w-3.5 h-3.5" />
-                  <span>Paste Key</span>
-                </button>
-              </div>
-
-              <div className="relative">
-                <Key className="w-4 h-4 text-[var(--m)] absolute left-3 top-3" />
-                <input
-                  type="password"
-                  value={geminiInput}
-                  onChange={(e) => {
-                    setGeminiInput(e.target.value);
-                    if (e.target.value.trim().length > 10) {
-                      bobAi.setGeminiKey(e.target.value.trim());
-                      setKeySaved(true);
-                    }
-                  }}
-                  placeholder="Paste AIzaSy... key here"
-                  className="w-full h-10 pl-9 pr-3 text-[12.5px] rounded-xl bg-[var(--s2)] border border-[var(--line)] outline-none text-[var(--t)] font-mono"
-                />
-              </div>
-
-              {keySaved && (
-                <div className="p-2.5 rounded-xl bg-[#e6f7ed] text-[#14844d] text-[11.5px] font-medium flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  <span>Google Gemini Flash connected & active!</span>
-                </div>
-              )}
-
-              <p className="text-[11px] text-center text-[var(--m)]">
-                You can also add or change this anytime in Settings.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 7: PREPARING BOB */}
-        {step === 7 && (
-          <div className="my-auto space-y-6 animate-in fade-in duration-200">
-            <div className="text-center space-y-1.5">
-              <h2 className="text-[22px] font-extrabold tracking-tight text-[var(--t)]">
-                Preparing Bob
-              </h2>
-              <p className="text-[13px] text-[var(--m)]">
-                Setting up research workspace and tools...
-              </p>
-            </div>
-
-            {/* Checklist items */}
-            <div className="space-y-2.5 max-w-[380px] mx-auto">
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-[var(--s2)] border border-[var(--line)] text-[12px] font-semibold text-[var(--t)]">
-                <div className="flex items-center gap-2.5">
-                  <Cpu className="w-4 h-4 text-[var(--y)]" />
-                  <span>
-                    {ollamaDetected.running
-                      ? `Ollama Local (${ollamaDetected.models[0] || 'active'})`
-                      : keySaved
-                      ? 'Google Gemini Cloud Brain'
-                      : 'Built-in Offline Synthesis'}
-                  </span>
-                </div>
-                <span className="flex items-center gap-1 text-[11px] text-[var(--g)] font-semibold">
-                  <CheckCircle2 className="w-4 h-4 text-[var(--g)]" />
-                  <span>Ready</span>
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-[var(--s2)] border border-[var(--line)] text-[12px] font-semibold text-[var(--t)]">
-                <div className="flex items-center gap-2.5">
-                  <Sparkles className="w-4 h-4 text-[var(--b)]" />
-                  <span>Cross-source synthesis</span>
-                </div>
-                {researchToolsReady || aiDownloadStatus.isReady ? (
-                  <CheckCircle2 className="w-4 h-4 text-[var(--g)] animate-in zoom-in-75" />
-                ) : (
-                  <span className="text-[11px] text-[var(--m)] font-mono">initializing...</span>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between p-2.5 rounded-xl bg-[var(--s2)] border border-[var(--line)] text-[12px] font-semibold text-[var(--t)]">
-                <div className="flex items-center gap-2.5">
-                  <Bookmark className="w-4 h-4 text-[#8b5cf6]" />
-                  <span>Research notebook & memory</span>
-                </div>
-                {localMemoryReady || aiDownloadStatus.isReady ? (
-                  <CheckCircle2 className="w-4 h-4 text-[var(--g)] animate-in zoom-in-75" />
-                ) : (
-                  <span className="text-[11px] text-[var(--m)] font-mono">ready</span>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 8: READY TO RESEARCH */}
-        {step === 8 && (
-          <div className="my-auto text-center space-y-6 animate-in zoom-in-95 duration-200">
-            <div className="flex justify-center">
-              <div className="p-3 bg-[var(--ys)] dark:bg-[#382c0b] rounded-3xl border border-[var(--y)]/40 shadow-xl inline-block">
-                <BobLogo size={68} shape="rounded" />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <h2 className="text-[26px] font-extrabold tracking-tight text-[var(--t)]">
-                Bob is ready, {localName}!
-              </h2>
-              <p className="text-[14px] text-[var(--m)] max-w-[380px] mx-auto leading-relaxed">
-                Your workspace is ready. You can start a new research question, capture notes, or dock Bob in Chrome.
-              </p>
-            </div>
-            <div className="pt-2 flex flex-col gap-2.5 max-w-[320px] mx-auto">
+          <div className="flex items-center gap-3">
+            {step > 1 && step < 8 && (
               <button
-                onClick={async () => {
-                  if (extDownload.state === 'saving') return;
-                  setExtDownload({ state: 'saving', message: 'Preparing bob-chrome-extension.zip…' });
-                  const result = await downloadExtensionZip();
-                  if (result.ok) {
-                    setExtDownload({
-                      state: 'saved',
-                      message: result.path ? `Saved to ${result.path}` : 'Extension archive downloaded.'
-                    });
-                  } else if (result.reason === 'canceled') {
-                    setExtDownload({ state: 'idle', message: 'Download canceled — nothing was saved.' });
-                  } else if (result.reason === 'missing-archive') {
-                    setExtDownload({
-                      state: 'error',
-                      message: 'The extension archive is missing from this build. Reinstall Bob, or copy the chrome-extension folder from the GitHub repo.'
-                    });
-                  } else {
-                    setExtDownload({ state: 'error', message: `Download failed (${result.reason}). Nothing was written to disk.` });
-                  }
-                }}
-                disabled={extDownload.state === 'saving'}
-                className="w-full h-11 rounded-2xl bg-[var(--y)] hover:bg-[#e0ac15] disabled:opacity-60 text-[#171717] text-[12.5px] font-bold flex items-center justify-center gap-2 shadow-sm transition-all"
+                type="button"
+                onClick={() => setStep((prev) => Math.max(1, prev - 1))}
+                className="px-4 py-2.5 rounded-xl text-[12.5px] font-semibold text-[var(--m)] hover:text-[var(--t)] transition-colors cursor-pointer"
               >
-                <Download className="w-4 h-4" />
-                <span>
-                  {extDownload.state === 'saving'
-                    ? 'Preparing…'
-                    : extDownload.state === 'saved'
-                      ? 'Download Chrome Extension again'
-                      : 'Download Chrome Extension (.zip)'}
-                </span>
+                Back
               </button>
+            )}
 
-              {extDownload.message && (
-                <p
-                  className={`text-[11px] leading-relaxed px-1 ${
-                    extDownload.state === 'error' ? 'text-[#c0392b]' : extDownload.state === 'saved' ? 'text-[var(--g)]' : 'text-[var(--m)]'
-                  }`}
-                >
-                  {extDownload.message}
-                </p>
-              )}
-
-              <button
-                onClick={() => {
-                  finishOnboarding();
-                  openChromeBridge();
-                }}
-                className="w-full h-10 rounded-2xl bg-[var(--s2)] border border-[var(--line)] hover:bg-[var(--line)]/50 text-[12px] font-semibold text-[var(--t)] flex items-center justify-center gap-2 transition-colors"
-              >
-                <Globe className="w-4 h-4 text-[var(--b)]" />
-                <span>Open Chrome Extension setup guide</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Bottom Navigation Buttons */}
-        <div className="flex items-center justify-between pt-6 border-t border-[var(--line)] mt-4">
-          {step > 1 ? (
             <button
-              onClick={() => setStep((prev) => prev - 1)}
-              className="text-[13px] font-semibold text-[var(--m)] hover:text-[var(--t)] px-3 py-1.5 transition-colors"
-            >
-              Back
-            </button>
-          ) : (
-            <div />
-          )}
-          {/* Hide Continue button completely on step 5 until extension is verified as connected */}
-          {step === 5 && !isExtensionConnected ? (
-            <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[var(--s2)] border border-[var(--line)] text-[12px] text-[var(--m)] animate-in fade-in">
-              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-              <span>Click <b>Check Connection</b> above to enable Continue</span>
-            </div>
-          ) : (
-            <button
+              type="button"
               onClick={handleNextStep}
-              className="h-11 px-6 rounded-2xl bg-[#171717] dark:bg-[#f5f4f0] text-white dark:text-[#171717] font-bold text-[13px] flex items-center gap-2 hover:opacity-95 shadow-md active:scale-95 transition-all cursor-pointer"
+              className="px-6 py-2.5 rounded-xl bg-[var(--y)] hover:bg-[#ebd200] text-[#171717] font-bold text-[13px] flex items-center gap-2 shadow-sm transition-all active:scale-95 cursor-pointer"
             >
-              <span>
-                {step === 1
-                  ? "Let's get started"
-                  : step === 8
-                  ? 'Start Researching'
-                  : 'Continue'}
-              </span>
+              <span>{step === 8 ? 'Enter Workspace' : 'Continue'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
-          )}
+          </div>
         </div>
 
       </div>

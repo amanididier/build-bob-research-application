@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useVoiceStore } from '../../store/useVoiceStore';
-import { PhoneOff, Mic, MicOff, MessageSquare, Volume2, Sparkles, Brain, Hand } from 'lucide-react';
+import { PhoneOff, Mic, MicOff, MessageSquare, Volume2, Sparkles, Brain, ArrowUpCircle } from 'lucide-react';
 import { AudioWaveVisualizer } from './AudioWaveVisualizer';
 
 interface VoiceCallOverlayProps {
@@ -14,67 +14,21 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({ onClose }) =
     voiceState,
     currentTranscript,
     lastBobReply,
-    errorMessage,
     stopVoiceMode,
     interrupt,
-    beginPushToTalk,
-    endPushToTalk,
+    finishTurnImmediately,
+    startPushToTalk,
+    stopPushToTalk,
+    isKokoroInstalled,
+    openInstallCard,
   } = useVoiceStore();
 
   const [isMuted, setIsMuted] = useState(false);
   const [isAvatarHovered, setIsAvatarHovered] = useState(false);
-  const [holdSeconds, setHoldSeconds] = useState(0);
-  const holdingRef = useRef(false);
-  const tickerRef = useRef<any>(null);
-
-  const startHold = useCallback(() => {
-    if (holdingRef.current) return;
-    holdingRef.current = true;
-    setHoldSeconds(0);
-    tickerRef.current = setInterval(() => setHoldSeconds((s) => s + 1), 1000);
-    void beginPushToTalk('call');
-  }, [beginPushToTalk]);
-
-  const endHold = useCallback(() => {
-    if (!holdingRef.current) return;
-    holdingRef.current = false;
-    if (tickerRef.current) {
-      clearInterval(tickerRef.current);
-      tickerRef.current = null;
-    }
-    setHoldSeconds(0);
-    void endPushToTalk();
-  }, [endPushToTalk]);
-
-  // Hold Space to talk during a call — release and Bob thinks, no silence guessing.
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.code !== 'Space' || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
-      const node = e.target as HTMLElement | null;
-      const tag = node?.tagName?.toLowerCase();
-      if (tag === 'input' || tag === 'textarea' || node?.isContentEditable === true) return;
-      e.preventDefault();
-      startHold();
-    };
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (e.code !== 'Space') return;
-      endHold();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup', onKeyUp);
-    window.addEventListener('blur', endHold);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup', onKeyUp);
-      window.removeEventListener('blur', endHold);
-      if (tickerRef.current) clearInterval(tickerRef.current);
-    };
-  }, [startHold, endHold]);
+  const [isSpaceHeld, setIsSpaceHeld] = useState(false);
 
   const isBobTurn = voiceState === 'SPEAKING' || voiceState === 'THINKING';
   const isUserTurn = voiceState === 'USER_SPEAKING' || voiceState === 'LISTENING';
-  const isRecording = holdingRef.current || voiceState === 'USER_SPEAKING';
-  const isTranscribing = voiceState === 'TRANSCRIBING' || voiceState === 'SUBMITTING';
 
   const handleEndCall = () => {
     stopVoiceMode();
@@ -88,6 +42,43 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({ onClose }) =
     setIsMuted(!isMuted);
   };
 
+  // Immediate turn finalization on spacebar release or button click
+  const handleDoneSpeaking = useCallback(async () => {
+    if (voiceState === 'USER_SPEAKING' || voiceState === 'LISTENING') {
+      await finishTurnImmediately();
+    }
+  }, [voiceState, finishTurnImmediately]);
+
+  // Keyboard Spacebar Push-To-Talk
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !e.repeat) {
+        // Prevent default page scroll
+        e.preventDefault();
+        setIsSpaceHeld(true);
+        if (isBobTurn) {
+          interrupt();
+        }
+        startPushToTalk('call');
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        setIsSpaceHeld(false);
+        stopPushToTalk();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [isBobTurn, interrupt, startPushToTalk, stopPushToTalk]);
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-between p-6 sm:p-10 bg-neutral-950/92 backdrop-blur-2xl text-white select-none animate-in fade-in duration-300">
       {/* Top Status Header */}
@@ -100,6 +91,20 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({ onClose }) =
           <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[11px] font-semibold text-emerald-400">
             Natural Voice Mode
           </span>
+          {isKokoroInstalled ? (
+            <span className="hidden sm:inline-flex px-2 py-0.5 rounded-full bg-blue-500/15 border border-blue-500/30 text-[11px] font-medium text-blue-300">
+              Kokoro 82M ✓
+            </span>
+          ) : (
+            <button
+              onClick={() => openInstallCard('tts')}
+              className="px-2.5 py-0.5 rounded-full bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-[11px] font-semibold text-amber-300 transition-colors cursor-pointer flex items-center gap-1"
+              title="Download Kokoro 82M for near-human voice quality"
+            >
+              <span>Kokoro Voice</span>
+              <span className="text-[9.5px] bg-amber-500/30 px-1 rounded uppercase">Get</span>
+            </button>
+          )}
         </div>
 
         <button
@@ -179,19 +184,13 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({ onClose }) =
             {voiceState === 'LISTENING' && (
               <>
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span>Listening... speak naturally</span>
+                <span>Listening... speak or hold Spacebar</span>
               </>
             )}
             {voiceState === 'USER_SPEAKING' && (
               <>
                 <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-                <span>{isRecording ? `Hearing you… ${holdSeconds > 0 ? `${holdSeconds}s` : ''}` : 'Hearing you...'}</span>
-              </>
-            )}
-            {isTranscribing && (
-              <>
-                <Sparkles className="w-3.5 h-3.5 text-violet-400 animate-pulse" />
-                <span>Transcribing your turn…</span>
+                <span>{isSpaceHeld ? 'Recording speech (Hold Space)...' : 'Hearing you...'}</span>
               </>
             )}
             {voiceState === 'THINKING' && (
@@ -209,9 +208,7 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({ onClose }) =
           </div>
 
           <span className="text-[11px] text-neutral-400">
-            {isBobTurn
-              ? 'Bob is speaking (talk to interrupt anytime)'
-              : 'Hold Space or the button to talk — release and Bob answers'}
+            {isBobTurn ? 'Bob is speaking (talk to interrupt anytime)' : 'Hold Spacebar to talk · Release or tap below to reply instantly'}
           </span>
         </div>
 
@@ -224,19 +221,26 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({ onClose }) =
           />
         </div>
 
+        {/* Immediate Send Now / Push-to-Talk action for noisy rooms */}
+        {isUserTurn && (
+          <button
+            type="button"
+            onClick={handleDoneSpeaking}
+            title="Click when finished speaking to submit immediately without waiting for silence"
+            className={`flex items-center gap-2 px-5 py-2 rounded-full font-bold text-[12px] transition-all cursor-pointer shadow-lg ${
+              isSpaceHeld
+                ? 'bg-amber-500 text-neutral-950 ring-4 ring-amber-400/50 scale-105'
+                : 'bg-neutral-800/90 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 active:scale-95'
+            }`}
+          >
+            <ArrowUpCircle className="w-4 h-4 text-emerald-400" />
+            <span>{isSpaceHeld ? 'Listening (Release Space to send)' : 'Done Speaking · Reply Now'}</span>
+            <kbd className="ml-1 text-[9.5px] px-1.5 py-0.5 rounded bg-black/40 text-neutral-400 font-mono">SPACE</kbd>
+          </button>
+        )}
+
         {/* Dynamic Speech & Transcript Cards */}
         <div className="w-full space-y-3 min-h-[110px] max-h-[220px] overflow-y-auto px-1">
-          {/* Error / status card so a failed turn is never silent */}
-          {errorMessage && (
-            <div className="p-3.5 rounded-2xl bg-red-500/10 border border-red-500/30 text-left animate-in fade-in duration-200">
-              <div className="text-[11px] font-bold text-red-400 flex items-center gap-1.5 mb-1">
-                <MicOff className="w-3 h-3 text-red-400" />
-                <span>Heads up</span>
-              </div>
-              <p className="text-[13px] text-neutral-200 m-0 leading-relaxed">{errorMessage}</p>
-            </div>
-          )}
-
           {/* User live speech card */}
           {currentTranscript.trim() && (
             <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-left animate-in fade-in duration-200">
@@ -278,35 +282,6 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({ onClose }) =
           }`}
         >
           {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-        </button>
-
-        {/* Hold to talk */}
-        <button
-          onPointerDown={(e) => {
-            e.preventDefault();
-            startHold();
-          }}
-          onPointerUp={endHold}
-          onPointerLeave={endHold}
-          onPointerCancel={endHold}
-          title="Hold to record your turn, release so Bob can answer"
-          className={`h-12 px-5 rounded-full font-bold text-[12.5px] flex items-center gap-2 transition-all select-none touch-none cursor-pointer border ${
-            isRecording
-              ? 'bg-amber-500 border-amber-400 text-neutral-950 shadow-lg shadow-amber-900/40 scale-105'
-              : 'bg-neutral-900 border-neutral-800 text-neutral-200 hover:text-white hover:bg-neutral-800'
-          }`}
-        >
-          {isRecording ? (
-            <>
-              <span className="w-2 h-2 rounded-full bg-neutral-950 animate-ping" />
-              <span>{holdSeconds > 0 ? `Listening ${holdSeconds}s` : 'Listening…'}</span>
-            </>
-          ) : (
-            <>
-              <Hand className="w-4 h-4" strokeWidth={2.2} />
-              <span>Hold to talk</span>
-            </>
-          )}
         </button>
 
         {/* Big End Call Button */}

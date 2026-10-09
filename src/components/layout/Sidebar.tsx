@@ -5,7 +5,7 @@ import { BobLogo } from '../BobLogo';
 import { 
   Sparkles, 
   LayoutDashboard, 
-  NotebookPen, 
+  MessageSquare, 
   CircleCheck, 
   Search, 
   Sun, 
@@ -21,13 +21,24 @@ export const Sidebar: React.FC = () => {
     activeResearchId, 
     isSidebarClosed, 
     setIsSearchOpen,
-    createNewResearchSession
+    createNewResearchSession,
+    userName,
+    userEmail,
+    userAvatar
   } = useApp();
   const { isDark, toggleTheme } = useTheme();
 
   if (isSidebarClosed) {
     return null;
   }
+
+  // Generate initials
+  const getUserAbbr = () => {
+    if (!userName || !userName.trim()) return 'D';
+    const parts = userName.trim().split(/\s+/);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return userName.trim().substring(0, Math.min(2, userName.trim().length)).toUpperCase();
+  };
 
   return (
     <aside className="w-[260px] bg-[var(--s)] border-r border-[var(--line)] px-4 py-4 flex flex-col flex-shrink-0 z-20 h-full select-none">
@@ -58,7 +69,8 @@ export const Sidebar: React.FC = () => {
         {/* New research - only icon carries Bob yellow accent */}
         <button
           onClick={() => {
-            createNewResearchSession();
+            const newId = createNewResearchSession();
+            navigateTo('research', 'chat', newId);
           }}
           className={`h-10 w-full text-left px-3 rounded-lg text-[13.5px] flex items-center gap-3 transition-colors duration-150 cursor-pointer ${
             currentPage === 'research'
@@ -83,17 +95,17 @@ export const Sidebar: React.FC = () => {
           <span>Dashboard</span>
         </button>
 
-        {/* Notes */}
+        {/* Replaced Notes with Chat as explicitly requested */}
         <button
-          onClick={() => navigateTo('notes')}
+          onClick={() => navigateTo('chat')}
           className={`h-10 w-full text-left px-3 rounded-lg text-[13.5px] flex items-center gap-3 transition-colors duration-150 cursor-pointer ${
-            currentPage === 'notes'
+            currentPage === 'chat'
               ? 'bg-[var(--s2)] text-[var(--t)] font-semibold'
               : 'text-[var(--t)] hover:bg-[var(--s2)]/70 font-medium'
           }`}
         >
-          <NotebookPen className="w-[18px] h-[18px] text-[var(--m)] shrink-0" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
-          <span>Notes</span>
+          <MessageSquare className="w-[18px] h-[18px] text-[var(--m)] shrink-0" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
+          <span>Chat</span>
         </button>
 
         {/* Due soon */}
@@ -157,32 +169,33 @@ export const Sidebar: React.FC = () => {
         </button>
 
         {/* Profile Row: Avatar, Name, Workspace, Settings Icon */}
-        <div className="flex items-center justify-between p-2 rounded-xl hover:bg-[var(--s2)]/70 transition-colors duration-150">
-          <button
-            onClick={() => navigateTo('profile')}
-            className="flex items-center gap-2.5 text-left flex-1 min-w-0 cursor-pointer"
-            title="Profile & Preferences"
-          >
-            <div className="w-[32px] h-[32px] rounded-full bg-gradient-to-br from-[#d9e7ff] to-[#f2d4bb] text-neutral-800 font-bold text-[12px] grid place-items-center shadow-xs shrink-0">
-              A
+        <div 
+          onClick={() => navigateTo('settings')}
+          className="flex items-center justify-between p-2 rounded-xl hover:bg-[var(--s2)]/70 transition-colors duration-150 cursor-pointer group"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 rounded-full bg-[var(--y)] text-[#171717] font-black text-[11px] grid place-items-center shrink-0 overflow-hidden shadow-xs">
+              {userAvatar ? (
+                <img src={userAvatar} alt={userName} className="w-full h-full object-cover" />
+              ) : (
+                <span>{getUserAbbr()}</span>
+              )}
             </div>
-            <div className="flex-1 min-w-0">
-              <span className="block text-[13.5px] font-semibold text-[var(--t)] truncate leading-tight">
-                Amani
+            <div className="min-w-0">
+              <span className="text-[13px] font-semibold text-[var(--t)] block truncate">
+                {userName}
               </span>
-              <span className="block text-[11.5px] text-[var(--m)] truncate leading-tight">
-                Research workspace
+              <span className="text-[11px] text-[var(--m)] block truncate">
+                {userEmail || 'Local workspace'}
               </span>
             </div>
-          </button>
-
+          </div>
           <button
-            onClick={() => navigateTo('settings')}
-            className="w-8 h-8 rounded-lg hover:bg-[var(--line)]/60 text-[var(--m)] hover:text-[var(--t)] grid place-items-center transition-colors cursor-pointer shrink-0"
+            type="button"
+            className="w-7 h-7 rounded-lg hover:bg-[var(--line)] grid place-items-center text-[var(--m)] group-hover:text-[var(--t)] transition-colors cursor-pointer"
             title="Settings"
-            aria-label="Settings"
           >
-            <Settings className="w-[18px] h-[18px]" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
+            <Settings className="w-4 h-4" />
           </button>
         </div>
       </div>

@@ -19,25 +19,28 @@ interface VoiceStoreState {
   installCardType: 'stt' | 'tts' | null;
   modelProgress: ModelDownloadProgress;
   isWhisperInstalled: boolean;
+  selectedModel: 'moonshine-tiny' | 'whisper-tiny';
   isPushToTalk: boolean;
+
+  // Kokoro TTS model state
+  isKokoroInstalled: boolean;
+  kokoroProgress: { status: 'idle' | 'downloading' | 'ready' | 'error'; progress: number; file?: string; error?: string };
+  downloadKokoroModel: () => Promise<boolean>;
+  deleteKokoroModel: () => void;
 
   setVoiceMode: (mode: VoiceMode) => void;
   startVoiceMode: (mode?: VoiceMode) => Promise<boolean>;
   stopVoiceMode: () => void;
   interrupt: () => void;
-  beginPushToTalk: (mode?: VoiceMode) => Promise<boolean>;
-  endPushToTalk: () => Promise<string>;
   setActiveVoiceId: (voiceId: string) => void;
   previewVoice: (voiceId: string) => Promise<void>;
   openInstallCard: (type: 'stt' | 'tts') => void;
   closeInstallCard: () => void;
   downloadWhisperModel: () => Promise<boolean>;
-}
-
-/** Chrome exposes SpeechRecognition; Electron does not, so it needs the local model. */
-function hasBrowserSpeechRecognition(): boolean {
-  if (typeof window === 'undefined') return false;
-  return Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+  finishTurnImmediately: () => Promise<void>;
+  startPushToTalk: (mode?: VoiceMode) => Promise<boolean>;
+  stopPushToTalk: () => Promise<void>;
+  setSelectedModel: (model: 'moonshine-tiny' | 'whisper-tiny') => void;
 }
 
 export const useVoiceStore = create<VoiceStoreState>((set, get) => {
@@ -60,6 +63,14 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => {
     });
   });
 
+  // Subscribe to Kokoro TTS download progress
+  tts.subscribeKokoro((progress) => {
+    set({
+      kokoroProgress: progress,
+      isKokoroInstalled: tts.isKokoroInstalled(),
+    });
+  });
+
   return {
     voiceState: 'IDLE',
     voiceMode: 'prompt',
@@ -74,7 +85,11 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => {
     installCardType: null,
     modelProgress: localVoiceManager.getStatus(),
     isWhisperInstalled: localVoiceManager.isModelInstalled(),
+    selectedModel: localVoiceManager.getSelectedModel(),
     isPushToTalk: false,
+
+    isKokoroInstalled: tts.isKokoroInstalled(),
+    kokoroProgress: tts.getKokoroStatus(),
 
     setVoiceMode: (mode: VoiceMode) => {
       voiceController.setMode(mode);
@@ -85,8 +100,8 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => {
       const targetMode = mode || voiceController.getMode();
       set({ voiceMode: targetMode });
 
-      // If no speech engine exists on this device, prompt with the clean white card.
-      if (!localVoiceManager.isModelInstalled() && !hasBrowserSpeechRecognition()) {
+      // If local model is not installed, prompt with the clean white card!
+      if (!localVoiceManager.isModelInstalled()) {
         set({ isInstallCardOpen: true, installCardType: 'stt' });
         return false;
       }
@@ -99,25 +114,39 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => {
       set({ isPushToTalk: false });
     },
 
-    interrupt: () => {
-      voiceController.interrupt();
+    finishTurnImmediately: async () => {
+      await voiceController.finishTurnImmediately();
+      set({ isPushToTalk: false });
     },
 
-    beginPushToTalk: async (mode?: VoiceMode) => {
-      const targetMode = mode || voiceController.getMode();
-      if (!localVoiceManager.isModelInstalled() && !hasBrowserSpeechRecognition()) {
-        set({ voiceMode: targetMode, isInstallCardOpen: true, installCardType: 'stt' });
+    startPushToTalk: async (mode?: VoiceMode) => {
+      const targetMode = mode || get().voiceMode;
+      set({ isPushToTalk: true, voiceMode: targetMode });
+
+      if (!localVoiceManager.isModelInstalled()) {
+        set({ isInstallCardOpen: true, installCardType: 'stt', isPushToTalk: false });
         return false;
       }
-      set({ voiceMode: targetMode });
-      const ok = await voiceController.beginPushToTalk(targetMode);
-      set({ isPushToTalk: ok });
-      return ok;
+
+      return voiceController.startPushToTalk(targetMode);
     },
 
-    endPushToTalk: async () => {
+    stopPushToTalk: async () => {
       set({ isPushToTalk: false });
-      return voiceController.endPushToTalk();
+      await voiceController.stopPushToTalk();
+    },
+
+    setSelectedModel: (model: 'moonshine-tiny' | 'whisper-tiny') => {
+      localVoiceManager.setSelectedModel(model);
+      set({
+        selectedModel: model,
+        isWhisperInstalled: localVoiceManager.isModelInstalled(model),
+        modelProgress: localVoiceManager.getStatus(),
+      });
+    },
+
+    interrupt: () => {
+      voiceController.interrupt();
     },
 
     setActiveVoiceId: (voiceId: string) => {
@@ -147,6 +176,20 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => {
         await voiceController.startVoiceMode(currentMode);
       }
       return ok;
+    },
+
+    downloadKokoroModel: async () => {
+      const ok = await tts.initKokoro();
+      set({ isKokoroInstalled: tts.isKokoroInstalled() });
+      if (ok) {
+        set({ isInstallCardOpen: false, installCardType: null });
+      }
+      return ok;
+    },
+
+    deleteKokoroModel: () => {
+      tts.clearKokoro();
+      set({ isKokoroInstalled: false });
     },
   };
 });

@@ -574,10 +574,27 @@ function startBridge() {
 
     if (pathname === '/events/desktop-update') {
       if (body && body.action === 'install') {
-        if (autoUpdater) {
-          // isSilent: true avoids launching the full NSIS installation wizard/progress bar
-          // isForceRunAfter: true immediately launches the updated Bob app
-          setTimeout(() => autoUpdater.quitAndInstall(true, true), 300)
+        if (autoUpdater && app.isPackaged) {
+          log('Installing update and restarting application...')
+          setTimeout(() => {
+            try {
+              app.removeAllListeners('window-all-closed')
+              if (win && !win.isDestroyed()) win.destroy()
+            } catch (_) {}
+            try {
+              autoUpdater.quitAndInstall(true, true)
+            } catch (err) {
+              log('quitAndInstall failed, relaunching:', err.message)
+              app.relaunch()
+              app.exit(0)
+            }
+          }, 200)
+          return send(200, { ok: true, restarting: true })
+        } else {
+          setTimeout(() => {
+            app.relaunch()
+            app.exit(0)
+          }, 200)
           return send(200, { ok: true, restarting: true })
         }
       }
@@ -1044,10 +1061,24 @@ function registerIpc() {
   })
 
   ipcMain.handle('bob:installUpdate', () => {
-    if (autoUpdater) {
-      // isSilent: true restarts Bob seamlessly without opening the NSIS setup wizard dialog
-      autoUpdater.quitAndInstall(true, true)
+    log('bob:installUpdate received')
+    if (autoUpdater && app.isPackaged) {
+      setImmediate(() => {
+        try {
+          autoUpdater.quitAndInstall(false, true)
+        } catch (err) {
+          log('quitAndInstall failed, relaunching:', err.message)
+          app.relaunch()
+          app.exit(0)
+        }
+      })
+    } else {
+      setImmediate(() => {
+        app.relaunch()
+        app.exit(0)
+      })
     }
+    return { ok: true }
   })
 
   ipcMain.handle('bob:openExtensionFolder', () => {

@@ -8,10 +8,13 @@ export const TopBar: React.FC = () => {
     toggleSidebar, 
     unreadNotifications, 
     navigateTo, 
-    triggerThinking 
+    userName,
+    userEmail,
+    userAvatar
   } = useApp();
 
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isShareHovered, setIsShareHovered] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown on click outside
@@ -31,6 +34,10 @@ export const TopBar: React.FC = () => {
         return 'Today';
       case 'research':
         return 'Research workspace';
+      case 'chat':
+        return 'Bob Messenger';
+      case 'word':
+        return 'Microsoft Word workspace';
       case 'notes':
         return 'Research notes';
       case 'tasks':
@@ -40,7 +47,7 @@ export const TopBar: React.FC = () => {
       case 'settings':
         return 'Settings';
       case 'profile':
-        return 'Profile & preferences';
+        return 'Personalization & Preferences';
       case 'notifications':
         return 'Notifications';
       case 'diagnostics':
@@ -50,8 +57,14 @@ export const TopBar: React.FC = () => {
     }
   };
 
-  const handleShare = () => {
-    triggerThinking('Share link ready', 'Your research workspace is ready to share.', 'Preparing clean share view');
+  // Generate abbreviation from user's name (e.g., "Didier Amani" -> "DA", "Didier" -> "D")
+  const getUserAbbreviation = () => {
+    if (!userName || !userName.trim()) return 'D';
+    const parts = userName.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return userName.trim().substring(0, Math.min(2, userName.trim().length)).toUpperCase();
   };
 
   return (
@@ -76,8 +89,8 @@ export const TopBar: React.FC = () => {
         )}
       </div>
 
-      {/* Right actions: Notifications & User Profile */}
-      <div className="flex items-center gap-1.5">
+      {/* Right actions: Notifications, Share with "coming soon" tooltip, User Profile */}
+      <div className="flex items-center gap-2">
         {/* Notifications Button */}
         <button
           onClick={() => navigateTo('notifications')}
@@ -90,40 +103,80 @@ export const TopBar: React.FC = () => {
           )}
         </button>
 
-        {/* Share Button */}
-        <button
-          onClick={handleShare}
-          title="Share workspace"
-          className="w-8 h-8 rounded-lg hover:bg-[var(--s2)] grid place-items-center text-[var(--m)] hover:text-[var(--t)] transition-colors cursor-pointer"
+        {/* Share Button with Yellow "coming soon.." pill on hover */}
+        <div 
+          className="relative inline-flex items-center justify-center"
+          onMouseEnter={() => setIsShareHovered(true)}
+          onMouseLeave={() => setIsShareHovered(false)}
         >
-          <Share2 className="w-3.5 h-3.5" />
-        </button>
+          <button
+            type="button"
+            className="w-8 h-8 rounded-lg hover:bg-[var(--s2)] grid place-items-center text-[var(--m)] hover:text-[var(--t)] transition-colors cursor-pointer"
+            title="Share"
+          >
+            <Share2 className="w-3.5 h-3.5" />
+          </button>
 
-        {/* User Profile Avatar with Dropdown */}
+          {isShareHovered && (
+            <div className="absolute top-10 right-0 z-50 animate-in fade-in zoom-in-95 duration-150">
+              <span className="inline-block px-2.5 py-1 rounded-full bg-[var(--y)] text-[#171717] font-bold text-[10.5px] shadow-lg whitespace-nowrap border border-black/10 select-none">
+                coming soon..
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* User Profile Avatar: Image or Name Abbreviation */}
         <div className="relative ml-1" ref={profileRef}>
           <button
             onClick={() => setIsProfileOpen(!isProfileOpen)}
-            className="w-7 h-7 rounded-full bg-gradient-to-br from-[#d9e7ff] to-[#f2d4bb] text-neutral-800 font-extrabold text-[11px] grid place-items-center shadow-xs cursor-pointer hover:ring-2 ring-[var(--y)] transition-all"
-            title="User menu"
+            className="w-7 h-7 rounded-full bg-gradient-to-br from-[#f59e0b] via-[#eab308] to-[#ca8a04] text-[#171717] font-black text-[10.5px] grid place-items-center shadow-xs cursor-pointer hover:ring-2 ring-[var(--y)] transition-all overflow-hidden"
+            title={`${userName} (${userEmail})`}
           >
-            A
+            {userAvatar ? (
+              <img 
+                src={userAvatar} 
+                alt={userName} 
+                className="w-full h-full object-cover rounded-full" 
+              />
+            ) : (
+              <span>{getUserAbbreviation()}</span>
+            )}
           </button>
 
           {isProfileOpen && (
-            <div className="absolute right-0 top-9 w-56 bg-[var(--s)] border border-[var(--line)] shadow-xl rounded-2xl p-2 z-50 text-[12px] animate-in fade-in zoom-in-95 duration-100">
+            <div className="absolute right-0 top-9 w-60 bg-[var(--s)] border border-[var(--line)] shadow-xl rounded-2xl p-2 z-50 text-[12px] animate-in fade-in zoom-in-95 duration-100">
               <div className="px-3 py-2 border-b border-[var(--line)] mb-1">
-                <b className="text-[13px] text-[var(--t)] block">Amani</b>
-                <small className="text-[10px] text-[var(--m)] block">Research workspace</small>
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-[var(--y)] text-[#171717] font-extrabold text-[10px] grid place-items-center">
+                    {getUserAbbreviation()}
+                  </div>
+                  <div className="min-w-0">
+                    <b className="text-[12.5px] text-[var(--t)] block truncate">{userName}</b>
+                    <small className="text-[10px] text-[var(--m)] block truncate">{userEmail}</small>
+                  </div>
+                </div>
               </div>
 
               <button
                 onClick={() => {
                   setIsProfileOpen(false);
-                  navigateTo('profile');
+                  navigateTo('settings');
                 }}
                 className="w-full text-left px-3 py-2 rounded-xl hover:bg-[var(--s2)] text-[var(--t)] flex items-center justify-between transition-colors cursor-pointer"
               >
-                <span>Profile & preferences</span>
+                <span>Profile & Personalization</span>
+                <span className="text-[10px] font-semibold text-[var(--y)]">Settings</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setIsProfileOpen(false);
+                  navigateTo('chat');
+                }}
+                className="w-full text-left px-3 py-2 rounded-xl hover:bg-[var(--s2)] text-[var(--t)] flex items-center justify-between transition-colors cursor-pointer"
+              >
+                <span>Bob Messenger Chat</span>
               </button>
 
               <button
@@ -139,29 +192,6 @@ export const TopBar: React.FC = () => {
                     {unreadNotifications}
                   </span>
                 )}
-              </button>
-
-              <button
-                onClick={() => {
-                  setIsProfileOpen(false);
-                  navigateTo('settings');
-                }}
-                className="w-full text-left px-3 py-2 rounded-xl hover:bg-[var(--s2)] text-[var(--t)] flex items-center justify-between transition-colors cursor-pointer"
-              >
-                <span>Settings</span>
-              </button>
-
-              <div className="border-t border-[var(--line)] my-1" />
-
-              <button
-                onClick={() => {
-                  setIsProfileOpen(false);
-                  triggerThinking('Shortcuts', '⌘ K: Search · ⌘ Enter: Send prompt · Esc: Close', 'Ready');
-                }}
-                className="w-full text-left px-3 py-2 rounded-xl hover:bg-[var(--s2)] text-[var(--m)] hover:text-[var(--t)] flex items-center justify-between transition-colors text-[11px] cursor-pointer"
-              >
-                <span>Keyboard shortcuts</span>
-                <kbd className="text-[9px] font-mono border border-[var(--line)] px-1 rounded">⌘K</kbd>
               </button>
             </div>
           )}
