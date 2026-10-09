@@ -22,6 +22,7 @@ export class VoiceController {
   private listeners: Set<VoiceStateListener> = new Set();
   private energyListeners: Set<(energy: number) => void> = new Set();
   private currentTranscript = '';
+  private bobReply = '';
   private isVoiceModeActive = false;
   private mode: VoiceMode = 'prompt';
   private chunker: ResponseTextChunker;
@@ -33,6 +34,7 @@ export class VoiceController {
   private pttActive = false;
   private pttHoldTimer: any = null;
   private pttCooldownUntil = 0;
+  private lastReplyNotify = 0;
 
   constructor() {
     this.chunker = new ResponseTextChunker((chunk) => {
@@ -66,7 +68,14 @@ export class VoiceController {
 
   private setState(newState: VoiceState, error?: string): void {
     this.state = newState;
-    this.listeners.forEach((l) => l(newState, { transcript: this.currentTranscript, error }));
+    this.listeners.forEach((l) =>
+      l(newState, {
+        transcript: this.currentTranscript,
+        aiReply: this.bobReply,
+        mode: this.mode,
+        error
+      })
+    );
   }
 
   public getState(): VoiceState {
@@ -297,8 +306,11 @@ export class VoiceController {
   private handleSpeechStart(): void {
     if (!this.isVoiceModeActive) return;
 
-    // Instant interruption (Barge-in): stop Bob speaking immediately when user speaks
-    if (this.state === 'SPEAKING' || audioQueue.isPlaying() || tts.isSpeaking()) {
+    // Instant interruption (Barge-in): stop Bob speaking immediately when the
+    // user speaks. While holding to talk, beginPushToTalk already cut Bob off —
+    // interrupting again would schedule a LISTENING state 120ms later that
+    // overwrites the recording indicator mid-turn.
+    if (!this.pttActive && (this.state === 'SPEAKING' || audioQueue.isPlaying() || tts.isSpeaking())) {
       this.interrupt();
     }
 
@@ -344,6 +356,7 @@ export class VoiceController {
     if (!cleanText || this.isSubmitting) return;
 
     this.isSubmitting = true;
+    this.bobReply = '';
     this.setState('SUBMITTING');
     try {
       if (this.onSubmitMessage) {
@@ -364,12 +377,32 @@ export class VoiceController {
 
   public feedAIStreamChunk(chunkText: string): void {
     if (!this.isVoiceModeActive || this.mode !== 'call') return;
+    this.bobReply += chunkText;
+    // Throttled so the call overlay can show Bob's words live without a
+    // re-render per token.
+    const now = Date.now();
+    if (now - this.lastReplyNotify > 240) {
+      this.lastReplyNotify = now;
+      this.notifyListeners();
+    }
     this.chunker.feed(chunkText);
   }
 
-  public finalizeAIResponse(_fullText?: string): void {
+  public finalizeAIResponse(fullText?: string): void {
     if (!this.isVoiceModeActive || this.mode !== 'call') return;
+    if (fullText && !this.bobReply) this.bobReply = fullText;
+    this.notifyListeners();
     this.chunker.flush();
+  }
+
+  private notifyListeners(): void {
+    this.listeners.forEach((l) =>
+      l(this.state, {
+        transcript: this.currentTranscript,
+        aiReply: this.bobReply,
+        mode: this.mode
+      })
+    );
   }
 
   public interrupt(): void {

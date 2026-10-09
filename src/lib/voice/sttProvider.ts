@@ -15,8 +15,14 @@ export interface STTProvider {
 const SAMPLE_RATE = 16000;
 /** Rolling partials: transcribe a new slice of the hold every ~1.4s. */
 const ROLL_INTERVAL_MS = 1400;
-/** A slice shorter than this is not worth a Whisper pass (~0.9s of audio). */
-const MIN_CHUNK_SAMPLES = Math.round(SAMPLE_RATE * 0.9);
+/** A rolling slice shorter than this is not worth a Whisper pass (~0.9s). */
+const MIN_ROLL_SAMPLES = Math.round(SAMPLE_RATE * 0.9);
+/**
+ * The final pass must accept much shorter audio: a call-mode question is often
+ * under a second long, and gating it at the rolling floor silently threw the
+ * whole turn away (release → empty transcript → Bob never answered).
+ */
+const MIN_FINAL_SAMPLES = Math.round(SAMPLE_RATE * 0.3);
 /** Hard ceiling so transcription can never hang "forever". */
 const FLUSH_TIMEOUT_MS = 20000;
 const CHUNK_TIMEOUT_MS = 12000;
@@ -139,7 +145,8 @@ export class DualEngineSTTProvider implements STTProvider {
     if (!recorded) return '';
 
     const pending = recorded.samples.subarray(this.committedSampleCount);
-    if (pending.length < MIN_CHUNK_SAMPLES) return '';
+    const floor = isFinal ? MIN_FINAL_SAMPLES : MIN_ROLL_SAMPLES;
+    if (pending.length < floor) return '';
 
     this.isProcessingChunk = true;
     this.transcribing = true;

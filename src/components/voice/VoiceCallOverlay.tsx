@@ -14,6 +14,7 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({ onClose }) =
     voiceState,
     currentTranscript,
     lastBobReply,
+    errorMessage,
     stopVoiceMode,
     interrupt,
     beginPushToTalk,
@@ -225,6 +226,17 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({ onClose }) =
 
         {/* Dynamic Speech & Transcript Cards */}
         <div className="w-full space-y-3 min-h-[110px] max-h-[220px] overflow-y-auto px-1">
+          {/* Error / status card so a failed turn is never silent */}
+          {errorMessage && (
+            <div className="p-3.5 rounded-2xl bg-red-500/10 border border-red-500/30 text-left animate-in fade-in duration-200">
+              <div className="text-[11px] font-bold text-red-400 flex items-center gap-1.5 mb-1">
+                <MicOff className="w-3 h-3 text-red-400" />
+                <span>Heads up</span>
+              </div>
+              <p className="text-[13px] text-neutral-200 m-0 leading-relaxed">{errorMessage}</p>
+            </div>
+          )}
+
           {/* User live speech card */}
           {currentTranscript.trim() && (
             <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-left animate-in fade-in duration-200">

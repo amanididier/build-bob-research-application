@@ -7,7 +7,7 @@ export const DEFAULT_VOICE_KEY = 'bob_voice_default';
 
 export const DEFAULT_VOICE_CONFIG: VoiceConfig = {
   enabled: true,
-  defaultVoice: 'Alex', // Warm conversational ChatGPT-style voice
+  defaultVoice: 'Noah', // Warm conversational natural voice
   speechStartThreshold: 12, // High sensitivity audio energy threshold
   speechEndSilenceDurationMs: 1500, // 1.5s silence handoff (natural conversation)
   promptSilenceDurationMs: 1500, // 1.5s silence in WhisperFlow dictation before finalizing

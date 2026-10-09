@@ -456,6 +456,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       );
 
+      // Safety net: non-streaming engines (REST/Ollama/local) never fire onDelta,
+      // so hand the whole answer to the chunker or call mode would stay silent.
+      if (!streamedText && response.answer) {
+        voiceController.feedAIStreamChunk(response.answer);
+      }
+
       voiceController.finalizeAIResponse(response.answer);
 
       const assistantMsg: ChatMessage = {

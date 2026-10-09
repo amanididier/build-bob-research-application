@@ -635,7 +635,7 @@ export const SettingsPage: React.FC = () => {
                   <div>
                     <b className="text-[16px] text-[var(--t)] block">Voice Personalities (ChatGPT-Style)</b>
                     <small className="text-[11.5px] text-[var(--m)]">
-                      Choose Bob's conversational voice for Call mode and Read Aloud. 100% offline neural speech.
+                      Choose Bob's conversational voice for Call mode and Read Aloud. Natural studio voices use your connected Gemini key; falls back to on-device speech offline.
                     </small>
                   </div>
                   <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">

@@ -22,59 +22,42 @@ export interface TTSProvider {
 
 /** Natural-voice models, tried in order. Bounded — no retry loops. */
 const TTS_MODELS = ['gemini-3.8-flash-lite-tts', 'gemini-3.8-flash-tts'];
-const TTS_TIMEOUT_MS = 12000;
+const TTS_TIMEOUT_MS = 20000;
 const DEFAULT_TTS_SAMPLE_RATE = 24000;
+/**
+ * Gemini TTS degrades to the robotic on-device voice when a single request is
+ * too long to synthesise inside the timeout, so long messages (Read Aloud) are
+ * split on sentence boundaries and spoken in order.
+ */
+const MAX_TTS_CHARS = 1000;
+export const DEFAULT_VOICE_ID = 'Noah';
+
+function splitForSpeech(text: string, max: number): string[] {
+  if (text.length <= max) return [text];
+  const pieces: string[] = [];
+  let current = '';
+  const sentences = text.match(/[^.!?;:\n]+[.!?;:]*\s*/g) || [text];
+  for (const sentence of sentences) {
+    if ((current + sentence).length > max && current.trim()) {
+      pieces.push(current.trim());
+      current = '';
+    }
+    current += sentence;
+    while (current.length > max) {
+      pieces.push(current.slice(0, max));
+      current = current.slice(max);
+    }
+  }
+  if (current.trim()) pieces.push(current.trim());
+  return pieces;
+}
 
 /**
- * Eight genuinely distinct characters. Each one maps to a different Gemini
+ * Four genuinely distinct characters. Each one maps to a different Gemini
  * prebuilt studio voice, and to its own pitch/rate pair so the on-device
  * fallback still sounds like a different person rather than one robotic voice.
  */
 export const CHATGPT_VOICES: VoiceProfile[] = [
-  {
-    id: 'Alex',
-    name: 'Alex',
-    gender: 'male',
-    personality: 'Warm male · Natural · Conversational',
-    language: 'English (US)',
-    geminiVoice: 'Puck',
-    pitch: 1.0,
-    rate: 1.08,
-    previewText: "Hey there! I'm Alex. I'm ready to help you analyze research, brainstorm ideas, and organize your work."
-  },
-  {
-    id: 'James',
-    name: 'James',
-    gender: 'male',
-    personality: 'Calm male · Clear · Professional',
-    language: 'English (US)',
-    geminiVoice: 'Charon',
-    pitch: 0.86,
-    rate: 0.98,
-    previewText: "Hello, I'm James. I focus on structured analysis, deep research queries, and synthesis."
-  },
-  {
-    id: 'Maya',
-    name: 'Maya',
-    gender: 'female',
-    personality: 'Warm female · Natural · Conversational',
-    language: 'English (US)',
-    geminiVoice: 'Kore',
-    pitch: 1.06,
-    rate: 1.04,
-    previewText: "Hi! I'm Maya. Let's explore your ideas together and find the key insights in your research."
-  },
-  {
-    id: 'Emma',
-    name: 'Emma',
-    gender: 'female',
-    personality: 'Bright female · Friendly · Clear',
-    language: 'English (US)',
-    geminiVoice: 'Zephyr',
-    pitch: 1.18,
-    rate: 1.12,
-    previewText: "Hi! I'm Emma. I'm excited to help you move quickly through your documents and tasks."
-  },
   {
     id: 'Noah',
     name: 'Noah',
@@ -159,7 +142,7 @@ export class LocalNeuralTTSProvider implements TTSProvider {
   private currentAudioElement: HTMLAudioElement | null = null;
   private currentObjectUrl: string | null = null;
   private abortController: AbortController | null = null;
-  private activeVoiceId = 'Alex';
+  private activeVoiceId = DEFAULT_VOICE_ID;
   private cachedVoices: SpeechSynthesisVoice[] = [];
   private lastEngine: 'gemini-tts' | 'browser-synthesis' | 'none' = 'none';
   /** Bumped by stop(); in-flight synthesis from an older epoch is discarded. */
@@ -170,6 +153,10 @@ export class LocalNeuralTTSProvider implements TTSProvider {
       const saved = localStorage.getItem(DEFAULT_VOICE_KEY);
       if (saved && CHATGPT_VOICES.some((v) => v.id === saved)) {
         this.activeVoiceId = saved;
+      } else if (saved) {
+        // Persisted id from a removed voice (Alex/James/Maya/Emma): reset it so
+        // Read Aloud and call mode don't fall back to an unknown profile.
+        localStorage.setItem(DEFAULT_VOICE_KEY, this.activeVoiceId);
       }
 
       if ('speechSynthesis' in window) {
@@ -271,22 +258,48 @@ export class LocalNeuralTTSProvider implements TTSProvider {
     const myEpoch = this.epoch;
     const profile =
       CHATGPT_VOICES.find((v) => v.id === (options.voiceId || this.activeVoiceId)) || CHATGPT_VOICES[0];
-
-    // Tier 1: Gemini natural studio voices, using the user's own connected key.
     const apiKey = bobAi.getGeminiKey();
+
+    // Long replies are split at sentence boundaries: one oversized Gemini TTS
+    // request times out and silently falls back to robotic browser synthesis,
+    // which is exactly the voice the user hates. Small pieces stay natural.
+    const pieces = splitForSpeech(cleanText, MAX_TTS_CHARS);
+    for (let i = 0; i < pieces.length; i++) {
+      if (myEpoch !== this.epoch) break;
+      await this.speakPiece(
+        pieces[i],
+        profile,
+        apiKey,
+        { onStart: i === 0 ? options.onStart : undefined, onError: options.onError },
+        myEpoch
+      );
+    }
+
+    options.onEnd?.();
+  }
+
+  private async speakPiece(
+    piece: string,
+    profile: VoiceProfile,
+    apiKey: string | null,
+    options: { onStart?: () => void; onError?: (err: any) => void },
+    myEpoch: number
+  ): Promise<void> {
+    // Tier 1: Gemini natural studio voices, using the user's own connected key.
     if (apiKey) {
-      const url = await this.synthesizeWithGemini(cleanText, profile, apiKey);
+      const url = await this.synthesizeWithGemini(piece, profile, apiKey);
       if (myEpoch !== this.epoch) {
-        options.onEnd?.();
+        if (url) this.revokeObjectUrl(url);
         return;
       }
       if (url) {
-        return this.playAudioUrl(url, options, myEpoch);
+        await this.playAudioUrl(url, options, myEpoch);
+        return;
       }
     }
 
     // Tier 2: fully on-device browser synthesis, tuned per character.
-    return this.speakWithBrowserSynthesis(cleanText, profile, options, myEpoch);
+    await this.speakWithBrowserSynthesis(piece, profile, options, myEpoch);
   }
 
   public async previewVoice(voiceId: string): Promise<void> {
