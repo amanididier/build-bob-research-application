@@ -9,3 +9,4 @@ export * from './textChunker';
 export * from './ttsProvider';
 export * from './audioQueue';
 export * from './voiceController';
+export * from './startupWarmup';
