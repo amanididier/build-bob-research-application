@@ -53,7 +53,7 @@ export const SettingsPage: React.FC = () => {
   const [isTestingKey, setIsTestingKey] = useState(false);
   const [keyTestFeedback, setKeyTestFeedback] = useState<{ ok: boolean; message: string } | null>(null);
 
-  const [installedVersion, setInstalledVersion] = useState<string>('1.0.56');
+  const [installedVersion, setInstalledVersion] = useState<string>('1.0.57');
 
   const [updaterState, setUpdaterState] = useState<{
     status: 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'latest' | 'error';
@@ -62,8 +62,8 @@ export const SettingsPage: React.FC = () => {
     message?: string;
   }>({
     status: 'idle',
-    version: '1.0.56',
-    message: 'Up to date (v1.0.56)'
+    version: '1.0.57',
+    message: 'Up to date (v1.0.57)'
   });
 
   const [hardware] = useState(() => detectSystemHardware());
@@ -191,7 +191,7 @@ export const SettingsPage: React.FC = () => {
     if (typeof window !== 'undefined' && (window as any).bob?.checkForUpdates) {
       try {
         const res = await (window as any).bob.checkForUpdates();
-        setUpdaterState(res || { status: 'latest', message: 'You are on the latest version (v1.0.56)' });
+        setUpdaterState(res || { status: 'latest', message: 'You are on the latest version (v1.0.57)' });
       } catch (err: any) {
         setUpdaterState({ status: 'error', message: err?.message || 'Update check failed.' });
       }
@@ -199,8 +199,8 @@ export const SettingsPage: React.FC = () => {
       setTimeout(() => {
         setUpdaterState({
           status: 'latest',
-          version: '1.0.56',
-          message: 'Running latest production build (v1.0.56)'
+          version: '1.0.57',
+          message: 'Running latest production build (v1.0.57)'
         });
       }, 700);
     }
@@ -285,8 +285,7 @@ export const SettingsPage: React.FC = () => {
             <button
               key={id}
               onClick={() => setActiveTab(id as any)}
-              className={`w-full text-left px-4 py-3 rounded-2xl text-[12.5px] font-semibold flex items-center gap-3 transition-colors ${
-                activeTab === id
+              className={`w-full text-left px-4 py-3 rounded-2xl text-[12.5px] font-semibold flex items-center gap-3 transition-colors ${\n                activeTab === id
                   ? 'bg-[var(--s)] text-[var(--t)] shadow-sm border border-[var(--line)]'
                   : 'text-[var(--m)] hover:text-[var(--t)] hover:bg-[var(--s2)]'
               }`}
