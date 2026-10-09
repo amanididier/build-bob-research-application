@@ -31,6 +31,8 @@ export const SettingsPage: React.FC = () => {
     openChromeBridge, 
     aiDownloadStatus, 
     memoryStats,
+    bobTastePreference,
+    setBobTastePreference,
     triggerThinking
   } = useApp();
 
@@ -39,7 +41,8 @@ export const SettingsPage: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, []);
 
-  const [activeTab, setActiveTab] = useState<'ai' | 'voice' | 'updates' | 'memory' | 'browser' | 'privacy'>('ai');
+  const [activeTab, setActiveTab] = useState<'ai' | 'voice' | 'updates' | 'memory' | 'browser' | 'privacy' | 'personalization'>('ai');
+  const [tasteDraft, setTasteDraft] = useState<string>(bobTastePreference);
   const [openChromeByDefault, setOpenChromeByDefault] = useState(true);
   const [localOnlyMode, setLocalOnlyMode] = useState(true);
   const [testMicState, setTestMicState] = useState<'idle' | 'recording' | 'success' | 'error'>('idle');
@@ -322,6 +325,18 @@ export const SettingsPage: React.FC = () => {
           </button>
 
           <button
+            onClick={() => setActiveTab('personalization')}
+            className={`w-full text-left px-4 py-3 rounded-2xl text-[12.5px] font-semibold flex items-center gap-3 transition-colors ${
+              activeTab === 'personalization'
+                ? 'bg-[var(--s)] text-[var(--t)] shadow-sm border border-[var(--line)]'
+                : 'text-[var(--m)] hover:text-[var(--t)] hover:bg-[var(--s2)]'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-[#ec4899]" />
+            <span>Personalization</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('voice')}
             className={`w-full text-left px-4 py-3 rounded-2xl text-[12.5px] font-semibold flex items-center gap-3 transition-colors ${
               activeTab === 'voice'
@@ -385,6 +400,61 @@ export const SettingsPage: React.FC = () => {
         {/* Tab Content Panels */}
         <div className="md:col-span-3">
           {/* AI Models & Keys Section */}
+          {activeTab === 'personalization' && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div className="bg-[var(--s)] border border-[var(--line)] rounded-[24px] p-6 shadow-sm">
+                <div className="flex items-center gap-2 mb-1">
+                  <Sparkles className="w-4 h-4 text-[#ec4899]" />
+                  <h3 className="text-[16px] font-bold text-[var(--t)] m-0">Bob's Personality & Tone</h3>
+                </div>
+                <p className="text-[12px] text-[var(--m)] leading-relaxed mb-4 mt-1">
+                  Describe how you want Bob to sound and behave. Bob follows this preference in every
+                  reply, summary, and voice conversation.
+                </p>
+
+                <textarea
+                  value={tasteDraft}
+                  onChange={(e) => setTasteDraft(e.target.value)}
+                  rows={4}
+                  placeholder="e.g. Warm and playful, short sentences, always end with a concrete next step..."
+                  className="w-full resize-none rounded-2xl border border-[var(--line)] bg-[var(--s2)] px-4 py-3 text-[13px] text-[var(--t)] placeholder:text-[var(--m)] outline-none focus:border-[var(--y)] focus:ring-2 focus:ring-[var(--y)]/30 transition-all"
+                />
+
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {[
+                    'Direct, sharp synthesis, academic and encouraging with clear next steps.',
+                    'Warm and playful, like a close friend who loves research.',
+                    'Brief and bullet-first. No fluff, only decisions and next actions.'
+                  ].map((preset) => (
+                    <button
+                      key={preset}
+                      onClick={() => setTasteDraft(preset)}
+                      className="px-3 py-1.5 rounded-full bg-[var(--s2)] border border-[var(--line)] text-[11px] font-medium text-[var(--m)] hover:text-[var(--t)] hover:border-[var(--y)] transition-all cursor-pointer"
+                    >
+                      {preset.slice(0, 34)}…
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-between mt-5 pt-4 border-t border-[var(--line)]">
+                  <span className="text-[11.5px] text-[var(--m)]">
+                    {tasteDraft === bobTastePreference ? 'Saved preference is active.' : 'Unsaved changes.'}
+                  </span>
+                  <button
+                    onClick={() => {
+                      setBobTastePreference(tasteDraft.trim());
+                      triggerThinking('Preference Saved', 'Bob will adapt his tone to your taste.', 'Personalized');
+                    }}
+                    disabled={!tasteDraft.trim() || tasteDraft === bobTastePreference}
+                    className="px-4 py-2 rounded-xl bg-[var(--y)] hover:bg-[#ebd200] text-[#171717] text-[12px] font-bold transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    Save preference
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'ai' && (
             <div className="space-y-7">
               <div className="border-b border-[var(--line)] pb-4">

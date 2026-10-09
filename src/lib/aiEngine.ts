@@ -116,6 +116,17 @@ class BobAiManager {
     return this.geminiKey;
   }
 
+  /** The user's personalization preference for how Bob should sound and behave. */
+  public getTastePreference(): string {
+    if (typeof window !== 'undefined') {
+      return (
+        localStorage.getItem('bob_taste_preference') ||
+        'Direct, sharp synthesis, academic and encouraging with clear next steps.'
+      );
+    }
+    return '';
+  }
+
   public setGeminiKey(key: string): void {
     const trimmed = key.trim();
     this.geminiKey = trimmed;

@@ -66,7 +66,12 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       const context = await buildContext(sessionId, text, { deepThink });
 
       // 4. Generate AI response (using KEZA prompt & brain)
-      const aiResult = await bobAi.generateResearchAnswer(text, sessionId);
+      const aiResult = await bobAi.generateResearchAnswer(
+        text,
+        sessionId,
+        undefined,
+        bobAi.getTastePreference()
+      );
       const parsed = parseKezaResponse(aiResult.answer);
 
       // 5. Save assistant message to SQLite

@@ -158,7 +158,7 @@ export const ResearchPage: React.FC = () => {
         </div>
       )}
 
-      {/* Research-specific Navigation (Chat, Summary, Tabs, Tasks) */}
+      {/* Research-specific Navigation (Research, Summary, Tabs, Tasks) */}
       <div className="h-12 border-b border-[var(--line)] flex gap-8 mb-6 sticky top-0 bg-[var(--bg)] z-10 pt-0.5">
         <button
           onClick={() => setResearchSubView('chat')}
@@ -168,7 +168,7 @@ export const ResearchPage: React.FC = () => {
               : 'text-[#888] hover:text-[var(--t)]'
           }`}
         >
-          Chat
+          Research
         </button>
 
         <button

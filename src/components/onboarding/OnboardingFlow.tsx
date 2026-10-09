@@ -220,11 +220,14 @@ export const OnboardingFlow: React.FC = () => {
     setIsBobTyping(true);
     try {
       const response = await bobAi.generateResearchAnswer(
-        `You are Bob, a warm, intelligent, local-first research companion. The user just completed onboarding and sent their first message: "${userText}". Greet them personally as ${localName || 'friend'} and provide a concise, high-value, structured response (2-3 sentences) showing how you will support them.`
+        `You are Bob, a warm, intelligent, local-first research companion. The user just completed onboarding and sent their first message: "${userText}". Greet them personally as ${localName || 'friend'} and provide a concise, high-value, structured response (2-3 sentences) showing how you will support them.`,
+        'urugendo',
+        undefined,
+        bobAi.getTastePreference()
       );
       setChatMessages((prev) => [
         ...prev,
-        { role: 'assistant', text: response.text, time: 'Just now' }
+        { role: 'assistant', text: response.answer, time: 'Just now' }
       ]);
     } catch {
       setChatMessages((prev) => [

@@ -13,13 +13,14 @@ import {
   Compass,
   FileText
 } from 'lucide-react';
-import sunflowerMorning from '../../assets/images/sunflower_garden_morning_1791540694993.jpg';
+import sunflowerMorning from '../../assets/images/sunflower_garden_morning_user.png';
 import sunflowerNight from '../../assets/images/sunflower_garden_night_1791540711934.jpg';
 
 export const HomePage: React.FC = () => {
   const { 
     navigateTo, 
     projects, 
+    tasks,
     userName, 
     createNewResearchSession,
     sendMessage,
@@ -37,6 +38,19 @@ export const HomePage: React.FC = () => {
 
   const isMorning = timeMode === 'morning';
   const heroImage = isMorning ? sunflowerMorning : sunflowerNight;
+
+  // Today's Focus is derived from real tasks and projects, never hardcoded copy.
+  const openTasks = tasks.filter((t) => !t.completed);
+  const dueToday = openTasks.filter((t) => (t.dueDate || '').toLowerCase().startsWith('today'));
+  const focusTask = dueToday[0] || openTasks[0] || null;
+  const focusProject =
+    projects.find((p) => p.id === (focusTask ? focusTask.projectId : '')) || projects[0] || null;
+  const projectTasks = focusProject ? tasks.filter((t) => t.projectId === focusProject.id) : [];
+  const doneInProject = projectTasks.filter((t) => t.completed).length;
+  const focusProgress = projectTasks.length
+    ? Math.round((doneInProject / projectTasks.length) * 100)
+    : 0;
+  const doneToday = tasks.filter((t) => t.completed).length;
 
   const handleComposerSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -215,7 +229,7 @@ export const HomePage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         {/* CARD 1: Recents */}
-        <div className="bg-[var(--s)] border border-[var(--line)] rounded-[24px] p-6 shadow-[0_5px_25px_rgba(0,0,0,0.03)] flex flex-col justify-between">
+        <div className="bg-[var(--s)] border border-[var(--line)] rounded-[24px] p-6 shadow-[0_5px_25px_rgba(0,0,0,0.03)] flex flex-col justify-between animate-in fade-in slide-in-from-bottom-3 duration-500">
           <div>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
@@ -235,7 +249,7 @@ export const HomePage: React.FC = () => {
             </div>
 
             <div className="divide-y divide-[var(--line)]">
-              {projects.map((proj) => (
+              {projects.slice(0, 4).map((proj) => (
                 <div
                   key={proj.id}
                   onClick={() => navigateTo('research', 'chat', proj.id)}
@@ -265,6 +279,15 @@ export const HomePage: React.FC = () => {
                 </div>
               ))}
             </div>
+
+            {projects.length > 4 && (
+              <button
+                onClick={() => navigateTo('research', 'chat')}
+                className="w-full py-2.5 text-[11.5px] font-semibold text-[var(--m)] hover:text-[var(--t)] transition-colors cursor-pointer"
+              >
+                +{projects.length - 4} more in the research workspace
+              </button>
+            )}
           </div>
 
           <div className="mt-5 pt-3 border-t border-[var(--line)] flex items-center justify-between text-[11.5px] text-[var(--m)]">
@@ -280,7 +303,10 @@ export const HomePage: React.FC = () => {
         </div>
 
         {/* CARD 2: Today's Focus */}
-        <div className="bg-[var(--s)] border border-[var(--line)] rounded-[24px] p-6 shadow-[0_5px_25px_rgba(0,0,0,0.03)] flex flex-col justify-between">
+        <div
+          className="bg-[var(--s)] border border-[var(--line)] rounded-[24px] p-6 shadow-[0_5px_25px_rgba(0,0,0,0.03)] flex flex-col justify-between animate-in fade-in slide-in-from-bottom-3 duration-500"
+          style={{ animationDelay: '120ms' }}
+        >
           <div>
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -292,23 +318,25 @@ export const HomePage: React.FC = () => {
               </span>
             </div>
 
-            <h2 className="text-[24px] font-black mt-2 mb-2 tracking-tight text-[var(--t)] leading-tight">
-              Validate the core problem
+            <h2 className="text-[22px] font-black mt-2 mb-2 tracking-tight text-[var(--t)] leading-tight truncate">
+              {focusTask ? focusTask.title : focusProject ? focusProject.title : 'Plan your first study'}
             </h2>
-            <p className="text-[13px] text-[var(--m)] leading-relaxed m-0">
-              68% of this research goal is connected across 9 sources, 2 discussions, and real-time user feedback.
+            <p className="text-[13px] text-[var(--m)] leading-relaxed m-0 line-clamp-2">
+              {focusProject
+                ? `${focusProgress}% of “${focusProject.title}” is complete across ${focusProject.sourceCount} linked sources and ${projectTasks.length} tracked tasks.`
+                : 'Start a study and Bob will surface today’s priorities here automatically.'}
             </p>
 
             {/* Progress bar */}
             <div className="mt-5">
               <div className="flex justify-between text-[11px] font-semibold text-[var(--t)] mb-1.5">
-                <span>Problem validation completeness</span>
-                <span className="font-mono text-[var(--y)] font-bold">68%</span>
+                <span>Goal completeness</span>
+                <span className="font-mono text-[var(--y)] font-bold">{focusProgress}%</span>
               </div>
               <div className="h-2 bg-[var(--s2)] rounded-full overflow-hidden">
                 <div
                   className="h-full bg-[var(--y)] rounded-full transition-all duration-700 shadow-sm"
-                  style={{ width: '68%' }}
+                  style={{ width: `${focusProgress}%` }}
                 />
               </div>
             </div>
@@ -316,27 +344,27 @@ export const HomePage: React.FC = () => {
             {/* Focus Metrics Badges */}
             <div className="grid grid-cols-3 gap-2.5 mt-5">
               <div className="p-3 rounded-xl bg-[var(--s2)] border border-[var(--line)] text-center">
-                <b className="text-[15px] font-bold text-[var(--t)] block">12</b>
-                <span className="text-[10.5px] text-[var(--m)]">Tabs linked</span>
+                <b className="text-[15px] font-bold text-[var(--t)] block">{focusProject ? focusProject.sourceCount : 0}</b>
+                <span className="text-[10.5px] text-[var(--m)]">Sources linked</span>
               </div>
               <div className="p-3 rounded-xl bg-[var(--s2)] border border-[var(--line)] text-center">
-                <b className="text-[15px] font-bold text-[var(--t)] block">7</b>
-                <span className="text-[10.5px] text-[var(--m)]">Verified sources</span>
+                <b className="text-[15px] font-bold text-[var(--t)] block">{openTasks.length}</b>
+                <span className="text-[10.5px] text-[var(--m)]">Open tasks</span>
               </div>
               <div className="p-3 rounded-xl bg-[var(--s2)] border border-[var(--line)] text-center">
-                <b className="text-[15px] font-bold text-[var(--t)] block">2</b>
-                <span className="text-[10.5px] text-[var(--m)]">Tasks due</span>
+                <b className="text-[15px] font-bold text-[var(--t)] block">{doneToday}</b>
+                <span className="text-[10.5px] text-[var(--m)]">Done so far</span>
               </div>
             </div>
           </div>
 
-          <div className="mt-5 pt-3 border-t border-[var(--line)] flex items-center justify-between">
-            <span className="text-[11.5px] text-[var(--m)]">
-              Next action: Finalize passenger drop-off metric
+          <div className="mt-5 pt-3 border-t border-[var(--line)] flex items-center justify-between gap-3">
+            <span className="text-[11.5px] text-[var(--m)] truncate">
+              {focusTask ? `Next action: ${focusTask.title}` : 'Next action: start a new study'}
             </span>
             <button
-              onClick={() => navigateTo('research', 'chat', 'urugendo')}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#171717] dark:bg-[#f2eee7] text-white dark:text-[#171717] text-[12px] font-bold hover:opacity-90 active:scale-95 transition-all shadow-xs cursor-pointer"
+              onClick={() => navigateTo('research', 'chat', focusProject ? focusProject.id : undefined)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#171717] dark:bg-[#f2eee7] text-white dark:text-[#171717] text-[12px] font-bold hover:opacity-90 active:scale-95 transition-all shadow-xs cursor-pointer shrink-0"
             >
               <span>Open research</span>
               <ArrowUpRight className="w-3.5 h-3.5" />

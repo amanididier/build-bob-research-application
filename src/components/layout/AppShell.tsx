@@ -18,6 +18,7 @@ import { ErrorBoundary } from '../ErrorBoundary';
 // Pages
 import { HomePage } from '../../pages/Home/HomePage';
 import { ResearchPage } from '../../pages/Research/ResearchPage';
+import { ChatPage } from '../../pages/Chat/ChatPage';
 import { NotesPage } from '../../pages/Notes/NotesPage';
 import { TasksPage } from '../../pages/Tasks/TasksPage';
 import { ChromeSidePanelPage } from '../../pages/Chrome/ChromeSidePanelPage';
@@ -35,6 +36,8 @@ export const AppShell: React.FC = () => {
         return <HomePage />;
       case 'research':
         return <ResearchPage />;
+      case 'chat':
+        return <ChatPage />;
       case 'notes':
         return <NotesPage />;
       case 'tasks':
