@@ -1,0 +1,23 @@
+<!--
+Paste this into Supabase Dashboard → Authentication → Email Templates → Magic Link.
+The template subject can be: Your Bob sign-in code
+Supabase fills {{ .Token }} with the 6-digit code.
+-->
+<div style="background:#f6f3ec;padding:32px 16px;font-family:Georgia,serif;color:#171717;">
+  <div style="max-width:420px;margin:0 auto;background:#fff;border:1px solid #e6e1d6;border-radius:24px;padding:28px 22px;">
+    <p style="letter-spacing:.14em;text-transform:uppercase;font-size:11px;font-family:Arial,sans-serif;color:#8a8175;margin:0 0 8px;">Bob</p>
+    <h1 style="font-size:26px;line-height:1.2;margin:0 0 8px;">Your sign-in code</h1>
+    <p style="font-family:Arial,sans-serif;font-size:14px;line-height:1.5;color:#4d463d;margin:0 0 18px;">Enter these six digits in Bob. The code expires soon. If you did not ask for it, you can ignore this email.</p>
+    <table role="presentation" cellspacing="8" cellpadding="0" style="margin:0 auto 18px;">
+      <tr>
+        <td style="width:44px;height:52px;border:1px solid #e6e1d6;border-radius:12px;text-align:center;font-family:Arial,sans-serif;font-size:24px;font-weight:700;background:#fffdf8;">{{ slice .Token 0 1 }}</td>
+        <td style="width:44px;height:52px;border:1px solid #e6e1d6;border-radius:12px;text-align:center;font-family:Arial,sans-serif;font-size:24px;font-weight:700;background:#fffdf8;">{{ slice .Token 1 2 }}</td>
+        <td style="width:44px;height:52px;border:1px solid #e6e1d6;border-radius:12px;text-align:center;font-family:Arial,sans-serif;font-size:24px;font-weight:700;background:#fffdf8;">{{ slice .Token 2 3 }}</td>
+        <td style="width:44px;height:52px;border:1px solid #e6e1d6;border-radius:12px;text-align:center;font-family:Arial,sans-serif;font-size:24px;font-weight:700;background:#fffdf8;">{{ slice .Token 3 4 }}</td>
+        <td style="width:44px;height:52px;border:1px solid #e6e1d6;border-radius:12px;text-align:center;font-family:Arial,sans-serif;font-size:24px;font-weight:700;background:#fffdf8;">{{ slice .Token 4 5 }}</td>
+        <td style="width:44px;height:52px;border:1px solid #e6e1d6;border-radius:12px;text-align:center;font-family:Arial,sans-serif;font-size:24px;font-weight:700;background:#fffdf8;">{{ slice .Token 5 6 }}</td>
+      </tr>
+    </table>
+    <p style="font-family:Arial,sans-serif;font-size:13px;color:#4d463d;text-align:center;margin:0;">Or use this link: <a href="{{ .ConfirmationURL }}" style="color:#8a6500;">Confirm sign-in</a></p>
+  </div>
+</div>
