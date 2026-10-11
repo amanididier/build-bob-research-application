@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --bg: #fafaf8;
   --s: #ffffff;
@@ -28,6 +30,18 @@ html.dark, body.dark {
   --y: #edb81a;
   --b: #76a5ff;
   --shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+}
+
+table {
+  color: var(--t);
+}
+
+th {
+  color: var(--t);
+}
+
+td {
+  color: var(--t);
 }
 
 * {

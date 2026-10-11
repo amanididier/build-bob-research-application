@@ -140,7 +140,7 @@ export const ChatView: React.FC = () => {
               {rows.map((row, rIdx) => (
                 <tr key={rIdx} className="hover:bg-[var(--s2)]/50 transition-colors">
                   {row.map((cell, cIdx) => (
-                    <td key={cIdx} className="py-2 px-3.5 text-[#444] dark:text-[#ccc]">
+                    <td key={cIdx} className="py-2.5 px-3.5 text-[var(--t)] font-medium leading-relaxed">
                       {cell.replace(/\*\*/g, '')}
                     </td>
                   ))}

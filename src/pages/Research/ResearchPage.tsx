@@ -4,7 +4,7 @@ import { ChatView } from './ChatView';
 import { SummaryView } from './SummaryView';
 import { TabsView } from './TabsView';
 import { TasksView } from './TasksView';
-import { GitFork, BookOpen, X, Sparkles, Send } from 'lucide-react';
+import { GitFork, BookOpen, X, Sparkles, Send, ChevronDown } from 'lucide-react';
 import { BobAvatar } from '../../components/BobAvatar';
 
 export const ResearchPage: React.FC = () => {
@@ -210,6 +210,24 @@ export const ResearchPage: React.FC = () => {
       {researchSubView === 'summary' && <SummaryView />}
       {researchSubView === 'tabs' && <TabsView />}
       {researchSubView === 'tasks' && <TasksView />}
+
+      {/* Floating Scroll Down button on right side above composer */}
+      <button
+        type="button"
+        onClick={() => {
+          const mainEl = document.querySelector('main');
+          if (mainEl) {
+            mainEl.scrollTo({ top: mainEl.scrollHeight, behavior: 'smooth' });
+          } else {
+            window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+          }
+        }}
+        title="Scroll to bottom"
+        aria-label="Scroll to bottom"
+        className="fixed bottom-24 right-8 z-30 w-9 h-9 rounded-full bg-[var(--s)]/95 hover:bg-[var(--s2)] border border-[var(--line)] shadow-md flex items-center justify-center text-[var(--m)] hover:text-[var(--t)] transition-all active:scale-90 cursor-pointer backdrop-blur-md"
+      >
+        <ChevronDown className="w-4 h-4 stroke-[2.2]" />
+      </button>
     </div>
   );
 };

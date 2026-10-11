@@ -14,6 +14,7 @@
 
 import { voiceDiagnostics } from '../voice/diagnostics';
 import { resolveGeminiApiKey } from './keyManager';
+import { voiceUsageService } from '../voice/VoiceUsageService';
 
 export interface GeminiLiveCallbacks {
   onConnected?: (model: string) => void;
@@ -252,6 +253,8 @@ export class GeminiLiveService {
             connection: 'connected'
           });
           voiceDiagnostics.event(`Gemini Live connected (${model})`);
+          voiceUsageService.setProvider('Gemini Multimodal Live', model, true);
+          voiceUsageService.recordLiveCallStart();
           resolve(true);
         } catch {
           resolve(false);
@@ -281,6 +284,7 @@ export class GeminiLiveService {
       ws.onerror = (_e: Event) => {
         clearTimeout(timeoutTimer);
         this.isConnecting = false;
+        voiceUsageService.recordError('Gemini Live WebSocket connection error');
         if (!connectionEstablished) {
           resolve(false);
         } else {
@@ -293,6 +297,7 @@ export class GeminiLiveService {
         clearTimeout(timeoutTimer);
         this.isConnected = false;
         this.isConnecting = false;
+        voiceUsageService.recordLiveCallEnd();
         if (!connectionEstablished) {
           resolve(false);
         } else {
