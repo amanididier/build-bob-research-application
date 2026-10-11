@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { PanelLeft, Bell, Share2 } from 'lucide-react';
+import { VoiceUsageIndicator } from '../voice/VoiceUsageIndicator';
 
 export const TopBar: React.FC = () => {
   const { 
@@ -17,7 +18,6 @@ export const TopBar: React.FC = () => {
   const [isShareHovered, setIsShareHovered] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown on click outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
@@ -57,7 +57,6 @@ export const TopBar: React.FC = () => {
     }
   };
 
-  // Generate abbreviation from user's name (e.g., "Didier Amani" -> "DA", "Didier" -> "D")
   const getUserAbbreviation = () => {
     if (!userName || !userName.trim()) return 'D';
     const parts = userName.trim().split(/\s+/);
@@ -71,7 +70,6 @@ export const TopBar: React.FC = () => {
     <header 
       className="h-11 border-b border-[var(--line)] flex items-center px-4 md:px-6 bg-[var(--bg)]/90 backdrop-blur-md sticky top-0 z-30 select-none transition-all justify-between"
     >
-      {/* Left: Sidebar toggle & Page Title */}
       <div className="flex items-center gap-3">
         <button
           onClick={toggleSidebar}
@@ -81,7 +79,6 @@ export const TopBar: React.FC = () => {
           <PanelLeft className="w-3.5 h-3.5" />
         </button>
 
-        {/* Clean page title breadcrumb */}
         {currentPage !== 'research' && (
           <span className="font-semibold text-[13px] text-[var(--t)]">
             {getPageTitle()}
@@ -89,9 +86,10 @@ export const TopBar: React.FC = () => {
         )}
       </div>
 
-      {/* Right actions: Notifications, Share with "coming soon" tooltip, User Profile */}
       <div className="flex items-center gap-2">
-        {/* Notifications Button */}
+        {/* Usage / quota status — real observed data only */}
+        <VoiceUsageIndicator />
+
         <button
           onClick={() => navigateTo('notifications')}
           title="Notifications"
@@ -103,7 +101,6 @@ export const TopBar: React.FC = () => {
           )}
         </button>
 
-        {/* Share Button with Yellow "coming soon.." pill on hover */}
         <div 
           className="relative inline-flex items-center justify-center"
           onMouseEnter={() => setIsShareHovered(true)}
@@ -126,7 +123,6 @@ export const TopBar: React.FC = () => {
           )}
         </div>
 
-        {/* User Profile Avatar: Image or Name Abbreviation */}
         <div className="relative ml-1" ref={profileRef}>
           <button
             onClick={() => setIsProfileOpen(!isProfileOpen)}
