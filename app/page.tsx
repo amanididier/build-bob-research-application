@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { SiteAccount } from '@/components/site-account'
 
 const windowsDownloadUrl = 'https://github.com/amanididier/build-bob-research-application/releases/latest/download/Bob-Research-Companion-Setup.exe'
 
@@ -10,7 +11,7 @@ export default function Page() {
           <span className="download-mark">B</span>
           <span>Bob</span>
         </Link>
-        <Link className="download-signin" href="/sign-in">Sign in</Link>
+        <SiteAccount />
       </header>
 
       <section className="download-hero" aria-labelledby="download-title">
@@ -23,7 +24,7 @@ export default function Page() {
           <span><strong>Download for Windows</strong><small>Free to use · Windows 10 or later</small></span>
           <span className="download-arrow" aria-hidden="true">↓</span>
         </a>
-        <p className="download-note">No account needed to download. Sign in after installation to sync your workspace.</p>
+        <p className="download-note">No account needed to download. Sign in on this site, or from the desktop app, with Google or an email code.</p>
       </section>
 
       <section className="download-features" aria-label="Bob features">
