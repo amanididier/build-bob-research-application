@@ -14,6 +14,7 @@ import { ChromeExtensionModal } from '../modals/ChromeExtensionModal';
 import { OnboardingFlow } from '../onboarding/OnboardingFlow';
 import { AuthModal } from '../modals/AuthModal';
 import { ErrorBoundary } from '../ErrorBoundary';
+import { BobOverlayBubble } from '../companion/BobOverlayBubble';
 
 // Pages
 import { HomePage } from '../../pages/Home/HomePage';
@@ -101,6 +102,9 @@ export const AppShell: React.FC = () => {
           triggerThinking('Account Synced', `Welcome back, ${user.name}! Workspace synced.`, 'Ready');
         }}
       />
+
+      {/* Floating Bob Companion Overlay Bubble */}
+      <BobOverlayBubble />
     </div>
   );
 };

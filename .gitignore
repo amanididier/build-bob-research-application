@@ -6,3 +6,9 @@ coverage/
 *.log
 .env*
 !.env.example
+.vite/
+.aistudio/
+*.bundle
+*.patch
+
+

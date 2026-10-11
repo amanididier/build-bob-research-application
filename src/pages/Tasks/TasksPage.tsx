@@ -72,6 +72,15 @@ export const TasksPage: React.FC = () => {
 
         {/* Action Controls */}
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Sequential Roadmap Steps */}
+          <button
+            onClick={() => navigateTo('research', 'tasks')}
+            className="h-9 px-4 rounded-xl border border-[var(--line)] bg-[var(--s)] hover:bg-[var(--s2)] text-[var(--t)] font-bold text-[12px] flex items-center gap-1.5 shadow-sm active:scale-95 transition-all"
+          >
+            <ListTodo className="w-3.5 h-3.5 text-[var(--y)]" />
+            <span>Sequential Roadmap Steps</span>
+          </button>
+
           {/* AI Auto-Extract Button */}
           <button
             onClick={handleAiExtract}

@@ -1,18 +1,70 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { jsPDF } from 'jspdf';
-import { Download, Check, FileText } from 'lucide-react';
+import { Download, Check, FileText, Quote, ArrowRight, CheckCircle2 } from 'lucide-react';
 
-export const SummaryView: React.FC = () => {
-  const { activeResearchId, projects, triggerThinking } = useApp();
+interface SummaryViewProps {
+  isSidePanel?: boolean;
+}
+
+export const SummaryView: React.FC<SummaryViewProps> = ({ isSidePanel = false }) => {
+  const { activeResearchId, projects, tasks, triggerThinking } = useApp();
   const [isExporting, setIsExporting] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
 
-  const project = projects.find((p) => p.id === activeResearchId) || projects[1];
+  const project = projects.find((p) => p.id === activeResearchId) || projects[0];
+  const openTasks = tasks.filter((t) => !t.completed);
+
+  // Quotes from tabs with colored left bars as requested by user
+  const tabQuotes = [
+    {
+      id: 'q-1',
+      text: 'Users often abandon booking workflows when real-time seat availability and pickup points remain uncertain until step 4.',
+      source: 'research.example.com/transport-booking',
+      color: 'border-emerald-500 bg-emerald-500/5',
+      domain: 'research.example.com',
+    },
+    {
+      id: 'q-2',
+      text: 'Cross-verifying claims across multiple conversational tabs eliminates model hallucinations and isolates true operational bottlenecks.',
+      source: 'chatgpt.com/share/transport',
+      color: 'border-amber-500 bg-amber-500/5',
+      domain: 'chatgpt.com',
+    },
+    {
+      id: 'q-3',
+      text: 'Local cooperative drivers maintain paper registers alongside smartphone apps. Ground reality requires two-way offline syncing.',
+      source: 'docs.google.com/document/transport',
+      color: 'border-sky-500 bg-sky-500/5',
+      domain: 'docs.google.com',
+    },
+  ];
+
+  // Best supporting sources with green relevance
+  const topSources = [
+    {
+      title: 'Why people abandon online transport booking',
+      url: 'https://research.example.com/transport-booking',
+      relevance: 96,
+      snippet: 'Key findings on price transparency, local carrier surcharges, and check-out friction.',
+    },
+    {
+      title: 'Rwanda transport booking workflow notes',
+      url: 'https://docs.google.com/document/transport',
+      relevance: 92,
+      snippet: 'Operational breakdown of ticket registers, station dispatching, and walk-up traffic.',
+    },
+    {
+      title: 'ChatGPT — transport research synthesis',
+      url: 'https://chatgpt.com/c/transport-flow',
+      relevance: 88,
+      snippet: 'Comparative analysis of 4 East African bus ticketing applications.',
+    },
+  ];
 
   const handleExportPDF = () => {
     setIsExporting(true);
-    triggerThinking('Generating PDF', 'Formatting minimal Claude/Apple-style executive brief...', 'Writing vector document', () => {
+    triggerThinking('Generating PDF', 'Formatting minimal executive brief...', 'Writing vector document', () => {
       try {
         const doc = new jsPDF({
           orientation: 'portrait',
@@ -25,7 +77,6 @@ export const SummaryView: React.FC = () => {
         const maxLineWidth = pageWidth - margin * 2;
         let y = 25;
 
-        // Top Header Brand & Date
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(9);
         doc.setTextColor(130, 130, 130);
@@ -33,13 +84,11 @@ export const SummaryView: React.FC = () => {
         doc.text(new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }), pageWidth - margin - 25, y);
         y += 8;
 
-        // Divider
         doc.setDrawColor(220, 220, 220);
         doc.setLineWidth(0.3);
         doc.line(margin, y, pageWidth - margin, y);
         y += 12;
 
-        // Title
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(22);
         doc.setTextColor(20, 20, 20);
@@ -47,14 +96,12 @@ export const SummaryView: React.FC = () => {
         doc.text(titleLines, margin, y);
         y += titleLines.length * 8 + 4;
 
-        // Subtitle / Scope
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(10);
         doc.setTextColor(110, 110, 110);
-        doc.text(`Scope: 9 verified sources · 2 synthesized discussions · 3 validated tasks`, margin, y);
+        doc.text(`Scope: ${topSources.length} verified sources · ${openTasks.length} open roadmap tasks`, margin, y);
         y += 14;
 
-        // Section 1: Executive Summary
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(13);
         doc.setTextColor(25, 25, 25);
@@ -64,71 +111,45 @@ export const SummaryView: React.FC = () => {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(10);
         doc.setTextColor(60, 60, 60);
-        const execSummary = `The collected evidence highlights an immediate initial imperative: resolve core booking and payment transparency before adding secondary application features. User abandonment across channels is primarily driven by unexpected mobile carrier surcharges and ambiguity regarding real-time seat fulfillment.`;
+        const execSummary = `The collected evidence highlights an immediate imperative: resolve core booking and payment transparency before adding secondary application features. User abandonment across channels is primarily driven by unexpected mobile carrier surcharges and ambiguity regarding real-time seat fulfillment.`;
         const execLines = doc.splitTextToSize(execSummary, maxLineWidth);
         doc.text(execLines, margin, y);
         y += execLines.length * 5 + 10;
 
-        // Section 2: Key Findings
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(13);
         doc.setTextColor(25, 25, 25);
-        doc.text('2. Core Findings & Evidence', margin, y);
+        doc.text('2. Core Findings & Verified Quotes', margin, y);
         y += 7;
 
-        // Finding Card 1
-        doc.setFillColor(248, 248, 246);
-        doc.roundedRect(margin, y, maxLineWidth, 22, 2, 2, 'F');
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(10);
-        doc.setTextColor(190, 130, 20);
-        doc.text('Finding 01: Pricing Shock at Checkout (45% drop-off rate)', margin + 4, y + 6);
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9);
-        doc.setTextColor(70, 70, 70);
-        const f1Text = doc.splitTextToSize('Tested users routinely abandon bookings when service surcharges appear late in checkout rather than upfront on the route search results.', maxLineWidth - 8);
-        doc.text(f1Text, margin + 4, y + 12);
-        y += 28;
+        tabQuotes.forEach((q) => {
+          doc.setFont('helvetica', 'italic');
+          doc.setFontSize(9);
+          doc.setTextColor(80, 80, 80);
+          const qLines = doc.splitTextToSize(`"${q.text}"`, maxLineWidth);
+          doc.text(qLines, margin, y);
+          y += qLines.length * 4.5;
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8);
+          doc.setTextColor(140, 140, 140);
+          doc.text(`Source: ${q.source}`, margin, y);
+          y += 6;
+        });
 
-        // Finding Card 2
-        doc.setFillColor(248, 248, 246);
-        doc.roundedRect(margin, y, maxLineWidth, 22, 2, 2, 'F');
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(10);
-        doc.setTextColor(40, 95, 210);
-        doc.text('Finding 02: Physical Seat Certainty vs Offline Walk-ups', margin + 4, y + 6);
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9);
-        doc.setTextColor(70, 70, 70);
-        const f2Text = doc.splitTextToSize('Passengers require explicit terminal stall locations and vehicle plate verification because operators routinely give priority to walk-up passengers.', maxLineWidth - 8);
-        doc.text(f2Text, margin + 4, y + 12);
-        y += 30;
-
-        // Section 3: Recommended Actions
+        y += 4;
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(13);
         doc.setTextColor(25, 25, 25);
-        doc.text('3. Actionable Next Steps', margin, y);
+        doc.text('3. Recommended Next Steps', margin, y);
         y += 7;
 
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(9.5);
         doc.setTextColor(60, 60, 60);
-        const steps = [
-          '• Conduct 2 structured operator interviews focusing on cash vs digital seat allocation.',
-          '• Implement upfront fee calculation to display total all-inclusive fare prior to checkout.',
-          '• Prototype automated SMS ticket confirmation with explicit pickup plate details.'
-        ];
-        steps.forEach((step) => {
-          doc.text(step, margin + 2, y);
+        openTasks.slice(0, 3).forEach((task) => {
+          doc.text(`• ${task.title} (${task.dueDate || 'Pending'})`, margin + 2, y);
           y += 6;
         });
-
-        // Footer
-        doc.setFont('helvetica', 'italic');
-        doc.setFontSize(8);
-        doc.setTextColor(150, 150, 150);
-        doc.text('Generated by Bob Research Companion · Private & Grounded Research', margin, 280);
 
         doc.save(`Bob-${project.id}-research-summary.pdf`);
         setExportSuccess(true);
@@ -142,128 +163,121 @@ export const SummaryView: React.FC = () => {
   };
 
   return (
-    <div className="max-w-[850px] mx-auto py-2 pb-24">
+    <div className={`mx-auto ${isSidePanel ? 'max-w-none px-2 py-1' : 'max-w-[850px] py-2 pb-24'}`}>
       {/* Header with Title and Export Button */}
-      <div className="flex items-start justify-between gap-6 mb-8 border-b border-[var(--line)] pb-6">
+      <div className="flex items-start justify-between gap-4 mb-6 border-b border-[var(--line)] pb-5">
         <div>
-          <div className="text-[10px] tracking-[0.08em] text-[#999] uppercase font-semibold">
-            RESEARCH SYNTHESIS
+          <div className="text-[10px] tracking-[0.08em] text-[var(--m)] uppercase font-semibold">
+            UNIFIED RESEARCH SUMMARY
           </div>
-          <h1 className="text-[32px] tracking-[-1px] font-extrabold my-2 text-[var(--t)]">
+          <h1 className={`${isSidePanel ? 'text-xl' : 'text-3xl'} tracking-tight font-extrabold my-1 text-[var(--t)]`}>
             {project.title}
           </h1>
-          <div className="flex gap-2 flex-wrap mt-3">
-            <span className="text-[10px] px-2.5 py-1 rounded-full bg-[var(--s2)] text-[#666] dark:text-[#cfc7be]">
-              9 verified sources
-            </span>
-            <span className="text-[10px] px-2.5 py-1 rounded-full bg-[var(--s2)] text-[#666] dark:text-[#cfc7be]">
-              2 conversations
-            </span>
-            <span className="text-[10px] px-2.5 py-1 rounded-full bg-[var(--s2)] text-[#666] dark:text-[#cfc7be]">
-              3 open tasks
-            </span>
+          {/* Zero-Pill Metadata */}
+          <div className="flex items-center gap-2 text-xs text-[var(--m)] mt-2">
+            <span>{topSources.length} verified sources</span>
+            <span aria-hidden="true">·</span>
+            <span>All active tabs unified</span>
+            <span aria-hidden="true">·</span>
+            <span className="text-[var(--y)] font-semibold">{openTasks.length} pending roadmap steps</span>
           </div>
         </div>
 
-        {/* Real PDF Export Button */}
-        <button
-          onClick={handleExportPDF}
-          disabled={isExporting}
-          className="h-10 px-5 rounded-full bg-[#171717] dark:bg-[#f2eee7] text-white dark:text-[#171717] font-bold text-[12px] flex items-center gap-2 shadow-md hover:opacity-90 active:scale-95 transition-all flex-shrink-0 disabled:opacity-50"
-        >
-          {exportSuccess ? (
-            <Check className="w-4 h-4 text-[var(--g)]" />
-          ) : (
-            <Download className="w-4 h-4" />
-          )}
-          <span>{exportSuccess ? 'Downloaded PDF!' : isExporting ? 'Exporting PDF...' : 'Export PDF'}</span>
-        </button>
+        {!isSidePanel && (
+          <button
+            onClick={handleExportPDF}
+            disabled={isExporting}
+            className="h-9 px-4 rounded-xl bg-[#171717] dark:bg-[#f2eee7] text-white dark:text-[#171717] font-bold text-xs flex items-center gap-2 shadow-sm hover:opacity-90 active:scale-95 transition-all shrink-0 disabled:opacity-50"
+          >
+            {exportSuccess ? <Check className="w-3.5 h-3.5 text-[var(--g)]" /> : <Download className="w-3.5 h-3.5" />}
+            <span>{exportSuccess ? 'Saved PDF' : isExporting ? 'Exporting...' : 'Export PDF'}</span>
+          </button>
+        )}
       </div>
 
-      {/* Structured Sections */}
-      <div className="space-y-8">
-        {/* Executive Summary */}
+      <div className="space-y-6">
+        {/* 1. Executive Summary */}
         <section className="space-y-2">
-          <h2 className="text-[18px] font-bold text-[var(--t)] tracking-tight">
-            1. Executive Summary
+          <h2 className="text-sm uppercase font-bold text-[var(--m)] tracking-wider">
+            1. Executive Synthesis
           </h2>
-          <p className="text-[13px] text-[#50504b] dark:text-[#d3ccc3] leading-relaxed">
-            The research points to a clear and immediate starting point: understand the real transport booking problem before adding architectural complexity. Multiple independent channels indicate that user drop-off is driven by ambiguity around real-time seat availability and pickup certainty.
-          </p>
-        </section>
-
-        {/* Key Findings */}
-        <section className="space-y-3">
-          <h2 className="text-[18px] font-bold text-[var(--t)] tracking-tight">
-            2. Key Findings
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-            <div className="bg-[var(--s)] border border-[var(--line)] rounded-[15px] p-4">
-              <span className="text-[10px] font-bold text-[var(--y)] uppercase tracking-wider block mb-1">
-                Finding 01
-              </span>
-              <h4 className="text-[13px] font-bold text-[var(--t)] m-0 mb-1.5">
-                Hidden Fees & Pricing Shock
-              </h4>
-              <p className="text-[12px] text-[var(--m)] leading-relaxed m-0">
-                Over 45% of tested users drop out during fare calculation when local service surcharges appear unexpectedly before checkout.
-              </p>
-            </div>
-            <div className="bg-[var(--s)] border border-[var(--line)] rounded-[15px] p-4">
-              <span className="text-[10px] font-bold text-[var(--b)] uppercase tracking-wider block mb-1">
-                Finding 02
-              </span>
-              <h4 className="text-[13px] font-bold text-[var(--t)] m-0 mb-1.5">
-                Lack of Guaranteed Dispatch
-              </h4>
-              <p className="text-[12px] text-[var(--m)] leading-relaxed m-0">
-                Unlike ride-hailing in mature markets, inter-city transport passengers require explicit physical station location and vehicle plate validation.
-              </p>
-            </div>
+          <div className="p-4 rounded-2xl bg-[var(--s)] border border-[var(--line)] text-xs text-[var(--t)] leading-relaxed">
+            The collected evidence across all open tabs indicates a direct conclusion: resolve fundamental booking and payment transparency before adding secondary application features. Passenger drop-off is predominantly driven by unexpected carrier fees and lack of guaranteed seat assignment.
           </div>
         </section>
 
-        {/* Evidence & Sources */}
-        <section className="space-y-3">
-          <h2 className="text-[18px] font-bold text-[var(--t)] tracking-tight">
-            3. Supporting Evidence & Sources
-          </h2>
-          <div className="bg-[var(--s)] border border-[var(--line)] rounded-[17px] divide-y divide-[var(--line)] overflow-hidden">
-            <div className="p-3.5 flex items-center justify-between">
-              <div>
-                <b className="text-[12px] text-[var(--t)] block">Why people abandon online transport booking</b>
-                <small className="text-[10px] text-[var(--m)]">research.example.com/transport-booking · 3 highlights</small>
+        {/* 2. Quotes with Colored Bars on the Left (User Request) */}
+        <section className="space-y-2.5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm uppercase font-bold text-[var(--m)] tracking-wider">
+              2. Core Tab Quotes & Evidence
+            </h2>
+            <span className="text-[11px] text-[var(--m)]">Direct passages</span>
+          </div>
+          <div className="space-y-2.5">
+            {tabQuotes.map((q) => (
+              <div
+                key={q.id}
+                className={`p-3.5 rounded-r-2xl border-l-4 border-y border-r border-[var(--line)] ${q.color} transition-all`}
+              >
+                <div className="text-xs text-[var(--t)] leading-relaxed font-medium italic">
+                  "{q.text}"
+                </div>
+                <div className="flex items-center gap-2 text-[10px] text-[var(--m)] mt-2 font-mono">
+                  <span>{q.domain}</span>
+                  <span aria-hidden="true">·</span>
+                  <span>Verified highlight</span>
+                </div>
               </div>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[var(--ys)] text-[#765700] font-bold">
-                96% relevance
-              </span>
-            </div>
-            <div className="p-3.5 flex items-center justify-between">
-              <div>
-                <b className="text-[12px] text-[var(--t)] block">ChatGPT — transport research synthesis</b>
-                <small className="text-[10px] text-[var(--m)]">chatgpt.com/share/transport · 2 claims</small>
-              </div>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[var(--bs)] text-[#1e40af] font-bold">
-                88% relevance
-              </span>
-            </div>
+            ))}
           </div>
         </section>
 
-        {/* Recommended Next Steps */}
-        <section className="space-y-2">
-          <h2 className="text-[18px] font-bold text-[var(--t)] tracking-tight">
-            4. Recommended Next Steps
+        {/* 3. Supporting Sources with Green Relevance Level */}
+        <section className="space-y-2.5">
+          <h2 className="text-sm uppercase font-bold text-[var(--m)] tracking-wider">
+            3. Supporting Sources (Top Priority)
           </h2>
-          <div className="bg-[var(--s2)] rounded-[15px] p-4 space-y-2 text-[12.5px] text-[var(--t)]">
-            <div className="flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-[var(--y)] text-neutral-900 font-bold text-[10px] grid place-items-center">1</span>
-              <span>Complete 2 operator interviews focusing on seat inventory sync.</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-[var(--y)] text-neutral-900 font-bold text-[10px] grid place-items-center">2</span>
-              <span>Draft a 1-page hypothesis brief summarizing operator onboarding friction.</span>
-            </div>
+          <div className="bg-[var(--s)] border border-[var(--line)] rounded-2xl divide-y divide-[var(--line)] overflow-hidden">
+            {topSources.map((source, idx) => (
+              <div key={idx} className="p-3.5 flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <a
+                    href={source.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs font-bold text-[var(--t)] hover:text-[var(--y)] transition-colors line-clamp-1"
+                  >
+                    {source.title}
+                  </a>
+                  <p className="text-[11px] text-[var(--m)] line-clamp-1 leading-normal">
+                    {source.snippet}
+                  </p>
+                </div>
+                {/* Green level of relevance tag */}
+                <div className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-mono text-[11px] font-extrabold shrink-0">
+                  {source.relevance}% relevance
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* 4. Recommended Next Steps Matching Tasks Page */}
+        <section className="space-y-2.5">
+          <h2 className="text-sm uppercase font-bold text-[var(--m)] tracking-wider">
+            4. Recommended Next Steps (Synchronized)
+          </h2>
+          <div className="p-4 rounded-2xl bg-[var(--s)] border border-[var(--line)] space-y-2.5">
+            {openTasks.slice(0, 3).map((task, idx) => (
+              <div key={task.id} className="flex items-center gap-3 text-xs text-[var(--t)]">
+                <span className="w-5 h-5 rounded-lg bg-[var(--y)] text-[#171717] font-extrabold text-[10px] flex items-center justify-center shrink-0">
+                  {idx + 1}
+                </span>
+                <span className="font-semibold flex-1 truncate">{task.title}</span>
+                <span className="text-[10px] text-[var(--m)] font-mono shrink-0">{task.dueDate}</span>
+              </div>
+            ))}
           </div>
         </section>
       </div>

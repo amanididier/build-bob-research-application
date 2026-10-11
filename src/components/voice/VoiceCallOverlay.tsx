@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useVoiceStore } from '../../store/useVoiceStore';
+import { voiceController } from '../../lib/voice/voiceController';
 import { PhoneOff, Mic, MicOff, MessageSquare, Volume2, Sparkles, Brain, ArrowUpCircle } from 'lucide-react';
 import { AudioWaveVisualizer } from './AudioWaveVisualizer';
 
@@ -88,9 +89,20 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({ onClose }) =
           <span className="text-[13px] font-bold tracking-wide uppercase text-neutral-400">
             Live Call with Bob
           </span>
-          <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[11px] font-semibold text-emerald-400">
-            Natural Voice Mode
-          </span>
+          {voiceController.isLiveModeActive() ? (
+            <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-[11px] font-semibold text-emerald-400 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Gemini Live API
+            </span>
+          ) : (
+            <span
+              className="px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-[11px] font-semibold text-amber-300 flex items-center gap-1.5 cursor-help"
+              title="Primary Gemini Live quota reached / network interruption. Switched to fallback agent mode."
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+              Fallback Agent Mode
+            </span>
+          )}
           {isKokoroInstalled ? (
             <span className="hidden sm:inline-flex px-2 py-0.5 rounded-full bg-blue-500/15 border border-blue-500/30 text-[11px] font-medium text-blue-300">
               Kokoro 82M ✓

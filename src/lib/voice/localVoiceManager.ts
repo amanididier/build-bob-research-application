@@ -72,10 +72,20 @@ class LocalVoiceManager {
     return Boolean(this.transcriber);
   }
 
+  private selectedModel: 'whisper-tiny' | 'moonshine-tiny' = 'whisper-tiny';
+
+  public getSelectedModel(): 'whisper-tiny' | 'moonshine-tiny' {
+    return this.selectedModel;
+  }
+
+  public setSelectedModel(model: 'whisper-tiny' | 'moonshine-tiny'): void {
+    this.selectedModel = model;
+  }
+
   /**
    * Returns true if model is compiled in memory or marked installed in local cache.
    */
-  public isModelInstalled(): boolean {
+  public isModelInstalled(_model?: string): boolean {
     if (this.isReady()) return true;
     if (typeof window !== 'undefined') {
       return localStorage.getItem('bob_local_whisper_ready') === 'true';

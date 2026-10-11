@@ -220,14 +220,11 @@ export const OnboardingFlow: React.FC = () => {
     setIsBobTyping(true);
     try {
       const response = await bobAi.generateResearchAnswer(
-        `You are Bob, a warm, intelligent, local-first research companion. The user just completed onboarding and sent their first message: "${userText}". Greet them personally as ${localName || 'friend'} and provide a concise, high-value, structured response (2-3 sentences) showing how you will support them.`,
-        'urugendo',
-        undefined,
-        bobAi.getTastePreference()
+        `You are Bob, a warm, intelligent, local-first research companion. The user just completed onboarding and sent their first message: "${userText}". Greet them personally as ${localName || 'friend'} and provide a concise, high-value, structured response (2-3 sentences) showing how you will support them.`
       );
       setChatMessages((prev) => [
         ...prev,
-        { role: 'assistant', text: response.answer, time: 'Just now' }
+        { role: 'assistant', text: response.answer || (response as any).text || '', time: 'Just now' }
       ]);
     } catch {
       setChatMessages((prev) => [
@@ -459,7 +456,12 @@ export const OnboardingFlow: React.FC = () => {
                   </div>
                   <button
                     type="button"
-                    onClick={() => downloadExtensionZip(setExtDownload)}
+                    onClick={async () => {
+                      const res = await downloadExtensionZip();
+                      if (res && res.ok) {
+                        setExtDownload({ state: 'saved', message: res.path || 'Extension downloaded' });
+                      }
+                    }}
                     className="h-10 px-4 rounded-xl bg-[var(--y)] text-[#171717] font-bold text-[12px] flex items-center gap-2 hover:opacity-90 active:scale-95 cursor-pointer shadow-xs"
                   >
                     <Download className="w-4 h-4" />

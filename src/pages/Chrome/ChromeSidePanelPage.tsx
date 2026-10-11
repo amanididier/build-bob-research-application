@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { BobAvatar } from '../../components/BobAvatar';
+import { SummaryView } from '../Research/SummaryView';
+import { TabsView } from '../Research/TabsView';
+import { TasksView } from '../Research/TasksView';
 import { 
   ArrowLeft, 
   RotateCcw, 
@@ -11,10 +14,10 @@ import {
   Copy, 
   Bookmark, 
   Plus, 
-  ExternalLink,
-  Lock,
-  Layers,
-  CheckCircle2
+  ExternalLink, 
+  Lock, 
+  Layers, 
+  CheckCircle2 
 } from 'lucide-react';
 
 export const ChromeSidePanelPage: React.FC = () => {
@@ -323,53 +326,20 @@ export const ChromeSidePanelPage: React.FC = () => {
               )}
 
               {panelView === 'tabs' && (
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-[12px] font-bold text-[var(--t)] m-0">Detected Tabs</h4>
-                    <button
-                      onClick={() => setIsTabPickerOpen(true)}
-                      className="text-[10px] text-[var(--y)] font-semibold"
-                    >
-                      Select tabs
-                    </button>
-                  </div>
-                  <div className="p-2.5 rounded-xl border border-[var(--line)] bg-[var(--s2)] text-[11px] space-y-1">
-                    <b className="block truncate text-[var(--t)]">1. Why people abandon online booking</b>
-                    <small className="block text-[9px] text-[var(--m)]">research.example.com · Current tab</small>
-                  </div>
-                  <div className="p-2.5 rounded-xl border border-[var(--line)] bg-[var(--s)] text-[11px] space-y-1">
-                    <b className="block truncate text-[var(--t)]">2. ChatGPT — transport research</b>
-                    <small className="block text-[9px] text-[var(--m)]">chatgpt.com · 2 mentions</small>
-                  </div>
+                <div className="animate-in fade-in duration-150">
+                  <TabsView isSidePanel={true} />
                 </div>
               )}
 
               {panelView === 'summary' && (
-                <div className="space-y-2.5 text-[11px] text-[var(--t)]">
-                  <h4 className="text-[12px] font-bold m-0">Quick Synthesis</h4>
-                  <p className="text-[var(--m)] leading-relaxed m-0">
-                    Pricing shock at checkout and missing station location are the two dominant friction drivers across all transport pages.
-                  </p>
-                  <button
-                    onClick={() => triggerThinking('Summary Saved', 'Pushed to main research report.', 'Updated')}
-                    className="w-full py-2 rounded-xl bg-[#171717] dark:bg-[#f2eee7] text-white dark:text-[#171717] text-[10px] font-semibold"
-                  >
-                    Save to Research Report
-                  </button>
+                <div className="animate-in fade-in duration-150">
+                  <SummaryView isSidePanel={true} />
                 </div>
               )}
 
               {panelView === 'tasks' && (
-                <div className="space-y-2 text-[11px]">
-                  <h4 className="text-[12px] font-bold text-[var(--t)] m-0">Active Tasks</h4>
-                  <div className="p-2.5 rounded-xl border border-[var(--line)] bg-[var(--s2)] flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-[var(--g)] flex-shrink-0" />
-                    <span className="truncate text-[var(--t)]">Verify pricing friction</span>
-                  </div>
-                  <div className="p-2.5 rounded-xl border border-[var(--line)] bg-[var(--s)] flex items-center gap-2">
-                    <span className="w-4 h-4 rounded-full border border-neutral-400 flex-shrink-0" />
-                    <span className="truncate text-[var(--t)]">Compare 3 transport sources</span>
-                  </div>
+                <div className="animate-in fade-in duration-150">
+                  <TasksView isSidePanel={true} />
                 </div>
               )}
             </div>

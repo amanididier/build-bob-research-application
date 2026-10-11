@@ -1,279 +1,268 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { CheckCircle2, Circle, ChevronDown, ChevronRight, Globe, ExternalLink, Plus } from 'lucide-react';
+import { CheckCircle2, Circle, ChevronDown, ChevronRight, Globe, ExternalLink, Plus, Star, Sparkles } from 'lucide-react';
 
-interface TabData {
+export interface TabItemData {
   id: string;
   title: string;
   domain: string;
   url: string;
   preview: string;
   relevance: number;
+  isToday: boolean;
+  isRelated: boolean;
   selected: boolean;
   faviconChar: string;
 }
 
-export const TabsView: React.FC = () => {
+interface TabsViewProps {
+  isSidePanel?: boolean;
+}
+
+export const TabsView: React.FC<TabsViewProps> = ({ isSidePanel = false }) => {
   const { triggerThinking, setIsTabPickerOpen } = useApp();
-  const [tabs, setTabs] = useState<TabData[]>([
-    {
-      id: 'tab-1',
-      title: 'Why people abandon online transport booking',
-      domain: 'research.example.com',
-      url: 'https://research.example.com/transport-booking',
-      preview: 'Users often leave booking flows when prices, seat availability, or pickup details are unclear...',
-      relevance: 96,
-      selected: true,
-      faviconChar: 'R',
-    },
-    {
-      id: 'tab-2',
-      title: 'ChatGPT — transport research & friction comparison',
-      domain: 'chatgpt.com',
-      url: 'https://chatgpt.com/c/transport-flow',
-      preview: 'Comparing claims side by side helps separate repeated assumptions from useful evidence.',
-      relevance: 88,
-      selected: true,
-      faviconChar: 'C',
-    },
-    {
-      id: 'tab-3',
-      title: 'Rwanda transport booking workflow notes',
-      domain: 'docs.google.com',
-      url: 'https://docs.google.com/document/transport',
-      preview: 'Local cooperative drivers often maintain manual paper ticket registers in parallel with mobile apps.',
-      relevance: 92,
-      selected: true,
-      faviconChar: 'N',
-    },
-    {
-      id: 'tab-4',
-      title: 'Competitor Booking Flow & Checkout Architecture',
-      domain: 'example.org',
-      url: 'https://example.org/checkout-case-study',
-      preview: 'Analyzing step-by-step dropoff across 4 major East African bus ticketing platforms.',
-      relevance: 74,
-      selected: false,
-      faviconChar: 'V',
-    },
-    {
-      id: 'tab-5',
-      title: 'AI Product Research & Local Assistant Design',
-      domain: 'claude.ai',
-      url: 'https://claude.ai/chat/ai-product-research',
-      preview: 'Strategies for grounding small local models with live active tab context in Chrome.',
-      relevance: 62,
-      selected: false,
-      faviconChar: 'A',
-    },
-    {
-      id: 'tab-6',
-      title: 'General travel blog post and tourism tips',
-      domain: 'travelblog.net',
-      url: 'https://travelblog.net/visiting-kigali',
-      preview: 'Things to see around Kigali, local markets, and scenic hills.',
-      relevance: 42,
-      selected: false,
-      faviconChar: 'T',
-    },
-  ]);
 
-  const [isOtherTabsOpen, setIsOtherTabsOpen] = useState(false);
-
-  const toggleSelect = (id: string) => {
-    setTabs((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, selected: !t.selected } : t))
-    );
-  };
-
-  const getRelevanceBadge = (relevance: number) => {
-    if (relevance >= 80) {
-      return {
-        bg: '#e6f7ed',
-        text: '#14844d',
-        border: '#38b96e',
-        label: 'High relevance',
-      };
-    } else if (relevance >= 66) {
-      return {
-        bg: '#e7f0ff',
-        text: '#1d4ed8',
-        border: '#4385f5',
-        label: 'Supporting',
-      };
-    } else if (relevance >= 50) {
-      return {
-        bg: '#fff3c5',
-        text: '#854d0e',
-        border: '#f4bc18',
-        label: 'Related',
-      };
-    } else {
-      return {
-        bg: '#fee2e2',
-        text: '#991b1b',
-        border: '#ef4444',
-        label: 'Low relevance',
-      };
+  const [tabs, setTabs] = useState<TabItemData[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('bob_tabs_catalog_v2');
+        if (saved) return JSON.parse(saved);
+      } catch {}
     }
+    return [
+      {
+        id: 'tab-1',
+        title: 'Why people abandon online transport booking',
+        domain: 'research.example.com',
+        url: 'https://research.example.com/transport-booking',
+        preview: 'Users often leave booking flows when prices, seat availability, or pickup details are unclear...',
+        relevance: 96,
+        isToday: true,
+        isRelated: true,
+        selected: true,
+        faviconChar: 'R',
+      },
+      {
+        id: 'tab-2',
+        title: 'ChatGPT — transport research & friction comparison',
+        domain: 'chatgpt.com',
+        url: 'https://chatgpt.com/c/transport-flow',
+        preview: 'Comparing claims side by side helps separate repeated assumptions from useful evidence.',
+        relevance: 88,
+        isToday: true,
+        isRelated: true,
+        selected: true,
+        faviconChar: 'C',
+      },
+      {
+        id: 'tab-3',
+        title: 'Rwanda transport booking workflow notes',
+        domain: 'docs.google.com',
+        url: 'https://docs.google.com/document/transport',
+        preview: 'Local cooperative drivers often maintain manual paper ticket registers in parallel with mobile apps.',
+        relevance: 92,
+        isToday: true,
+        isRelated: true,
+        selected: true,
+        faviconChar: 'N',
+      },
+      {
+        id: 'tab-4',
+        title: 'Competitor Booking Flow & Checkout Architecture',
+        domain: 'example.org',
+        url: 'https://example.org/checkout-case-study',
+        preview: 'Analyzing step-by-step dropoff across 4 major East African bus ticketing platforms.',
+        relevance: 74,
+        isToday: true,
+        isRelated: true,
+        selected: false,
+        faviconChar: 'V',
+      },
+      {
+        id: 'tab-5',
+        title: 'AI Product Research & Local Assistant Design',
+        domain: 'claude.ai',
+        url: 'https://claude.ai/chat/ai-product-research',
+        preview: 'Strategies for grounding small local models with live active tab context in Chrome.',
+        relevance: 62,
+        isToday: false,
+        isRelated: false,
+        selected: false,
+        faviconChar: 'A',
+      },
+      {
+        id: 'tab-6',
+        title: 'General travel blog post and tourism tips',
+        domain: 'travelblog.net',
+        url: 'https://travelblog.net/visiting-kigali',
+        preview: 'Things to see around Kigali, local markets, and scenic hills.',
+        relevance: 42,
+        isToday: false,
+        isRelated: false,
+        selected: false,
+        faviconChar: 'T',
+      },
+    ];
+  });
+
+  const [isOlderTabsOpen, setIsOlderTabsOpen] = useState(false);
+
+  // Filter based on desktop vs side-panel spec:
+  // Desktop: Only show related (top priority) tabs opened today
+  // Side panel: Can show all, and clicking a tab adds it to Desktop
+  const todayTopTabs = tabs.filter((t) => t.isToday && t.isRelated);
+  const olderOrOtherTabs = tabs.filter((t) => !t.isToday || !t.isRelated);
+
+  const toggleSelectTab = (id: string) => {
+    setTabs((prev) => {
+      const updated = prev.map((t) =>
+        t.id === id ? { ...t, selected: !t.selected, isRelated: true } : t
+      );
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('bob_tabs_catalog_v2', JSON.stringify(updated));
+      }
+      return updated;
+    });
   };
 
-  const selectedTabs = tabs.filter((t) => t.selected);
-  const otherTabs = tabs.filter((t) => !t.selected);
+  const handlePromoteToDesktop = (tab: TabItemData) => {
+    setTabs((prev) => {
+      const updated = prev.map((t) =>
+        t.id === tab.id ? { ...t, isRelated: true, isToday: true, selected: true } : t
+      );
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('bob_tabs_catalog_v2', JSON.stringify(updated));
+      }
+      return updated;
+    });
+    triggerThinking('Tab Added to Desktop', `Added "${tab.title}" to active research scope.`, 'Syncing tab context');
+  };
 
   return (
-    <div className="max-w-[850px] mx-auto py-2 pb-24">
+    <div className={`mx-auto ${isSidePanel ? 'max-w-none px-2 py-1' : 'max-w-[850px] py-2 pb-24'}`}>
       {/* Header */}
-      <div className="flex items-center justify-between py-3 pb-6 border-b border-[var(--line)] mb-6">
+      <div className="flex items-center justify-between py-3 pb-5 border-b border-[var(--line)] mb-6">
         <div>
-          <div className="text-[10px] tracking-[0.08em] text-[#999] uppercase font-semibold">
-            CONNECTED BROWSER CONTEXT
+          <div className="text-[10px] tracking-[0.08em] text-[var(--m)] uppercase font-semibold">
+            {isSidePanel ? 'BROWSER CONTEXT TABS' : 'CONNECTED RESEARCH TABS'}
           </div>
-          <h1 className="text-[31px] tracking-[-1px] font-extrabold my-2 text-[var(--t)]">
-            Connected Research Tabs
+          <h1 className={`${isSidePanel ? 'text-xl' : 'text-3xl'} tracking-tight font-extrabold my-1 text-[var(--t)]`}>
+            Tabs & Evidence
           </h1>
-          <p className="text-[var(--m)] text-[13px] leading-relaxed max-w-[620px] m-0">
-            Bob monitors and extracts relevant passages from your active Chrome session. Only selected tabs are fed into responses and summaries.
+          <p className="text-[var(--m)] text-xs leading-relaxed max-w-[620px] m-0">
+            {isSidePanel
+              ? 'Select any browser tab below to focus and sync it into your main desktop research study.'
+              : 'Showing top priority tabs opened today. Older or low-relevance tabs are neatly categorized.'}
           </p>
         </div>
 
         <button
           onClick={() => setIsTabPickerOpen(true)}
-          className="h-9 px-3.5 rounded-xl border border-[var(--line)] bg-[var(--s)] hover:bg-[var(--s2)] text-[var(--t)] text-[11px] font-semibold flex items-center gap-1.5 shadow-sm transition-colors"
+          className="h-8 px-3 rounded-xl bg-[var(--y)] hover:bg-[#e0ac15] text-[#171717] text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all shrink-0"
         >
           <Plus className="w-3.5 h-3.5" />
-          <span>Connect Tabs</span>
+          <span>Add Tab</span>
         </button>
       </div>
 
-      {/* Selected Tabs Section */}
-      <div className="space-y-3 mb-8">
-        <div className="flex items-center justify-between">
-          <h3 className="text-[14px] font-bold text-[var(--t)] m-0">
-            Selected Tabs ({selectedTabs.length})
-          </h3>
-          <span className="text-[11px] text-[var(--m)]">
-            Active in synthesis
-          </span>
+      {/* 1. Related Top-Priority Tabs Opened Today */}
+      <div className="space-y-3 mb-6">
+        <div className="flex items-center justify-between text-xs font-bold text-[var(--t)]">
+          <div className="flex items-center gap-1.5">
+            <Star className="w-3.5 h-3.5 text-[var(--y)] fill-current" />
+            <span>Today's Top Priority Tabs ({todayTopTabs.length})</span>
+          </div>
+          <span className="text-[10px] text-[var(--m)] font-mono">Synced to Bob Brain</span>
         </div>
 
         <div className="space-y-2.5">
-          {selectedTabs.map((tab) => {
-            const badge = getRelevanceBadge(tab.relevance);
-            return (
-              <div
-                key={tab.id}
-                className="bg-[var(--s)] border border-[var(--line)] rounded-[15px] p-4 flex items-start gap-3.5 hover:shadow-sm transition-shadow"
-              >
-                {/* Selection Circle */}
+          {todayTopTabs.map((tab) => (
+            <div
+              key={tab.id}
+              className="p-4 rounded-2xl bg-[var(--s)] border border-[var(--line)] shadow-sm flex items-start justify-between gap-3 hover:border-[var(--y)]/40 transition-all"
+            >
+              <div className="flex items-start gap-3 min-w-0">
                 <button
-                  onClick={() => toggleSelect(tab.id)}
-                  className="mt-1 text-[var(--g)] flex-shrink-0"
+                  type="button"
+                  onClick={() => toggleSelectTab(tab.id)}
+                  className="mt-0.5 text-[var(--m)] hover:text-[var(--y)] transition-colors shrink-0"
                 >
-                  <CheckCircle2 className="w-5 h-5 fill-current" />
+                  {tab.selected ? (
+                    <CheckCircle2 className="w-4 h-4 text-[var(--g)] fill-current" />
+                  ) : (
+                    <Circle className="w-4 h-4" />
+                  )}
                 </button>
-
-                {/* Favicon Icon */}
-                <div className="w-7 h-7 rounded-[8px] bg-[var(--s2)] text-[var(--t)] font-bold text-[11px] grid place-items-center flex-shrink-0 mt-0.5">
-                  {tab.faviconChar}
-                </div>
-
-                {/* Details */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-3">
-                    <b className="text-[13px] text-[var(--t)] truncate block font-bold">
-                      {tab.title}
-                    </b>
-                    <span
-                      className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full flex-shrink-0"
-                      style={{
-                        backgroundColor: badge.bg,
-                        color: badge.text,
-                        border: `1px solid ${badge.border}`,
-                      }}
-                    >
-                      {tab.relevance}% · {badge.label}
+                <div className="min-w-0 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="w-4 h-4 rounded bg-[var(--s2)] text-[10px] font-bold text-[var(--m)] flex items-center justify-center font-mono">
+                      {tab.faviconChar}
                     </span>
+                    <a
+                      href={tab.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs font-bold text-[var(--t)] hover:text-[var(--y)] truncate block transition-colors"
+                    >
+                      {tab.title}
+                    </a>
                   </div>
-
-                  <small className="block text-[11px] text-[var(--m)] mt-0.5">
-                    {tab.domain}
-                  </small>
-
-                  <p className="text-[12px] text-[#50504b] dark:text-[#d3ccc3] mt-2 leading-relaxed m-0">
-                    "{tab.preview}"
+                  <p className="text-[11px] text-[var(--m)] line-clamp-2 leading-relaxed">
+                    {tab.preview}
                   </p>
+                  <div className="text-[10px] text-[var(--m)] font-mono">{tab.domain}</div>
                 </div>
               </div>
-            );
-          })}
+
+              {/* Green level of relevance badge */}
+              <div className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-mono text-[11px] font-extrabold shrink-0">
+                {tab.relevance}%
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Other Tabs Section (Collapsible) */}
-      <div className="space-y-3">
-        <button
-          onClick={() => setIsOtherTabsOpen(!isOtherTabsOpen)}
-          className="flex items-center gap-2 text-[14px] font-bold text-[var(--t)] hover:text-[var(--y)] transition-colors"
-        >
-          {isOtherTabsOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          <span>Other Detected Tabs ({otherTabs.length})</span>
-          <span className="text-[11px] font-normal text-[var(--m)] ml-2">
-            Click to view and connect
-          </span>
-        </button>
+      {/* 2. Older / Collapsed Tabs Archive */}
+      {olderOrOtherTabs.length > 0 && (
+        <div className="space-y-3 pt-3 border-t border-[var(--line)]">
+          <button
+            type="button"
+            onClick={() => setIsOlderTabsOpen((prev) => !prev)}
+            className="flex items-center justify-between w-full text-xs font-bold text-[var(--m)] hover:text-[var(--t)] transition-colors"
+          >
+            <span>Older or Lower-Relevance Tabs ({olderOrOtherTabs.length})</span>
+            {isOlderTabsOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          </button>
 
-        {isOtherTabsOpen && (
-          <div className="space-y-2.5 pt-1">
-            {otherTabs.map((tab) => {
-              const badge = getRelevanceBadge(tab.relevance);
-              return (
+          {isOlderTabsOpen && (
+            <div className="space-y-2 pt-1 animate-in fade-in duration-150">
+              {olderOrOtherTabs.map((tab) => (
                 <div
                   key={tab.id}
-                  className="bg-[var(--s)]/70 border border-[var(--line)] rounded-[15px] p-4 flex items-start gap-3.5 hover:bg-[var(--s)] transition-colors opacity-90"
+                  className="p-3.5 rounded-xl bg-[var(--s2)]/40 border border-[var(--line)] flex items-center justify-between gap-3 text-xs"
                 >
-                  <button
-                    onClick={() => toggleSelect(tab.id)}
-                    className="mt-1 text-[#aaa] hover:text-[var(--t)] flex-shrink-0"
-                  >
-                    <Circle className="w-5 h-5" />
-                  </button>
-
-                  <div className="w-7 h-7 rounded-[8px] bg-[var(--s2)] text-[var(--m)] font-bold text-[11px] grid place-items-center flex-shrink-0 mt-0.5">
-                    {tab.faviconChar}
+                  <div className="min-w-0">
+                    <div className="font-semibold text-[var(--t)] truncate">{tab.title}</div>
+                    <div className="text-[10px] text-[var(--m)] font-mono">{tab.domain}</div>
                   </div>
 
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-3">
-                      <b className="text-[13px] text-[var(--t)] truncate block font-bold">
-                        {tab.title}
-                      </b>
-                      <span
-                        className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full flex-shrink-0"
-                        style={{
-                          backgroundColor: badge.bg,
-                          color: badge.text,
-                          border: `1px solid ${badge.border}`,
-                        }}
-                      >
-                        {tab.relevance}% · {badge.label}
-                      </span>
-                    </div>
-
-                    <small className="block text-[11px] text-[var(--m)] mt-0.5">
-                      {tab.domain}
-                    </small>
-
-                    <p className="text-[12px] text-[var(--m)] mt-1.5 leading-relaxed m-0">
-                      "{tab.preview}"
-                    </p>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="font-mono text-[10px] text-[var(--m)]">{tab.relevance}%</span>
+                    <button
+                      type="button"
+                      onClick={() => handlePromoteToDesktop(tab)}
+                      className="px-2.5 py-1 rounded-lg bg-[var(--s)] hover:bg-[var(--y)] hover:text-[#171717] border border-[var(--line)] text-[10px] font-bold text-[var(--t)] transition-all"
+                    >
+                      Focus in Desktop
+                    </button>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

@@ -13,9 +13,7 @@ export async function generateSessionSummary(sessionId: string): Promise<string>
   try {
     const response = await bobAi.generateResearchAnswer(
       `Summarize this research conversation into 2-3 concise, high-impact bullet points:\n${conversationText}`,
-      sessionId,
-      undefined,
-      bobAi.getTastePreference()
+      sessionId
     );
     const summary = response.answer.slice(0, 300);
     await updateSessionSummary(sessionId, summary);

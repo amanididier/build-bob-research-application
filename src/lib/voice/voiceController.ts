@@ -6,6 +6,8 @@ import { tts } from './ttsProvider';
 import { audioQueue } from './audioQueue';
 import { ResponseTextChunker } from './textChunker';
 import { SILENCE_TIMEOUT_MS, MAX_CALL_IDLE_MS, DEFAULT_VOICE_CONFIG } from './voiceConfig';
+import { liveProvider } from './liveProvider';
+import { voiceDiagnostics } from './diagnostics';
 
 const SILENCE_MS: Record<VoiceMode, number> = {
   // WhisperFlow dictation: finalize live words into composer after ~1.5s silence
@@ -132,6 +134,61 @@ export class VoiceController {
     }
   }
 
+  private isUsingLive = false;
+
+  private async failoverToLegacyCall(stream: MediaStream): Promise<void> {
+    if (this.isUsingLive) {
+      liveProvider.stop();
+      this.isUsingLive = false;
+    }
+    voiceDiagnostics.set({ provider: 'Fallback Secondary Agent', connection: 'active' });
+    this.startVad(stream);
+    this.armCallIdleTimer();
+    await this.startLegacySTT();
+  }
+
+  private async startLegacySTT(): Promise<void> {
+    await stt.start(
+      (event) => {
+        this.currentTranscript = event.transcript;
+
+        if (this.mode === 'prompt') {
+          this.onTranscriptUpdate?.(event.transcript, event.isFinal);
+          if (event.isFinal) {
+            this.setState('TRANSCRIPT_READY');
+            if (this.transcriptReadyTimer) clearTimeout(this.transcriptReadyTimer);
+            this.transcriptReadyTimer = setTimeout(() => {
+              if (this.isVoiceModeActive && this.mode === 'prompt') {
+                this.setState('LISTENING');
+              }
+            }, 1200);
+          } else if (this.state !== 'USER_SPEAKING') {
+            this.setState('USER_SPEAKING');
+          }
+          return;
+        }
+
+        // Call mode
+        if (event.isFinal) {
+          void this.handleFinalTranscript(event.transcript);
+          return;
+        }
+
+        if (this.state !== 'USER_SPEAKING' && this.state !== 'SUBMITTING' && this.state !== 'THINKING') {
+          this.setState('USER_SPEAKING');
+          this.clearCallIdleTimer();
+        }
+      },
+      (errMsg) => {
+        this.setState('ERROR', errMsg);
+      }
+    );
+  }
+
+  public isLiveModeActive(): boolean {
+    return this.isUsingLive;
+  }
+
   public async startVoiceMode(targetMode?: VoiceMode): Promise<boolean> {
     if (targetMode) {
       this.mode = targetMode;
@@ -146,47 +203,81 @@ export class VoiceController {
       this.currentTranscript = '';
       this.setState('LISTENING');
 
-      this.startVad(stream);
       if (this.mode === 'call') {
         this.armCallIdleTimer();
+        const apiKey = typeof window !== 'undefined'
+          ? (localStorage.getItem('gemini_api_key') || (import.meta as any).env?.VITE_GEMINI_API_KEY || '')
+          : '';
+
+        if (apiKey && DEFAULT_VOICE_CONFIG.liveEnabled) {
+          try {
+            const systemInstruction =
+              "You are Bob, a helpful, witty, and proactive AI companion. Assist the user with research, productivity, and thought partner conversations in a friendly, conversational tone. Keep voice responses brief, vivid, and articulate.";
+            const connected = await liveProvider.connect(stream, apiKey, systemInstruction, {
+              onConnected: (model) => {
+                this.isUsingLive = true;
+                voiceDiagnostics.set({ provider: 'Gemini Multimodal Live', model, connection: 'connected' });
+                voiceDiagnostics.event('Primary Gemini Live connected successfully');
+              },
+              onUserSpeechStart: () => {
+                this.setState('USER_SPEAKING');
+                this.clearCallIdleTimer();
+              },
+              onUserSpeechEnd: () => {
+                if (this.state === 'USER_SPEAKING') {
+                  this.setState('THINKING');
+                }
+              },
+              onUserTranscript: (text, _isFinal) => {
+                this.currentTranscript = text;
+                this.notifyListeners();
+              },
+              onModelText: (text, _isFinal) => {
+                this.bobReply = text;
+                this.notifyListeners();
+              },
+              onModelAudioStart: () => {
+                this.setState('SPEAKING');
+                this.clearCallIdleTimer();
+              },
+              onModelAudioEnd: () => {
+                this.setState('LISTENING');
+                this.armCallIdleTimer();
+              },
+              onInterrupted: () => {
+                this.setState('LISTENING');
+              },
+              onError: (_err) => {
+                voiceDiagnostics.event('Primary Gemini Live quota reached / network interruption. Switched to fallback agent mode.');
+                void this.failoverToLegacyCall(stream);
+              },
+              onClosed: () => {
+                if (this.isVoiceModeActive && this.isUsingLive) {
+                  voiceDiagnostics.event('Primary Gemini Live quota reached / network interruption. Switched to fallback agent mode.');
+                  void this.failoverToLegacyCall(stream);
+                }
+              },
+            });
+
+            if (connected) {
+              this.isUsingLive = true;
+              return true;
+            }
+          } catch {
+            voiceDiagnostics.event('Primary Gemini Live quota reached / network interruption. Switched to fallback agent mode.');
+          }
+        } else {
+          voiceDiagnostics.event('Primary Gemini Live quota reached / network interruption. Switched to fallback agent mode.');
+        }
+
+        // Secondary legacy fallback
+        await this.failoverToLegacyCall(stream);
+        return true;
       }
 
-      await stt.start(
-        (event) => {
-          this.currentTranscript = event.transcript;
-
-          if (this.mode === 'prompt') {
-            // Live WhisperFlow-style streaming transcription
-            this.onTranscriptUpdate?.(event.transcript, event.isFinal);
-            if (event.isFinal) {
-              this.setState('TRANSCRIPT_READY');
-              if (this.transcriptReadyTimer) clearTimeout(this.transcriptReadyTimer);
-              this.transcriptReadyTimer = setTimeout(() => {
-                if (this.isVoiceModeActive && this.mode === 'prompt') {
-                  this.setState('LISTENING');
-                }
-              }, 1200);
-            } else if (this.state !== 'USER_SPEAKING') {
-              this.setState('USER_SPEAKING');
-            }
-            return;
-          }
-
-          // Call mode
-          if (event.isFinal) {
-            void this.handleFinalTranscript(event.transcript);
-            return;
-          }
-
-          if (this.state !== 'USER_SPEAKING' && this.state !== 'SUBMITTING' && this.state !== 'THINKING') {
-            this.setState('USER_SPEAKING');
-            this.clearCallIdleTimer();
-          }
-        },
-        (errMsg) => {
-          this.setState('ERROR', errMsg);
-        }
-      );
+      // Prompt / Dictation mode: default live transcription pipeline with legacy fallback
+      this.startVad(stream);
+      await this.startLegacySTT();
 
       return true;
     } catch (err: any) {
@@ -272,6 +363,18 @@ export class VoiceController {
     return this.pttActive;
   }
 
+  public async startPushToTalk(mode: VoiceMode = 'prompt'): Promise<boolean> {
+    return this.beginPushToTalk(mode);
+  }
+
+  public async stopPushToTalk(): Promise<string> {
+    return this.endPushToTalk();
+  }
+
+  public async finishTurnImmediately(): Promise<void> {
+    await this.endPushToTalk();
+  }
+
   private clearPttHoldTimer(): void {
     if (this.pttHoldTimer) {
       clearTimeout(this.pttHoldTimer);
@@ -289,6 +392,11 @@ export class VoiceController {
     if (this.transcriptReadyTimer) {
       clearTimeout(this.transcriptReadyTimer);
       this.transcriptReadyTimer = null;
+    }
+
+    if (this.isUsingLive) {
+      liveProvider.stop();
+      this.isUsingLive = false;
     }
 
     audioQueue.interrupt();
@@ -407,12 +515,18 @@ export class VoiceController {
 
   public interrupt(): void {
     this.setState('INTERRUPTING');
+    if (this.isUsingLive) {
+      liveProvider.clearScheduledAudio();
+    }
     audioQueue.interrupt();
     tts.stop();
     this.chunker.reset();
     setTimeout(() => {
       if (this.isVoiceModeActive) {
         this.setState('LISTENING');
+        if (this.mode === 'call') {
+          this.armCallIdleTimer();
+        }
       }
     }, 120);
   }

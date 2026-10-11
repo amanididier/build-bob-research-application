@@ -40,6 +40,8 @@ interface VoiceStoreState {
   finishTurnImmediately: () => Promise<void>;
   startPushToTalk: (mode?: VoiceMode) => Promise<boolean>;
   stopPushToTalk: () => Promise<void>;
+  beginPushToTalk: (mode?: VoiceMode) => Promise<boolean>;
+  endPushToTalk: () => Promise<string>;
   setSelectedModel: (model: 'moonshine-tiny' | 'whisper-tiny') => void;
 }
 
@@ -100,12 +102,7 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => {
       const targetMode = mode || voiceController.getMode();
       set({ voiceMode: targetMode });
 
-      // If local model is not installed, prompt with the clean white card!
-      if (!localVoiceManager.isModelInstalled()) {
-        set({ isInstallCardOpen: true, installCardType: 'stt' });
-        return false;
-      }
-
+      // In call mode or when WebSpeech/Gemini is present, start directly via Gemini Live/browser STT
       return voiceController.startVoiceMode(targetMode);
     },
 
@@ -134,6 +131,17 @@ export const useVoiceStore = create<VoiceStoreState>((set, get) => {
     stopPushToTalk: async () => {
       set({ isPushToTalk: false });
       await voiceController.stopPushToTalk();
+    },
+
+    beginPushToTalk: async (mode?: VoiceMode) => {
+      const targetMode = mode || get().voiceMode;
+      set({ isPushToTalk: true, voiceMode: targetMode });
+      return voiceController.beginPushToTalk(targetMode);
+    },
+
+    endPushToTalk: async () => {
+      set({ isPushToTalk: false });
+      return voiceController.endPushToTalk();
     },
 
     setSelectedModel: (model: 'moonshine-tiny' | 'whisper-tiny') => {
