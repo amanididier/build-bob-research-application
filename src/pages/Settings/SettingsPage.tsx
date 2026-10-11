@@ -53,7 +53,7 @@ export const SettingsPage: React.FC = () => {
   const [isTestingKey, setIsTestingKey] = useState(false);
   const [keyTestFeedback, setKeyTestFeedback] = useState<{ ok: boolean; message: string } | null>(null);
 
-  const [installedVersion, setInstalledVersion] = useState<string>('1.0.58');
+  const [installedVersion, setInstalledVersion] = useState<string>('1.0.59');
 
   const [updaterState, setUpdaterState] = useState<{
     status: 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'latest' | 'error';
@@ -62,8 +62,8 @@ export const SettingsPage: React.FC = () => {
     message?: string;
   }>({
     status: 'idle',
-    version: '1.0.58',
-    message: 'Up to date (v1.0.58)'
+    version: '1.0.59',
+    message: 'Up to date (v1.0.59)'
   });
 
   const [hardware] = useState(() => detectSystemHardware());
@@ -191,7 +191,7 @@ export const SettingsPage: React.FC = () => {
     if (typeof window !== 'undefined' && (window as any).bob?.checkForUpdates) {
       try {
         const res = await (window as any).bob.checkForUpdates();
-        setUpdaterState(res || { status: 'latest', message: 'You are on the latest version (v1.0.58)' });
+        setUpdaterState(res || { status: 'latest', message: 'You are on the latest version (v1.0.59)' });
       } catch (err: any) {
         setUpdaterState({ status: 'error', message: err?.message || 'Update check failed.' });
       }
@@ -199,8 +199,8 @@ export const SettingsPage: React.FC = () => {
       setTimeout(() => {
         setUpdaterState({
           status: 'latest',
-          version: '1.0.58',
-          message: 'Running latest production build (v1.0.58)'
+          version: '1.0.59',
+          message: 'Running latest production build (v1.0.59)'
         });
       }, 700);
     }
@@ -349,12 +349,16 @@ export const SettingsPage: React.FC = () => {
               <div className="bg-[var(--s)] border border-[var(--line)] rounded-[24px] p-6 shadow-sm">
                 <h4 className="text-[14px] font-bold text-[var(--t)] mb-2 flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                  Release Commit Log (v1.0.54 → v1.0.58)
+                  Release Commit Log (v1.0.55 → v1.0.59)
                 </h4>
                 <ul className="text-[12px] text-[var(--m)] space-y-2 list-none p-0 mt-3 font-mono">
                   <li className="flex items-start gap-2">
-                    <span className="text-[var(--y)] font-semibold">v1.0.58:</span>
-                    <span>Fixed Vite unicode escape sequence in SettingsPage:288, verified clean compile and packaging.</span>
+                    <span className="text-[var(--y)] font-semibold">v1.0.59:</span>
+                    <span>GeminiLiveService raw WebSocket transport, bidirectional audio streaming, Kokoro/DualEngine fallback safeguards, honest dynamic agent reporting & 2-line clamped speech cards.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-[var(--m)] font-semibold">v1.0.58:</span>
+                    <span>Bob Experience overlay routines, Sunflower garden, Gemini Live primary priority agent with seamless fallback.</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-[var(--m)] font-semibold">v1.0.57:</span>

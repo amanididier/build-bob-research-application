@@ -8,6 +8,8 @@ import { ResponseTextChunker } from './textChunker';
 import { SILENCE_TIMEOUT_MS, MAX_CALL_IDLE_MS, DEFAULT_VOICE_CONFIG } from './voiceConfig';
 import { liveProvider } from './liveProvider';
 import { voiceDiagnostics } from './diagnostics';
+import { resolveGeminiApiKey } from '../ai/keyManager';
+import { geminiLiveService } from '../ai/GeminiLiveService';
 
 const SILENCE_MS: Record<VoiceMode, number> = {
   // WhisperFlow dictation: finalize live words into composer after ~1.5s silence
@@ -189,6 +191,42 @@ export class VoiceController {
     return this.isUsingLive;
   }
 
+  public getActiveCallAgent(): {
+    name: string;
+    engine: 'gemini-live' | 'kokoro' | 'webspeech';
+    badge: string;
+    description: string;
+    isPrimary: boolean;
+  } {
+    if (this.isUsingLive) {
+      return {
+        name: 'Gemini Multimodal Live',
+        engine: 'gemini-live',
+        badge: 'Gemini Live API',
+        description: 'Primary agent · Full-duplex WebSocket, server VAD & native barge-in.',
+        isPrimary: true,
+      };
+    }
+
+    if (tts.isKokoroInstalled()) {
+      return {
+        name: 'Kokoro 82M Neural TTS',
+        engine: 'kokoro',
+        badge: 'Kokoro TTS (Fallback)',
+        description: 'Secondary fallback agent · Local on-device neural weights & Whisper STT.',
+        isPrimary: false,
+      };
+    }
+
+    return {
+      name: 'Browser Speech Engine',
+      engine: 'webspeech',
+      badge: 'Browser WebSpeech (Fallback)',
+      description: 'Secondary fallback agent · System Web Speech API synthesizer & hybrid STT.',
+      isPrimary: false,
+    };
+  }
+
   public async startVoiceMode(targetMode?: VoiceMode): Promise<boolean> {
     if (targetMode) {
       this.mode = targetMode;
@@ -205,9 +243,7 @@ export class VoiceController {
 
       if (this.mode === 'call') {
         this.armCallIdleTimer();
-        const apiKey = typeof window !== 'undefined'
-          ? (localStorage.getItem('gemini_api_key') || (import.meta as any).env?.VITE_GEMINI_API_KEY || '')
-          : '';
+        const apiKey = resolveGeminiApiKey() || '';
 
         if (apiKey && DEFAULT_VOICE_CONFIG.liveEnabled) {
           try {

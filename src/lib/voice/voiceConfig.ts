@@ -19,8 +19,8 @@ export const DEFAULT_VOICE_CONFIG: VoiceConfig = {
   ttsVolume: 1.0,
   maxQueueLength: 20,
   continuous: true,
-  liveEnabled: false,
-  liveModels: ['gemini-2.0-flash-exp'],
+  liveEnabled: true,
+  liveModels: ['gemini-2.0-flash-exp', 'gemini-2.5-flash', 'gemini-2.0-flash'],
   liveConnectTimeoutMs: 8000,
   liveVoice: 'Puck',
 };

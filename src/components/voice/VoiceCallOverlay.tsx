@@ -2,7 +2,20 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useVoiceStore } from '../../store/useVoiceStore';
 import { voiceController } from '../../lib/voice/voiceController';
-import { PhoneOff, Mic, MicOff, MessageSquare, Volume2, Sparkles, Brain, ArrowUpCircle } from 'lucide-react';
+import { 
+  PhoneOff, 
+  Mic, 
+  MicOff, 
+  MessageSquare, 
+  Volume2, 
+  Sparkles, 
+  Brain, 
+  ArrowUpCircle,
+  Cpu,
+  Info,
+  CheckCircle2,
+  X
+} from 'lucide-react';
 import { AudioWaveVisualizer } from './AudioWaveVisualizer';
 
 interface VoiceCallOverlayProps {
@@ -27,6 +40,11 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({ onClose }) =
   const [isMuted, setIsMuted] = useState(false);
   const [isAvatarHovered, setIsAvatarHovered] = useState(false);
   const [isSpaceHeld, setIsSpaceHeld] = useState(false);
+  const [showAgentsModal, setShowAgentsModal] = useState(false);
+
+  // Honest agent currently powering the call - dynamically retrieved, NEVER hardcoded
+  const activeAgent = voiceController.getActiveCallAgent();
+  const isLiveGemini = voiceController.isLiveModeActive();
 
   const isBobTurn = voiceState === 'SPEAKING' || voiceState === 'THINKING';
   const isUserTurn = voiceState === 'USER_SPEAKING' || voiceState === 'LISTENING';
@@ -50,7 +68,7 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({ onClose }) =
     }
   }, [voiceState, finishTurnImmediately]);
 
-  // Keyboard Spacebar Push-To-Talk
+  // Keyboard Spacebar Push-To-Talk (optional convenience in noisy rooms)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space' && !e.repeat) {
@@ -89,23 +107,33 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({ onClose }) =
           <span className="text-[13px] font-bold tracking-wide uppercase text-neutral-400">
             Live Call with Bob
           </span>
-          {voiceController.isLiveModeActive() ? (
-            <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-[11px] font-semibold text-emerald-400 flex items-center gap-1.5">
+          
+          {/* Honest Active Agent Badge */}
+          {isLiveGemini ? (
+            <button
+              onClick={() => setShowAgentsModal(true)}
+              className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-[11px] font-semibold text-emerald-400 flex items-center gap-1.5 hover:bg-emerald-500/30 transition-colors cursor-pointer"
+              title="Click to view all available voice agents"
+            >
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Gemini Live API
-            </span>
+              <span>Gemini Live API</span>
+              <Info className="w-3 h-3 opacity-60 ml-0.5" />
+            </button>
           ) : (
-            <span
-              className="px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-[11px] font-semibold text-amber-300 flex items-center gap-1.5 cursor-help"
+            <button
+              onClick={() => setShowAgentsModal(true)}
+              className="px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-[11px] font-semibold text-amber-300 flex items-center gap-1.5 hover:bg-amber-500/30 transition-colors cursor-pointer"
               title="Primary Gemini Live quota reached / network interruption. Switched to fallback agent mode."
             >
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-              Fallback Agent Mode
-            </span>
+              <span>{activeAgent.badge}</span>
+              <Info className="w-3 h-3 opacity-60 ml-0.5" />
+            </button>
           )}
+
           {isKokoroInstalled ? (
             <span className="hidden sm:inline-flex px-2 py-0.5 rounded-full bg-blue-500/15 border border-blue-500/30 text-[11px] font-medium text-blue-300">
-              Kokoro 82M ✓
+              Kokoro 82M Ready
             </span>
           ) : (
             <button
@@ -119,16 +147,26 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({ onClose }) =
           )}
         </div>
 
-        <button
-          onClick={handleEndCall}
-          className="text-[12px] font-semibold text-neutral-400 hover:text-white px-3 py-1.5 rounded-xl hover:bg-neutral-900 border border-transparent hover:border-neutral-800 transition-all cursor-pointer"
-        >
-          Exit to text
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowAgentsModal(true)}
+            className="text-[12px] font-medium text-neutral-400 hover:text-white px-2.5 py-1.5 rounded-xl hover:bg-neutral-900 border border-transparent hover:border-neutral-800 transition-all cursor-pointer flex items-center gap-1"
+            title="View Available Voice Agents"
+          >
+            <Cpu className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Agents</span>
+          </button>
+          <button
+            onClick={handleEndCall}
+            className="text-[12px] font-semibold text-neutral-400 hover:text-white px-3 py-1.5 rounded-xl hover:bg-neutral-900 border border-transparent hover:border-neutral-800 transition-all cursor-pointer"
+          >
+            Exit to text
+          </button>
+        </div>
       </div>
 
       {/* Central Interactive Avatar Area */}
-      <div className="flex flex-col items-center justify-center my-auto w-full max-w-lg space-y-8">
+      <div className="flex flex-col items-center justify-center my-auto w-full max-w-lg space-y-6">
         {/* Dynamic Avatar Circle */}
         <div className="relative flex items-center justify-center">
           {/* Animated concentric audio reactive rings */}
@@ -191,12 +229,14 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({ onClose }) =
         </div>
 
         {/* State Label */}
-        <div className="flex flex-col items-center gap-2">
+        <div className="flex flex-col items-center gap-1.5">
           <div className="px-4 py-1.5 rounded-full bg-neutral-900 border border-neutral-800 text-[12.5px] font-semibold flex items-center gap-2">
             {voiceState === 'LISTENING' && (
               <>
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span>Listening... speak or hold Spacebar</span>
+                <span>
+                  {isLiveGemini ? 'Listening · Speak freely (live talking active)' : 'Listening... speak or hold Spacebar'}
+                </span>
               </>
             )}
             {voiceState === 'USER_SPEAKING' && (
@@ -214,13 +254,15 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({ onClose }) =
             {voiceState === 'SPEAKING' && (
               <>
                 <Volume2 className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
-                <span>Bob is replying... (talk to interrupt)</span>
+                <span>Bob is speaking... (talk to interrupt anytime)</span>
               </>
             )}
           </div>
 
-          <span className="text-[11px] text-neutral-400">
-            {isBobTurn ? 'Bob is speaking (talk to interrupt anytime)' : 'Hold Spacebar to talk · Release or tap below to reply instantly'}
+          <span className="text-[11px] text-neutral-400 text-center max-w-md">
+            {isLiveGemini 
+              ? (isBobTurn ? 'Bob is speaking · Talk over him anytime to barge-in' : 'Full-duplex conversation active · Speak naturally without push-to-talk')
+              : (isBobTurn ? 'Bob is speaking (click avatar to interrupt)' : 'Speak clearly or hold Spacebar in noisy rooms')}
           </span>
         </div>
 
@@ -229,12 +271,12 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({ onClose }) =
           <AudioWaveVisualizer
             active={voiceState === 'USER_SPEAKING' || voiceState === 'LISTENING'}
             color={isBobTurn ? '#60a5fa' : '#f59e0b'}
-            height={32}
+            height={28}
           />
         </div>
 
-        {/* Immediate Send Now / Push-to-Talk action for noisy rooms */}
-        {isUserTurn && (
+        {/* Optional Push-to-Talk action for noisy rooms */}
+        {isUserTurn && !isLiveGemini && (
           <button
             type="button"
             onClick={handleDoneSpeaking}
@@ -251,29 +293,29 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({ onClose }) =
           </button>
         )}
 
-        {/* Dynamic Speech & Transcript Cards */}
-        <div className="w-full space-y-3 min-h-[110px] max-h-[220px] overflow-y-auto px-1">
-          {/* User live speech card */}
+        {/* Dynamic Speech & Transcript Cards — Strictly 2 lines max to avoid infinite card expansion */}
+        <div className="w-full space-y-2.5 max-h-[160px] overflow-hidden px-1">
+          {/* User live speech card (clamped to max 2 lines) */}
           {currentTranscript.trim() && (
-            <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-left animate-in fade-in duration-200">
-              <div className="text-[11px] font-bold text-amber-400 flex items-center gap-1.5 mb-1">
-                <Mic className="w-3 h-3 text-amber-400" />
+            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-left animate-in fade-in duration-200">
+              <div className="text-[11px] font-bold text-amber-400 flex items-center gap-1.5 mb-0.5">
+                <Mic className="w-3 h-3 text-amber-400 shrink-0" />
                 <span>You said</span>
               </div>
-              <p className="text-[13px] text-neutral-200 m-0 leading-relaxed font-medium">
+              <p className="text-[13px] text-neutral-200 m-0 leading-snug font-medium line-clamp-2 overflow-hidden text-ellipsis">
                 {currentTranscript}
               </p>
             </div>
           )}
 
-          {/* Bob speech response card */}
+          {/* Bob speech response card (clamped to max 2 lines) */}
           {lastBobReply && (
-            <div className="p-3.5 rounded-2xl bg-blue-500/10 border border-blue-500/25 text-left animate-in fade-in duration-200">
-              <div className="text-[11px] font-bold text-blue-400 flex items-center gap-1.5 mb-1">
-                <Volume2 className="w-3 h-3 text-blue-400" />
+            <div className="p-3 rounded-2xl bg-blue-500/10 border border-blue-500/25 text-left animate-in fade-in duration-200">
+              <div className="text-[11px] font-bold text-blue-400 flex items-center gap-1.5 mb-0.5">
+                <Volume2 className="w-3 h-3 text-blue-400 shrink-0" />
                 <span>Bob</span>
               </div>
-              <p className="text-[13px] text-neutral-200 m-0 leading-relaxed">
+              <p className="text-[13px] text-neutral-200 m-0 leading-snug line-clamp-2 overflow-hidden text-ellipsis">
                 {lastBobReply}
               </p>
             </div>
@@ -315,6 +357,119 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({ onClose }) =
           <MessageSquare className="w-5 h-5" />
         </button>
       </div>
+
+      {/* Available Agents Info Modal */}
+      {showAgentsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-neutral-900 border border-neutral-800 rounded-3xl p-6 shadow-2xl text-left space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
+              <div className="flex items-center gap-2">
+                <Cpu className="w-5 h-5 text-amber-400" />
+                <h3 className="text-[16px] font-bold text-white m-0">Available Voice Agents</h3>
+              </div>
+              <button
+                onClick={() => setShowAgentsModal(false)}
+                className="p-1 rounded-full text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-[12px] text-neutral-400 leading-relaxed m-0">
+              Bob uses an automatic multi-tier routing architecture with primary priority execution and automatic failover safeguards:
+            </p>
+
+            <div className="space-y-2.5">
+              {/* Agent 1: Gemini Live */}
+              <div className={`p-3.5 rounded-2xl border transition-all ${
+                isLiveGemini 
+                  ? 'bg-emerald-500/10 border-emerald-500/40 ring-1 ring-emerald-500/30'
+                  : 'bg-neutral-950/60 border-neutral-800 opacity-75'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${isLiveGemini ? 'bg-emerald-400 animate-pulse' : 'bg-neutral-600'}`} />
+                    <span className="font-bold text-[13px] text-white">Gemini Multimodal Live API</span>
+                  </div>
+                  {isLiveGemini ? (
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-extrabold uppercase">
+                      Active Now
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-400 text-[10px] font-semibold">
+                      Primary Default
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11.5px] text-neutral-400 mt-1 mb-0 leading-relaxed">
+                  Real-time bi-directional audio WebSocket pipeline with native server VAD and instantaneous barge-in. Free tier 1,500 req/day.
+                </p>
+              </div>
+
+              {/* Agent 2: Kokoro 82M Neural */}
+              <div className={`p-3.5 rounded-2xl border transition-all ${
+                !isLiveGemini && isKokoroInstalled
+                  ? 'bg-blue-500/10 border-blue-500/40 ring-1 ring-blue-500/30'
+                  : 'bg-neutral-950/60 border-neutral-800 opacity-75'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${!isLiveGemini && isKokoroInstalled ? 'bg-blue-400 animate-pulse' : 'bg-neutral-600'}`} />
+                    <span className="font-bold text-[13px] text-white">Kokoro 82M Neural TTS</span>
+                  </div>
+                  {!isLiveGemini && isKokoroInstalled ? (
+                    <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 text-[10px] font-extrabold uppercase">
+                      Active Fallback
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-400 text-[10px] font-semibold">
+                      {isKokoroInstalled ? 'Standby Fallback' : 'Offline Model'}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11.5px] text-neutral-400 mt-1 mb-0 leading-relaxed">
+                  High-fidelity 82M parameter ONNX neural voice generator running locally inside the browser/desktop without cloud costs.
+                </p>
+              </div>
+
+              {/* Agent 3: Browser Web Speech */}
+              <div className={`p-3.5 rounded-2xl border transition-all ${
+                !isLiveGemini && !isKokoroInstalled
+                  ? 'bg-amber-500/10 border-amber-500/40 ring-1 ring-amber-500/30'
+                  : 'bg-neutral-950/60 border-neutral-800 opacity-60'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${!isLiveGemini && !isKokoroInstalled ? 'bg-amber-400' : 'bg-neutral-600'}`} />
+                    <span className="font-bold text-[13px] text-white">Browser Speech Engine</span>
+                  </div>
+                  {!isLiveGemini && !isKokoroInstalled ? (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-[10px] font-extrabold uppercase">
+                      Active Fallback
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-400 text-[10px] font-semibold">
+                      Tertiary Fallback
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11.5px] text-neutral-400 mt-1 mb-0 leading-relaxed">
+                  System Web Speech API synthesizer and DualEngine Whisper/WebSpeech STT.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <button
+                onClick={() => setShowAgentsModal(false)}
+                className="w-full py-2.5 rounded-2xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-[12px] transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

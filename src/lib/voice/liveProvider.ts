@@ -9,6 +9,8 @@
 import { GoogleGenAI } from '@google/genai';
 import { DEFAULT_VOICE_CONFIG } from './voiceConfig';
 import { voiceDiagnostics } from './diagnostics';
+import { geminiLiveService } from '../ai/GeminiLiveService';
+import { resolveGeminiApiKey } from '../ai/keyManager';
 
 export interface LiveProviderCallbacks {
   onConnected: (model: string) => void;
@@ -88,11 +90,49 @@ export class GeminiLiveProvider {
 
     this.stopped = false;
     this.callbacks = callbacks;
-    this.startCapture(stream);
 
     const models = DEFAULT_VOICE_CONFIG.liveModels.length
       ? DEFAULT_VOICE_CONFIG.liveModels
-      : ['gemini-3.8-live'];
+      : ['gemini-2.0-flash-exp'];
+
+    // 1. Primary: Use raw WebSocket connection to Gemini Multimodal Live API via GeminiLiveService
+    try {
+      const ok = await geminiLiveService.connect(
+        stream,
+        apiKey,
+        {
+          model: models[0],
+          voiceName: DEFAULT_VOICE_CONFIG.liveVoice,
+          systemInstruction,
+        },
+        {
+          onConnected: (m) => {
+            this.connected = true;
+            this.model = m;
+            callbacks.onConnected(m);
+          },
+          onUserSpeechStart: callbacks.onUserSpeechStart,
+          onUserSpeechEnd: callbacks.onUserSpeechEnd,
+          onUserTranscript: callbacks.onUserTranscript,
+          onModelText: callbacks.onModelText,
+          onModelAudioStart: callbacks.onModelAudioStart,
+          onModelAudioEnd: callbacks.onModelAudioEnd,
+          onInterrupted: callbacks.onInterrupted,
+          onError: callbacks.onError,
+          onClosed: callbacks.onClosed,
+        }
+      );
+      if (ok) {
+        this.connected = true;
+        this.model = models[0];
+        return true;
+      }
+    } catch (e) {
+      console.warn('[GeminiLiveProvider] Raw WebSocket connect attempt deferred:', e);
+    }
+
+    // 2. Secondary fallback via GoogleGenAI SDK Live connect
+    this.startCapture(stream);
 
     for (const model of models) {
       if (this.stopped) return false;
@@ -334,6 +374,7 @@ export class GeminiLiveProvider {
   public stop(): void {
     this.stopped = true;
     this.connected = false;
+    geminiLiveService.stop();
     this.clearScheduledAudio();
 
     if (this.processor) {
