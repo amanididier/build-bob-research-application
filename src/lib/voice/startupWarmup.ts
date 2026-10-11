@@ -1,16 +1,12 @@
 /**
- * Quiet background warmup for Bob's voice stack.
+ * Quiet background warmup for Bob's voice stack (v1.0.60 Gemini-only release).
  *
- * Goal: by the time the user finishes onboarding (or opens the app again),
- * Whisper STT and the active TTS path are already in memory so the first
- * hold-to-talk / call-mode turn does not wait on a multi-second model load.
+ * Kokoro and Whisper downloads are intentionally disabled for this release so
+ * users can evaluate Gemini Live + Gemini transcription without local model
+ * downloads. Only browser speechSynthesis is primed.
  *
- * Called from OnboardingFlow on the first card (alongside silent model
- * download). Must never throw into the UI and must not ask for mic permission.
+ * To re-enable local models later, restore the previous warmStt / warmTts bodies.
  */
-
-import { localVoiceManager } from './localVoiceManager';
-import { tts } from './ttsProvider';
 
 let warmupPromise: Promise<void> | null = null;
 let warmed = false;
@@ -18,8 +14,6 @@ let warmed = false;
 function warmBrowserSpeechSynthesis(): void {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
   try {
-    // Force the browser to populate the voice list early. Electron / Chrome
-    // often leave getVoices() empty until this runs once.
     const synth = window.speechSynthesis;
     const voices = synth.getVoices();
     if (voices.length === 0) {
@@ -31,79 +25,35 @@ function warmBrowserSpeechSynthesis(): void {
         { once: true }
       );
     }
-    // Tiny no-op utterance cancelled immediately — primes the speech service
-    // without audible output on most platforms.
     try {
       const u = new SpeechSynthesisUtterance('');
       u.volume = 0;
       synth.speak(u);
       synth.cancel();
     } catch {
-      // Some environments reject empty utterances; list load above is enough.
+      // ignore
     }
   } catch {
-    // Ignore — WebSpeech TTS is a fallback tier only.
-  }
-}
-
-async function warmStt(): Promise<void> {
-  try {
-    // Prefer in-memory ready. If the model was downloaded before, ensureReady
-    // loads it from the browser cache without a full re-download.
-    if (localVoiceManager.isReady()) return;
-
-    if (localVoiceManager.isModelInstalled()) {
-      await localVoiceManager.ensureReady();
-      return;
-    }
-
-    // First-run: start a silent download so the model is cached by the time
-    // the user reaches call mode. downloadModel(true) suppresses progress UI.
-    await localVoiceManager.downloadModel(true);
-  } catch (err) {
-    console.warn('[startupWarmup] STT warmup skipped:', err);
-  }
-}
-
-async function warmTts(): Promise<void> {
-  try {
-    warmBrowserSpeechSynthesis();
-
-    // Only pull Kokoro weights if the user already installed them (or a prior
-    // session marked them ready). Avoids a surprise large download on first open.
-    if (tts.isKokoroInstalled()) {
-      await tts.initKokoro();
-    }
-  } catch (err) {
-    console.warn('[startupWarmup] TTS warmup skipped:', err);
+    // ignore
   }
 }
 
 /**
- * Warm STT + TTS in the background. Safe to call many times; concurrent
- * callers share one promise. Resolves when the best-effort warmup finishes
- * (success or soft failure).
+ * Warm browser TTS only. Whisper / Kokoro downloads are suppressed in v1.0.60.
  */
 export async function warmupVoiceEngine(): Promise<void> {
   if (warmed) return;
   if (warmupPromise) return warmupPromise;
 
   warmupPromise = (async () => {
-    // Run STT and TTS warmup in parallel — independent stacks.
-    await Promise.all([warmStt(), warmTts()]);
+    warmBrowserSpeechSynthesis();
     warmed = true;
-  })().finally(() => {
-    // Allow a later retry if everything soft-failed (e.g. offline first open).
-    if (!localVoiceManager.isReady() && !tts.isKokoroInstalled()) {
-      warmed = false;
-      warmupPromise = null;
-    }
-  });
+  })();
 
   return warmupPromise;
 }
 
-/** Whether a warmup pass has completed successfully this session. */
+/** Whether a warmup pass has completed this session. */
 export function isVoiceEngineWarmed(): boolean {
-  return warmed || localVoiceManager.isReady();
+  return warmed;
 }
