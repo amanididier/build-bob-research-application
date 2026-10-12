@@ -1,6 +1,6 @@
 {
   "name": "@bob/desktop",
-  "version": "1.0.63",
+  "version": "1.0.65",
   "description": "Bob desktop research companion",
   "author": "Bob",
   "private": true,
@@ -36,20 +36,15 @@
       "preload.cjs",
       "bob-logo.ico",
       "bob-logo.png",
-      "bob-logo.png",
       "renderer/**",
       {
         "from": "../../dist",
         "to": "dist",
-        "filter": [
-          "**/*"
-        ]
+        "filter": ["**/*"]
       },
       "../../dist/**"
     ],
-    "directories": {
-      "output": "dist"
-    },
+    "directories": { "output": "dist" },
     "win": {
       "target": "nsis",
       "icon": "bob-logo.ico",
@@ -61,14 +56,7 @@
       "allowToChangeInstallationDirectory": false,
       "deleteAppDataOnUninstall": true
     },
-    "mac": {
-      "category": "public.app-category.productivity",
-      "icon": "bob-logo.png"
-    },
-    "linux": {
-      "target": "AppImage",
-      "category": "Office",
-      "icon": "bob-logo.png"
-    }
+    "mac": { "category": "public.app-category.productivity", "icon": "bob-logo.png" },
+    "linux": { "target": "AppImage", "category": "Office", "icon": "bob-logo.png" }
   }
 }
