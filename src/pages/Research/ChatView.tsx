@@ -110,38 +110,36 @@ export const ChatView: React.FC = () => {
         return;
       }
 
-      // Parse markdown table
+      // Parse markdown table with robust cell extractor
       const headerLine = tableBuffer[0];
-      const headers = headerLine
-        .split('|')
-        .map((h) => h.trim())
-        .filter(Boolean);
+      const parseCells = (line: string): string[] => {
+        let trimmed = line.trim();
+        if (trimmed.startsWith('|')) trimmed = trimmed.slice(1);
+        if (trimmed.endsWith('|')) trimmed = trimmed.slice(0, -1);
+        return trimmed.split('|').map((c) => c.trim());
+      };
 
-      const rows = tableBuffer.slice(2).map((rowLine) =>
-        rowLine
-          .split('|')
-          .map((c) => c.trim())
-          .filter((_, idx, arr) => idx > 0 && idx < arr.length - 1 || arr.length <= 2)
-      );
+      const headers = parseCells(headerLine);
+      const rows = tableBuffer.slice(2).map(parseCells);
 
       elements.push(
-        <div key={key} className="my-3 overflow-x-auto rounded-xl border border-[var(--line)] shadow-sm">
+        <div key={key} className="my-3 overflow-x-auto rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 shadow-sm">
           <table className="w-full text-left border-collapse text-[12px]">
             <thead>
-              <tr className="bg-[var(--s2)] border-b border-[var(--line)]">
+              <tr className="bg-neutral-100 dark:bg-neutral-800 border-b border-neutral-300 dark:border-neutral-700">
                 {headers.map((h, i) => (
-                  <th key={i} className="py-2.5 px-3.5 font-bold text-[var(--t)]">
-                    {h.replace(/\*\*/g, '')}
+                  <th key={i} className="py-2.5 px-3.5 font-bold text-neutral-950 dark:text-neutral-100 text-[12.5px] border-r last:border-r-0 border-neutral-200 dark:border-neutral-700">
+                    {formatInline(h)}
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-[var(--line)] bg-[var(--s)]">
+            <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800 bg-white dark:bg-neutral-900">
               {rows.map((row, rIdx) => (
-                <tr key={rIdx} className="hover:bg-[var(--s2)]/50 transition-colors">
+                <tr key={rIdx} className="hover:bg-neutral-50 dark:hover:bg-neutral-800/60 transition-colors odd:bg-white even:bg-neutral-50/50 dark:odd:bg-neutral-900 dark:even:bg-neutral-900/60">
                   {row.map((cell, cIdx) => (
-                    <td key={cIdx} className="py-2.5 px-3.5 text-[var(--t)] font-medium leading-relaxed">
-                      {cell.replace(/\*\*/g, '')}
+                    <td key={cIdx} className="py-2.5 px-3.5 text-neutral-900 dark:text-neutral-100 font-medium leading-relaxed border-r last:border-r-0 border-neutral-200 dark:border-neutral-800">
+                      {formatInline(cell)}
                     </td>
                   ))}
                 </tr>

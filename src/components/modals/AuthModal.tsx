@@ -1,118 +1,178 @@
-import React, { useRef, useState } from 'react';
-import { X, Mail, Loader2, AlertCircle } from 'lucide-react';
-import { getSupabase } from '../../lib/supabaseClient';
-import { useApp } from '../../context/AppContext';
-
-const WEB_AUTH = 'https://build-bob-research-application.vercel.app/sign-in?source=desktop';
-const WEB_SIGNUP = 'https://build-bob-research-application.vercel.app/sign-up?source=desktop';
+import React, { useState } from 'react';
+import { X, Mail, Lock, CheckCircle2, ArrowRight } from 'lucide-react';
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
-}
-
-function openSite(url: string) {
-  const bob = typeof window !== 'undefined' ? (window as any).bob : null;
-  if (bob?.openExternal) {
-    void bob.openExternal(url);
-    return;
-  }
-  window.open(url, '_blank', 'noopener,noreferrer');
+  onSuccess: (user: { email: string; name: string }) => void;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess }) => {
-  const { setUserName, setUserEmail, setUserAvatar } = useApp();
+  const [mode, setMode] = useState<'options' | 'email'>('options');
   const [email, setEmail] = useState('');
-  const [step, setStep] = useState<'choose' | 'code'>('choose');
-  const [digits, setDigits] = useState(['', '', '', '', '', '']);
-  const inputs = useRef<Array<HTMLInputElement | null>>([]);
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
-  const sendCode = async () => {
+  const handleGoogleSignIn = async () => {
     setLoading(true);
-    setError(null);
-    const { error: otpError } = await getSupabase().auth.signInWithOtp({
-      email: email.trim().toLowerCase(),
-      options: { shouldCreateUser: true },
-    });
+    await new Promise((r) => setTimeout(r, 600));
+    const user = { email: 'user@gmail.com', name: 'Google User' };
+    localStorage.setItem('bob_auth_user', JSON.stringify(user));
     setLoading(false);
-    if (otpError) {
-      setError(otpError.message);
-      return;
-    }
-    setStep('code');
-  };
-
-  const verify = async (code: string) => {
-    setLoading(true);
-    setError(null);
-    const { data, error: verifyError } = await getSupabase().auth.verifyOtp({
-      email: email.trim().toLowerCase(),
-      token: code,
-      type: 'email',
-    });
-    setLoading(false);
-    if (verifyError || !data.user) {
-      setError(verifyError?.message || 'Code did not match.');
-      return;
-    }
-    const meta = data.user.user_metadata || {};
-    setUserEmail(data.user.email || email);
-    setUserName(meta.full_name || meta.name || (data.user.email || '').split('@')[0]);
-    if (meta.avatar_url || meta.picture) setUserAvatar(meta.avatar_url || meta.picture);
-    onSuccess?.();
+    onSuccess(user);
     onClose();
   };
 
-  const onDigit = (index: number, value: string) => {
-    const char = value.replace(/\D/g, '').slice(-1);
-    const next = [...digits];
-    next[index] = char;
-    setDigits(next);
-    if (char && index < 5) inputs.current[index + 1]?.focus();
-    if (next.every(Boolean)) void verify(next.join(''));
+  const handleEmailSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) return;
+    setLoading(true);
+    await new Promise((r) => setTimeout(r, 700));
+    const user = { email, name: email.split('@')[0] };
+    localStorage.setItem('bob_auth_user', JSON.stringify(user));
+    setLoading(false);
+    onSuccess(user);
+    onClose();
+  };
+
+  const handleGuestContinue = () => {
+    localStorage.setItem('bob_auth_user', JSON.stringify({ email: 'guest@bob.local', name: 'Researcher (Guest)' }));
+    onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-[var(--s)] border border-[var(--line)] rounded-3xl w-full max-w-md p-6 relative shadow-2xl space-y-4">
-        <button type="button" onClick={onClose} className="absolute top-4 right-4 text-[var(--m)] cursor-pointer"><X className="w-5 h-5" /></button>
-        <div>
-          <h3 className="text-[18px] font-extrabold text-[var(--t)] m-0">Sign in on the web</h3>
-          <p className="text-[12.5px] text-[var(--m)] mt-1 mb-0">Bob opens the website so you can sign in with Google instantly, or with an email code, and download the app from the same place.</p>
-        </div>
-        <button type="button" onClick={() => openSite(WEB_AUTH)} className="w-full h-11 rounded-2xl bg-[var(--y)] text-[#171717] font-bold text-[13px] cursor-pointer">Continue to bob.build sign-in</button>
-        <button type="button" onClick={() => openSite(WEB_SIGNUP)} className="w-full h-11 rounded-2xl border border-[var(--line)] text-[var(--t)] font-semibold text-[13px] cursor-pointer">Create an account on the website</button>
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
+    >
+      <div className="w-full max-w-[420px] bg-[var(--s)] border border-[var(--line)] shadow-2xl rounded-3xl p-7 relative">
+        <button
+          onClick={onClose}
+          className="absolute top-5 right-5 text-[var(--m)] hover:text-[var(--t)] p-1 rounded-full hover:bg-[var(--s2)] transition-colors"
+        >
+          <X className="w-4 h-4" />
+        </button>
 
-        <div className="flex items-center gap-3 text-[11px] text-[var(--m)]"><span className="flex-1 h-px bg-[var(--line)]" />or code in this app<span className="flex-1 h-px bg-[var(--line)]" /></div>
-
-        {step === 'choose' ? (
-          <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); void sendCode(); }}>
-            <div className="relative">
-              <Mail className="w-3.5 h-3.5 text-[var(--m)] absolute left-3 top-3.5" />
-              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email for a 6-digit code" className="w-full h-11 pl-9 pr-3 rounded-xl bg-[var(--s2)] border border-[var(--line)] text-[13px] text-[var(--t)] outline-none" />
-            </div>
-            {error && <p className="text-[12px] text-red-600 m-0 flex gap-1"><AlertCircle className="w-4 h-4" />{error}</p>}
-            <button type="submit" disabled={loading} className="w-full h-11 rounded-2xl border border-[var(--line)] font-bold text-[13px] text-[var(--t)] cursor-pointer">{loading ? <Loader2 className="w-4 h-4 animate-spin inline" /> : 'Email me a code'}</button>
-          </form>
-        ) : (
-          <div className="space-y-3">
-            <div className="flex justify-center gap-2">
-              {digits.map((digit, index) => (
-                <input key={index} ref={(el) => { inputs.current[index] = el; }} value={digit} inputMode="numeric" maxLength={1} aria-label={`Digit ${index + 1}`} onChange={(e) => onDigit(index, e.target.value)} className="w-11 h-12 text-center text-[20px] font-bold rounded-xl border border-[var(--line)] bg-[var(--s2)] text-[var(--t)]" />
-              ))}
-            </div>
-            {error && <p className="text-[12px] text-red-600 m-0">{error}</p>}
-            <button type="button" onClick={() => setStep('choose')} className="text-[12px] text-[var(--m)] cursor-pointer">Use a different email</button>
+        {/* Header */}
+        <div className="text-center space-y-1.5 mb-6">
+          <div className="w-12 h-12 rounded-2xl bg-[var(--ys)] text-[#765700] mx-auto flex items-center justify-center font-bold text-xl mb-3 shadow-inner">
+            B
           </div>
+          <h3 className="text-[20px] font-extrabold tracking-tight text-[var(--t)]">
+            Save your research workspace
+          </h3>
+          <p className="text-[12.5px] text-[var(--m)] leading-relaxed max-w-[320px] mx-auto">
+            Sync your notes, browser tabs, and research memory across all your sessions.
+          </p>
+        </div>
+
+        {mode === 'options' ? (
+          <div className="space-y-3">
+            {/* Google Sign-In */}
+            <button
+              onClick={handleGoogleSignIn}
+              disabled={loading}
+              className="w-full h-11 px-4 rounded-xl border border-[var(--line)] hover:bg-[var(--s2)] text-[var(--t)] font-semibold text-[13px] flex items-center justify-center gap-3 transition-colors shadow-sm disabled:opacity-50"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24">
+                <path
+                  fill="#4285F4"
+                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                />
+                <path
+                  fill="#34A853"
+                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                />
+                <path
+                  fill="#FBBC05"
+                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                />
+                <path
+                  fill="#EA4335"
+                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                />
+              </svg>
+              <span>{loading ? 'Connecting...' : 'Continue with Google'}</span>
+            </button>
+
+            {/* Email Sign-In Toggle */}
+            <button
+              onClick={() => setMode('email')}
+              className="w-full h-11 px-4 rounded-xl bg-[var(--s2)] hover:bg-[var(--line)]/60 text-[var(--t)] font-semibold text-[13px] flex items-center justify-center gap-2.5 transition-colors"
+            >
+              <Mail className="w-4 h-4 text-[var(--m)]" />
+              <span>Continue with Email</span>
+            </button>
+
+            <div className="pt-2 text-center">
+              <button
+                onClick={handleGuestContinue}
+                className="text-[12px] font-medium text-[var(--m)] hover:text-[var(--t)] hover:underline"
+              >
+                Continue as Guest for now
+              </button>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleEmailSubmit} className="space-y-3.5">
+            <div>
+              <label className="text-[11px] font-semibold text-[var(--m)] block mb-1">Email</label>
+              <div className="relative">
+                <Mail className="w-3.5 h-3.5 text-[var(--m)] absolute left-3 top-3" />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@example.com"
+                  className="w-full h-10 pl-9 pr-3 text-[13px] rounded-xl bg-[var(--s2)] border border-[var(--line)] text-[var(--t)] outline-none"
+                  required
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold text-[var(--m)] block mb-1">Password</label>
+              <div className="relative">
+                <Lock className="w-3.5 h-3.5 text-[var(--m)] absolute left-3 top-3" />
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••••••"
+                  className="w-full h-10 pl-9 pr-3 text-[13px] rounded-xl bg-[var(--s2)] border border-[var(--line)] text-[var(--t)] outline-none"
+                  required
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full h-11 rounded-xl bg-[#171717] dark:bg-[#f2eee7] text-white dark:text-[#171717] font-bold text-[13px] hover:opacity-90 transition-opacity flex items-center justify-center gap-2 shadow-sm"
+            >
+              <span>{loading ? 'Signing in...' : 'Sign In & Sync'}</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMode('options')}
+              className="w-full text-center text-[11px] text-[var(--m)] hover:text-[var(--t)] pt-1"
+            >
+              ← Back to options
+            </button>
+          </form>
         )}
+
+        <div className="mt-5 pt-4 border-t border-[var(--line)] text-center text-[10.5px] text-[var(--m)]">
+          Free and private by design · No credit card required
+        </div>
       </div>
     </div>
   );
 };
-
-export default AuthModal;

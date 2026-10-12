@@ -16,6 +16,7 @@ import { AuthModal } from '../modals/AuthModal';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { BobOverlayBubble } from '../companion/BobOverlayBubble';
 
+// Pages
 import { HomePage } from '../../pages/Home/HomePage';
 import { ResearchPage } from '../../pages/Research/ResearchPage';
 import { ChatPage } from '../../pages/Chat/ChatPage';
@@ -59,19 +60,32 @@ export const AppShell: React.FC = () => {
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-[var(--bg)] text-[var(--t)] font-sans select-none">
+      {/* 1. Chrome-Styled Window Top Bar: Logo, Name, Real Auto-Update Indicator, and Window Controls */}
       <DesktopWindowHeader />
+
+      {/* 2. Main Workspace Layout */}
       <div className="flex-1 min-h-0 flex overflow-hidden relative">
+        {/* Sidebar Navigation (Gemini / ChatGPT level layout) */}
         <Sidebar />
+
+        {/* Primary Content Viewport */}
         <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden relative">
+          {/* Top Bar containing Page Breadcrumb, Notifications & User Profile */}
           <TopBar />
+
+          {/* Page Content Viewport */}
           <main className="flex-1 overflow-y-auto relative">
             <ErrorBoundary key={`${currentPage}-${activeResearchId}-${researchSubView}`}>
               {renderCurrentPage()}
             </ErrorBoundary>
           </main>
+
+          {/* Bottom Floating Composer */}
           <BottomComposer />
         </div>
       </div>
+
+      {/* Controlled Popovers & Modals */}
       <ToolsMenu />
       <BridgeModal />
       <UploadModal />
@@ -83,11 +97,13 @@ export const AppShell: React.FC = () => {
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
-        onSuccess={() => {
+        onSuccess={(user) => {
           setIsAuthModalOpen(false);
-          triggerThinking('Account Synced', 'You are signed in. Your Gemini key stays on this device.', 'Ready');
+          triggerThinking('Account Synced', `Welcome back, ${user.name}! Workspace synced.`, 'Ready');
         }}
       />
+
+      {/* Floating Bob Companion Overlay Bubble */}
       <BobOverlayBubble />
     </div>
   );

@@ -50,106 +50,109 @@ export const Sidebar: React.FC = () => {
         </span>
       </div>
 
-      {/* 2. Compact AI-app Search control (⌘ K) */}
-      <button
-        type="button"
-        onClick={() => setIsSearchOpen(true)}
-        className="h-10 w-full bg-[var(--s2)]/80 hover:bg-[var(--s2)] border border-[var(--line)]/50 rounded-xl flex items-center px-3 gap-2.5 cursor-pointer text-[var(--m)] hover:text-[var(--t)] transition-colors duration-150 mb-5 text-left"
-        title="Search research and notes (⌘ K)"
-      >
-        <Search className="w-[18px] h-[18px] text-[var(--m)] shrink-0" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
-        <span className="text-[13px] flex-1">Search</span>
-        <kbd className="text-[10px] bg-[var(--s)] border border-[var(--line)] px-1.5 py-0.5 rounded font-mono text-[var(--m)]">
-          ⌘ K
-        </kbd>
-      </button>
-
-      {/* 3. Primary Navigation Rows */}
-      <nav className="space-y-1">
-        {/* New research - only icon carries Bob yellow accent */}
+      {/* Scrollable Middle Container: Search, Nav & Recent Projects */}
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden space-y-4 pr-1 -mr-1">
+        {/* 2. Compact AI-app Search control (⌘ K) */}
         <button
-          onClick={() => {
-            const newId = createNewResearchSession();
-            navigateTo('research', 'chat', newId);
-          }}
-          className={`h-10 w-full text-left px-3 rounded-lg text-[13.5px] flex items-center gap-3 transition-colors duration-150 cursor-pointer ${
-            currentPage === 'research'
-              ? 'bg-[var(--s2)] text-[var(--t)] font-semibold'
-              : 'text-[var(--t)] hover:bg-[var(--s2)]/70 font-medium'
-          }`}
+          type="button"
+          onClick={() => setIsSearchOpen(true)}
+          className="h-10 w-full bg-[var(--s2)]/80 hover:bg-[var(--s2)] border border-[var(--line)]/50 rounded-xl flex items-center px-3 gap-2.5 cursor-pointer text-[var(--m)] hover:text-[var(--t)] transition-colors duration-150 mb-2 text-left"
+          title="Search research and notes (⌘ K)"
         >
-          <Sparkles className="w-[18px] h-[18px] text-[var(--y)] shrink-0" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
-          <span>New research</span>
+          <Search className="w-[18px] h-[18px] text-[var(--m)] shrink-0" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
+          <span className="text-[13px] flex-1">Search</span>
+          <kbd className="text-[10px] bg-[var(--s)] border border-[var(--line)] px-1.5 py-0.5 rounded font-mono text-[var(--m)]">
+            ⌘ K
+          </kbd>
         </button>
 
-        {/* Dashboard */}
-        <button
-          onClick={() => navigateTo('home')}
-          className={`h-10 w-full text-left px-3 rounded-lg text-[13.5px] flex items-center gap-3 transition-colors duration-150 cursor-pointer ${
-            currentPage === 'home'
-              ? 'bg-[var(--s2)] text-[var(--t)] font-semibold'
-              : 'text-[var(--t)] hover:bg-[var(--s2)]/70 font-medium'
-          }`}
-        >
-          <LayoutDashboard className="w-[18px] h-[18px] text-[var(--m)] shrink-0" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
-          <span>Dashboard</span>
-        </button>
+        {/* 3. Primary Navigation Rows */}
+        <nav className="space-y-1">
+          {/* New research - only icon carries Bob yellow accent */}
+          <button
+            onClick={() => {
+              const newId = createNewResearchSession();
+              navigateTo('research', 'chat', newId);
+            }}
+            className={`h-10 w-full text-left px-3 rounded-lg text-[13.5px] flex items-center gap-3 transition-colors duration-150 cursor-pointer ${
+              currentPage === 'research'
+                ? 'bg-[var(--s2)] text-[var(--t)] font-semibold'
+                : 'text-[var(--t)] hover:bg-[var(--s2)]/70 font-medium'
+            }`}
+          >
+            <Sparkles className="w-[18px] h-[18px] text-[var(--y)] shrink-0" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
+            <span>New research</span>
+          </button>
 
-        {/* Replaced Notes with Chat as explicitly requested */}
-        <button
-          onClick={() => navigateTo('chat')}
-          className={`h-10 w-full text-left px-3 rounded-lg text-[13.5px] flex items-center gap-3 transition-colors duration-150 cursor-pointer ${
-            currentPage === 'chat'
-              ? 'bg-[var(--s2)] text-[var(--t)] font-semibold'
-              : 'text-[var(--t)] hover:bg-[var(--s2)]/70 font-medium'
-          }`}
-        >
-          <MessageSquare className="w-[18px] h-[18px] text-[var(--m)] shrink-0" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
-          <span>Chat</span>
-        </button>
+          {/* Dashboard */}
+          <button
+            onClick={() => navigateTo('home')}
+            className={`h-10 w-full text-left px-3 rounded-lg text-[13.5px] flex items-center gap-3 transition-colors duration-150 cursor-pointer ${
+              currentPage === 'home'
+                ? 'bg-[var(--s2)] text-[var(--t)] font-semibold'
+                : 'text-[var(--t)] hover:bg-[var(--s2)]/70 font-medium'
+            }`}
+          >
+            <LayoutDashboard className="w-[18px] h-[18px] text-[var(--m)] shrink-0" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
+            <span>Dashboard</span>
+          </button>
 
-        {/* Due soon */}
-        <button
-          onClick={() => navigateTo('tasks')}
-          className={`h-10 w-full text-left px-3 rounded-lg text-[13.5px] flex items-center gap-3 transition-colors duration-150 cursor-pointer ${
-            currentPage === 'tasks'
-              ? 'bg-[var(--s2)] text-[var(--t)] font-semibold'
-              : 'text-[var(--t)] hover:bg-[var(--s2)]/70 font-medium'
-          }`}
-        >
-          <CircleCheck className="w-[18px] h-[18px] text-[var(--m)] shrink-0" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
-          <span>Due soon</span>
-        </button>
-      </nav>
+          {/* Chat */}
+          <button
+            onClick={() => navigateTo('chat')}
+            className={`h-10 w-full text-left px-3 rounded-lg text-[13.5px] flex items-center gap-3 transition-colors duration-150 cursor-pointer ${
+              currentPage === 'chat'
+                ? 'bg-[var(--s2)] text-[var(--t)] font-semibold'
+                : 'text-[var(--t)] hover:bg-[var(--s2)]/70 font-medium'
+            }`}
+          >
+            <MessageSquare className="w-[18px] h-[18px] text-[var(--m)] shrink-0" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
+            <span>Chat</span>
+          </button>
 
-      {/* 4. Recent Projects Section */}
-      <div className="mt-7 mb-2.5">
-        <div className="text-[10.5px] tracking-[0.08em] text-[var(--m)] font-medium uppercase px-2 mb-2">
-          RECENT PROJECTS
-        </div>
-        <div className="space-y-1 overflow-y-auto max-h-[220px]">
-          {projects.map((proj) => (
-            <button
-              key={proj.id}
-              onClick={() => navigateTo('research', 'chat', proj.id)}
-              className={`h-9 w-full text-left px-3 rounded-lg text-[13px] flex items-center gap-2.5 transition-colors duration-150 cursor-pointer ${
-                currentPage === 'research' && activeResearchId === proj.id
-                  ? 'bg-[var(--s2)] font-semibold text-[var(--t)]'
-                  : 'text-[var(--t)] hover:bg-[var(--s2)]/70 font-normal'
-              }`}
-            >
-              <span
-                className="w-2 h-2 rounded-full shrink-0"
-                style={{ backgroundColor: proj.dotColor || '#3b82f6' }}
-              />
-              <span className="truncate flex-1">{proj.title}</span>
-            </button>
-          ))}
+          {/* Due soon */}
+          <button
+            onClick={() => navigateTo('tasks')}
+            className={`h-10 w-full text-left px-3 rounded-lg text-[13.5px] flex items-center gap-3 transition-colors duration-150 cursor-pointer ${
+              currentPage === 'tasks'
+                ? 'bg-[var(--s2)] text-[var(--t)] font-semibold'
+                : 'text-[var(--t)] hover:bg-[var(--s2)]/70 font-medium'
+            }`}
+          >
+            <CircleCheck className="w-[18px] h-[18px] text-[var(--m)] shrink-0" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
+            <span>Due soon</span>
+          </button>
+        </nav>
+
+        {/* 4. Recent Projects Section */}
+        <div className="pt-2">
+          <div className="text-[10.5px] tracking-[0.08em] text-[var(--m)] font-medium uppercase px-2 mb-2">
+            RECENT PROJECTS
+          </div>
+          <div className="space-y-1">
+            {projects.map((proj) => (
+              <button
+                key={proj.id}
+                onClick={() => navigateTo('research', 'chat', proj.id)}
+                className={`h-9 w-full text-left px-3 rounded-lg text-[13px] flex items-center gap-2.5 transition-colors duration-150 cursor-pointer ${
+                  currentPage === 'research' && activeResearchId === proj.id
+                    ? 'bg-[var(--s2)] font-semibold text-[var(--t)]'
+                    : 'text-[var(--t)] hover:bg-[var(--s2)]/70 font-normal'
+                }`}
+              >
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: proj.dotColor || '#3b82f6' }}
+                />
+                <span className="truncate flex-1">{proj.title}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* 5. Bottom Section: Theme & User Profile */}
-      <div className="mt-auto pt-3 border-t border-[var(--line)] space-y-1.5">
+      {/* 5. Bottom Section: Theme & User Profile (ALWAYS pinned and visible) */}
+      <div className="shrink-0 mt-auto pt-3 border-t border-[var(--line)] space-y-1.5 bg-[var(--s)]">
         {/* Light mode / Dark appearance toggle row */}
         <button
           onClick={toggleTheme}

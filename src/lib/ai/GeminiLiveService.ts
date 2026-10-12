@@ -14,7 +14,7 @@
 
 import { voiceDiagnostics } from '../voice/diagnostics';
 import { resolveGeminiApiKey } from './keyManager';
-import { voiceUsageService } from '../voice/VoiceUsageService';
+import { voiceUsageService } from '../voice/voiceUsageService';
 
 export interface GeminiLiveCallbacks {
   onConnected?: (model: string) => void;
@@ -40,7 +40,6 @@ const LIVE_WS_ENDPOINT = 'wss://generativelanguage.googleapis.com/ws/google.ai.g
 const DEFAULT_LIVE_MODEL = 'models/gemini-2.0-flash-exp';
 const FALLBACK_MODELS = [
   'models/gemini-2.0-flash-exp',
-  'models/gemini-2.5-flash',
   'models/gemini-2.0-flash'
 ];
 

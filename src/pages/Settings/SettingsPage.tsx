@@ -454,9 +454,6 @@ export const SettingsPage: React.FC = () => {
                 <VoiceSelectorCards />
                 <div className="flex flex-wrap gap-2 mt-4">
                   <button onClick={handleTestMic} className="px-4 py-2 rounded-xl border border-[var(--line)] text-[12px] font-semibold cursor-pointer">Test microphone</button>
-                  {!isWhisperInstalled && (
-                    <button onClick={handleDownloadModel} className="px-4 py-2 rounded-xl bg-[var(--y)] text-[#171717] text-[12px] font-bold cursor-pointer">Download speech model</button>
-                  )}
                 </div>
                 {testMicMessage && <p className="text-[12px] text-[var(--m)] mt-3 mb-0">{testMicMessage}</p>}
               </div>

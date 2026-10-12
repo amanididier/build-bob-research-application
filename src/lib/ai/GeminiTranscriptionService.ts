@@ -1,8 +1,8 @@
 /**
  * GeminiTranscriptionService
- *
- * Cloud Gemini-powered Speech-to-Text for Prompt dictation.
- * No local Whisper downloads required.
+ * 
+ * Provides cloud Gemini-powered Speech-to-Text dictation without requiring
+ * local Whisper model downloads or quantized on-device inference caches.
  */
 
 import { GoogleGenAI } from '@google/genai';
@@ -25,6 +25,9 @@ export class GeminiTranscriptionService {
     return this.isTranscribing;
   }
 
+  /**
+   * Transcribes an audio blob or audio array buffer using the user's Gemini key
+   */
   public async transcribeAudio(
     audioBlob: Blob,
     mimeType: string = 'audio/webm'
@@ -40,11 +43,12 @@ export class GeminiTranscriptionService {
     voiceDiagnostics.set({ stt: 'transcribing via Gemini', stage: 'stt' });
 
     try {
+      // Convert Blob to base64
       const arrayBuffer = await audioBlob.arrayBuffer();
       const base64Audio = this.arrayBufferToBase64(arrayBuffer);
 
       const ai = new GoogleGenAI({ apiKey });
-
+      
       const response = await ai.models.generateContent({
         model: 'gemini-2.0-flash',
         contents: [
@@ -65,7 +69,7 @@ export class GeminiTranscriptionService {
         ],
       });
 
-      const transcript = (response as any)?.text?.trim?.() || '';
+      const transcript = response?.text?.trim() || '';
       this.isTranscribing = false;
       voiceDiagnostics.set({ stt: 'transcription complete', stage: 'transcript' });
       voiceUsageService.recordDictation(true);
@@ -73,14 +77,8 @@ export class GeminiTranscriptionService {
     } catch (err: any) {
       this.isTranscribing = false;
       const errorMsg = err?.message || 'Gemini transcription request failed';
-      const isQuota =
-        /quota|rate.?limit|429|resource.?exhausted/i.test(errorMsg);
       voiceDiagnostics.set({ stt: 'error', stage: 'error' });
-      voiceUsageService.recordError(
-        errorMsg,
-        isQuota ? 'QUOTA_EXHAUSTED' : 'GEMINI_STT_ERROR'
-      );
-      voiceUsageService.recordDictation(false);
+      voiceUsageService.recordError(errorMsg, 'GEMINI_STT_ERROR');
       return { text: '', error: errorMsg };
     }
   }
@@ -91,10 +89,7 @@ export class GeminiTranscriptionService {
     const len = bytes.byteLength;
     const chunkSize = 0x8000;
     for (let i = 0; i < len; i += chunkSize) {
-      binary += String.fromCharCode.apply(
-        null,
-        Array.from(bytes.subarray(i, i + chunkSize)) as any
-      );
+      binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunkSize)) as any);
     }
     return btoa(binary);
   }

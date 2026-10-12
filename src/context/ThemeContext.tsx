@@ -34,6 +34,18 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
 
       setIsDark(dark);
+
+      // Lock CSS transitions during theme switch so all sections render simultaneously on the exact same frame
+      const style = document.createElement('style');
+      style.id = 'bob-theme-sync-lock';
+      style.textContent = `
+        *, *::before, *::after {
+          transition: none !important;
+          animation-duration: 0s !important;
+        }
+      `;
+      document.head.appendChild(style);
+
       if (dark) {
         document.documentElement.classList.add('dark');
         document.body.classList.add('dark');
@@ -41,6 +53,16 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         document.documentElement.classList.remove('dark');
         document.body.classList.remove('dark');
       }
+
+      // Force synchronous reflow so all DOM nodes paint the new theme simultaneously
+      void document.body.offsetHeight;
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const el = document.getElementById('bob-theme-sync-lock');
+          if (el) el.remove();
+        });
+      });
     };
 
     applyTheme();

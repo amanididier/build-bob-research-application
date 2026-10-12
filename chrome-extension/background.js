@@ -8,10 +8,10 @@ const BRIDGE_ORIGIN = 'http://127.0.0.1:54321';
 const DEFAULT_BRIDGE_TOKEN = 'development-token';
 const BRIDGE_TIMEOUT_MS = 1500;
 const GEMINI_MODELS = [
-  'gemini-3.1-flash-lite',
-  'gemini-flash-latest',
-  'gemini-2.5-flash',
-  'gemini-3.8-flash'
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
+  'gemini-1.5-flash',
+  'gemini-1.5-pro'
 ];
 
 const KEYS = {
@@ -773,13 +773,13 @@ async function callGemini(prompt, contextText, opts = {}) {
   }
 
   // 3. Direct API fallback with candidate models
-  const verified = settings.verifiedModel || 'gemini-3.1-flash-lite';
+  const verified = settings.verifiedModel || 'gemini-2.0-flash';
   const candidateModels = [
     verified,
-    'gemini-2.5-flash',
-    'gemini-3.1-flash-lite',
-    'gemini-flash-latest',
-    'gemini-3.8-flash'
+    'gemini-2.0-flash',
+    'gemini-2.0-flash-lite',
+    'gemini-1.5-flash',
+    'gemini-1.5-pro'
   ].filter(Boolean);
   const uniqueModels = [...new Set(candidateModels)];
 

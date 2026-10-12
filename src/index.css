@@ -34,14 +34,23 @@ html.dark, body.dark {
 
 table {
   color: var(--t);
+  border-collapse: collapse;
 }
 
-th {
+th, td {
   color: var(--t);
 }
 
-td {
-  color: var(--t);
+html:not(.dark) table {
+  color: #111111;
+}
+
+html:not(.dark) th {
+  color: #000000;
+}
+
+html:not(.dark) td {
+  color: #171717;
 }
 
 * {
