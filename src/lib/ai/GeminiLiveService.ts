@@ -2,7 +2,7 @@
  * GeminiLiveService
  * 
  * Manages raw WebSocket connection to the Gemini Multimodal Live API:
- * wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent
+ * wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent
  * 
  * Architecture:
  * 1. Audio-to-Audio Pipeline: Bidirectional 16kHz PCM audio streaming upstream and 24kHz PCM downstream.
@@ -36,12 +36,12 @@ export interface GeminiLiveOptions {
   mode?: 'call' | 'dictation';
 }
 
-const LIVE_WS_ENDPOINT = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent';
-const DEFAULT_LIVE_MODEL = 'models/gemini-3.8-live';
+const LIVE_WS_ENDPOINT = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
+const DEFAULT_LIVE_MODEL = 'models/gemini-2.5-flash-native-audio-dialog';
 const FALLBACK_MODELS = [
-  'models/gemini-3.8-live',
-  'models/gemini-3.5-transcribe-live',
-  'models/gemini-3.1-flash-lite'
+  'models/gemini-2.5-flash-native-audio-dialog',
+  'models/gemini-live-2.5-flash-preview',
+  'models/gemini-2.0-flash-live-001'
 ];
 
 const TARGET_INPUT_SAMPLE_RATE = 16000;
@@ -106,6 +106,9 @@ export class GeminiLiveService {
   private isConnecting = false;
   private isConnected = false;
   private isStopped = false;
+  private setupAcknowledged = false;
+  private setupResolver: ((ok: boolean) => void) | null = null;
+  private setupTimeout: ReturnType<typeof setTimeout> | null = null;
   private currentModel = DEFAULT_LIVE_MODEL;
   private activeApiKey = '';
   private callbacks: GeminiLiveCallbacks = {};
@@ -192,9 +195,10 @@ export class GeminiLiveService {
   private tryConnectSocket(model: string, apiKey: string, options: GeminiLiveOptions): Promise<boolean> {
     return new Promise((resolve) => {
       this.isConnecting = true;
+      this.setupAcknowledged = false;
+      this.setupResolver = resolve;
       const url = `${LIVE_WS_ENDPOINT}?key=${encodeURIComponent(apiKey)}`;
 
-      let connectionEstablished = false;
       let ws: WebSocket;
 
       try {
@@ -202,24 +206,27 @@ export class GeminiLiveService {
         this.ws = ws;
       } catch (err: any) {
         this.isConnecting = false;
+        this.setupResolver = null;
         return resolve(false);
       }
 
+      // The connection is only considered established once the server acknowledges
+      // the session setup (setupComplete). Opening the socket alone is NOT success.
       const timeoutTimer = setTimeout(() => {
-        if (!connectionEstablished) {
+        if (!this.setupAcknowledged) {
+          this.setupTimeout = null;
           try { ws.close(); } catch {}
           this.isConnecting = false;
+          this.isConnected = false;
+          this.setupResolver = null;
           resolve(false);
         }
-      }, 7000);
+      }, 9000);
+      this.setupTimeout = timeoutTimer;
 
       ws.onopen = () => {
-        clearTimeout(timeoutTimer);
-        connectionEstablished = true;
-        this.isConnected = true;
-        this.isConnecting = false;
-
-        // Send initial Handshake / Setup message
+        // Socket opened: send the setup handshake and WAIT for the server's
+        // setupComplete acknowledgement before declaring the session connected.
         const setupPayload = {
           setup: {
             model: model.startsWith('models/') ? model : `models/${model}`,
@@ -246,17 +253,12 @@ export class GeminiLiveService {
 
         try {
           ws.send(JSON.stringify(setupPayload));
-          this.callbacks.onConnected?.(model);
-          voiceDiagnostics.set({
-            provider: 'Gemini Multimodal Live',
-            model,
-            connection: 'connected'
-          });
-          voiceDiagnostics.event(`Gemini Live connected (${model})`);
-          voiceUsageService.setProvider('Gemini Multimodal Live', model, true);
-          voiceUsageService.recordLiveCallStart();
-          resolve(true);
+          this.currentModel = model;
         } catch {
+          clearTimeout(timeoutTimer);
+          this.setupTimeout = null;
+          this.isConnecting = false;
+          this.setupResolver = null;
           resolve(false);
         }
       };
@@ -283,10 +285,13 @@ export class GeminiLiveService {
 
       ws.onerror = (_e: Event) => {
         clearTimeout(timeoutTimer);
+        this.setupTimeout = null;
         this.isConnecting = false;
         voiceUsageService.recordError('Gemini Live WebSocket connection error');
-        if (!connectionEstablished) {
-          resolve(false);
+        if (!this.setupAcknowledged) {
+          const r = this.setupResolver;
+          this.setupResolver = null;
+          r?.(false);
         } else {
           voiceDiagnostics.event('Primary Gemini Live quota reached / network interruption. Switched to fallback agent mode.');
           this.callbacks.onError?.('Gemini Live WebSocket error');
@@ -295,11 +300,14 @@ export class GeminiLiveService {
 
       ws.onclose = (event: CloseEvent) => {
         clearTimeout(timeoutTimer);
+        this.setupTimeout = null;
         this.isConnected = false;
         this.isConnecting = false;
         voiceUsageService.recordLiveCallEnd();
-        if (!connectionEstablished) {
-          resolve(false);
+        if (!this.setupAcknowledged) {
+          const r = this.setupResolver;
+          this.setupResolver = null;
+          r?.(false);
         } else {
           // Check for quota exhaustion / rate limits (e.g. 1008 policy violation, 429 code)
           const reason = event.reason || `Close code: ${event.code}`;
@@ -311,10 +319,66 @@ export class GeminiLiveService {
   }
 
   /**
+   * Called once the server acknowledges the session setup. This is the ONLY point
+   * at which we treat the Live session as genuinely connected.
+   */
+  private markSetupComplete(model: string): void {
+    if (this.setupAcknowledged) return;
+    this.setupAcknowledged = true;
+    this.isConnected = true;
+    this.isConnecting = false;
+    this.currentModel = model;
+
+    if (this.setupTimeout) {
+      clearTimeout(this.setupTimeout);
+      this.setupTimeout = null;
+    }
+
+    this.callbacks.onConnected?.(model);
+    voiceDiagnostics.set({
+      provider: 'Gemini Multimodal Live',
+      model,
+      connection: 'connected'
+    });
+    voiceDiagnostics.event(`Gemini Live connected (${model})`);
+    voiceUsageService.setProvider('Gemini Multimodal Live', model, true);
+    voiceUsageService.recordLiveCallStart();
+
+    const r = this.setupResolver;
+    this.setupResolver = null;
+    r?.(true);
+  }
+
+  /**
    * Handles incoming Gemini Live Bidi messages
    */
   private handleServerMessage(msg: any): void {
     if (!msg || typeof msg !== 'object') return;
+
+    // Session setup acknowledgement: the ONLY genuine "connected" signal.
+    if (msg.setupComplete) {
+      const ackedModel = msg.setupComplete?.model || this.currentModel;
+      this.markSetupComplete(ackedModel);
+      return;
+    }
+
+    // Setup was rejected by the server (bad model, quota, malformed config).
+    if (msg.setupError || msg.error) {
+      const errText = msg.setupError?.message || msg.error?.message || 'Gemini Live setup rejected';
+      if (!this.setupAcknowledged) {
+        if (this.setupTimeout) {
+          clearTimeout(this.setupTimeout);
+          this.setupTimeout = null;
+        }
+        this.isConnecting = false;
+        this.isConnected = false;
+        voiceUsageService.recordError(errText);
+        const r = this.setupResolver;
+        this.setupResolver = null;
+        r?.(false);
+        return;
+      }
+    }
 
     // Interruption signal: user spoke while model was speaking
     if (msg.serverContent?.interrupted) {
@@ -577,6 +641,12 @@ export class GeminiLiveService {
 
     this.isConnected = false;
     this.isConnecting = false;
+    this.setupAcknowledged = false;
+    if (this.setupTimeout) {
+      clearTimeout(this.setupTimeout);
+      this.setupTimeout = null;
+    }
+    this.setupResolver = null;
   }
 
   public stop(): void {
