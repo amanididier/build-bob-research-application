@@ -20,7 +20,7 @@ export const DEFAULT_VOICE_CONFIG: VoiceConfig = {
   maxQueueLength: 20,
   continuous: true,
   liveEnabled: true,
-  liveModels: ['gemini-2.0-flash-exp', 'gemini-2.0-flash'],
+  liveModels: ['gemini-3.8-live', 'gemini-3.5-transcribe-live', 'gemini-3.1-flash-lite'],
   liveConnectTimeoutMs: 8000,
   liveVoice: 'Puck',
 };

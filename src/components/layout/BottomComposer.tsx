@@ -106,6 +106,10 @@ export const BottomComposer: React.FC = () => {
     setIsChromeModalOpen(true);
   };
 
+  const isVoiceActive = voiceState !== 'IDLE' && voiceState !== 'ERROR' && voiceState !== 'STOPPING';
+  const isExpanded = Boolean(prompt.trim()) || isVoiceActive;
+  const isBusy = voiceState === 'TRANSCRIBING' || voiceState === 'SUBMITTING' || voiceState === 'THINKING';
+
   const handleToggleMic = async () => {
     if (voiceState === 'SPEAKING') {
       interrupt();
@@ -140,10 +144,6 @@ export const BottomComposer: React.FC = () => {
       handleSend();
     }
   };
-
-  const isVoiceActive = voiceState !== 'IDLE' && voiceState !== 'ERROR' && voiceState !== 'STOPPING';
-  const isExpanded = Boolean(prompt.trim()) || isVoiceActive;
-  const isBusy = voiceState === 'TRANSCRIBING' || voiceState === 'SUBMITTING' || voiceState === 'THINKING';
 
   if (isVoiceActive && voiceMode === 'call') {
     return <VoiceCallOverlay onClose={() => stopVoiceMode()} />;

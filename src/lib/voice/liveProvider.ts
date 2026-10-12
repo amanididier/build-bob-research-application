@@ -93,7 +93,7 @@ export class GeminiLiveProvider {
 
     const models = DEFAULT_VOICE_CONFIG.liveModels.length
       ? DEFAULT_VOICE_CONFIG.liveModels
-      : ['gemini-2.0-flash-exp'];
+      : ['gemini-3.8-live', 'gemini-3.5-transcribe-live'];
 
     // 1. Primary: Use raw WebSocket connection to Gemini Multimodal Live API via GeminiLiveService
     try {
@@ -224,7 +224,7 @@ export class GeminiLiveProvider {
         if (!pcm.length) return;
         try {
           this.session.sendRealtimeInput({
-            media: { mimeType: `audio/pcm;rate=${TARGET_INPUT_RATE}`, data: int16ToBase64(pcm) },
+            audio: { mimeType: `audio/pcm;rate=${TARGET_INPUT_RATE}`, data: int16ToBase64(pcm) },
           } as any);
         } catch {
           // Socket went away mid-frame; onclose/onerror handles the session teardown.

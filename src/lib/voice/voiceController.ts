@@ -101,11 +101,11 @@ export class VoiceController {
   }
 
   public registerHandlers(handlers: {
-    onTranscriptUpdate: (transcript: string, isFinal: boolean) => void;
-    onSubmitMessage: (text: string) => Promise<void>;
+    onTranscriptUpdate?: (transcript: string, isFinal: boolean) => void;
+    onSubmitMessage?: (text: string) => Promise<void>;
   }): void {
-    this.onTranscriptUpdate = handlers.onTranscriptUpdate;
-    this.onSubmitMessage = handlers.onSubmitMessage;
+    if (handlers.onTranscriptUpdate) this.onTranscriptUpdate = handlers.onTranscriptUpdate;
+    if (handlers.onSubmitMessage) this.onSubmitMessage = handlers.onSubmitMessage;
   }
 
   private startVad(stream: MediaStream): void {
@@ -208,21 +208,11 @@ export class VoiceController {
       };
     }
 
-    if (tts.isKokoroInstalled()) {
-      return {
-        name: 'Kokoro 82M Neural TTS',
-        engine: 'kokoro',
-        badge: 'Kokoro TTS (Fallback)',
-        description: 'Secondary fallback agent · Local on-device neural weights & Whisper STT.',
-        isPrimary: false,
-      };
-    }
-
     return {
-      name: 'Browser Speech Engine',
+      name: 'Gemini Fast Voice',
       engine: 'webspeech',
-      badge: 'Browser WebSpeech (Fallback)',
-      description: 'Secondary fallback agent · System Web Speech API synthesizer & hybrid STT.',
+      badge: 'Gemini Fast Voice',
+      description: 'Secondary agent · Gemini STT & Flash reasoning with instant audio synthesis.',
       isPrimary: false,
     };
   }
@@ -311,7 +301,14 @@ export class VoiceController {
         return true;
       }
 
-      // Prompt / Dictation mode: default live transcription pipeline with legacy fallback
+      // Prompt / Dictation mode: default live transcription pipeline with Gemini STT fallback
+      const apiKey = resolveGeminiApiKey();
+      const hasSpeechRec = typeof window !== 'undefined' && Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+      if (!apiKey && !hasSpeechRec) {
+        this.setState('ERROR', 'Gemini API key required for dictation. Add your key in Settings.');
+        return false;
+      }
+
       this.startVad(stream);
       await this.startLegacySTT();
 

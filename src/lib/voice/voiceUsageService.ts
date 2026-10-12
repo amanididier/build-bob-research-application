@@ -32,7 +32,7 @@ class VoiceUsageService {
 
   private snapshot: VoiceUsageSnapshot = {
     provider: 'Gemini Multimodal Live',
-    activeModel: 'models/gemini-2.0-flash-exp',
+    activeModel: 'models/gemini-3.8-live',
     isAvailable: true,
     totalGeminiRequests: 0,
     successfulOperations: 0,

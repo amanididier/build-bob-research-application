@@ -575,6 +575,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // Register persistent global voice submit handler across all app routes
+  useEffect(() => {
+    voiceController.registerHandlers({
+      onSubmitMessage: async (text: string) => {
+        await sendMessage(text);
+      },
+    });
+  }, [sendMessage]);
+
   const clearChat = () => {
     setSessionMessages((prev) => {
       const updated = { ...prev, [activeResearchId]: [] };

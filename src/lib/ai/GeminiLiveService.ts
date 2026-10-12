@@ -37,10 +37,11 @@ export interface GeminiLiveOptions {
 }
 
 const LIVE_WS_ENDPOINT = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent';
-const DEFAULT_LIVE_MODEL = 'models/gemini-2.0-flash-exp';
+const DEFAULT_LIVE_MODEL = 'models/gemini-3.8-live';
 const FALLBACK_MODELS = [
-  'models/gemini-2.0-flash-exp',
-  'models/gemini-2.0-flash'
+  'models/gemini-3.8-live',
+  'models/gemini-3.5-transcribe-live',
+  'models/gemini-3.1-flash-lite'
 ];
 
 const TARGET_INPUT_SAMPLE_RATE = 16000;
@@ -403,9 +404,13 @@ export class GeminiLiveService {
         const pcm16 = floatTo16BitPCM(downsampled);
         const base64Audio = arrayBufferToBase64(pcm16.buffer);
 
-        // Send upstream PCM chunk via WebSocket
+        // Send upstream PCM chunk via WebSocket (supports both audio and mediaChunks specifications)
         const realtimeInputPayload = {
           realtimeInput: {
+            audio: {
+              mimeType: `audio/pcm;rate=${TARGET_INPUT_SAMPLE_RATE}`,
+              data: base64Audio
+            },
             mediaChunks: [
               {
                 mimeType: `audio/pcm;rate=${TARGET_INPUT_SAMPLE_RATE}`,

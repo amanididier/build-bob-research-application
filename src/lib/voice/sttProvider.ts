@@ -2,6 +2,8 @@ import { STTEvent } from './types';
 import { micManager } from './microphoneManager';
 import { localVoiceManager } from './localVoiceManager';
 import { pcmRecorder } from './pcmRecorder';
+import { geminiTranscriptionService } from '../ai/GeminiTranscriptionService';
+import { resolveGeminiApiKey } from '../ai/keyManager';
 
 export interface STTProvider {
   start: (onTranscript: (event: STTEvent) => void, onError: (err: string) => void) => Promise<void>;
@@ -80,7 +82,7 @@ export class DualEngineSTTProvider implements STTProvider {
       pcmRecorder.start(stream);
     }
 
-    // Warm the on-device model now so the first release does not pay the load cost.
+    // Warm on-device model if present
     this.hasWhisper = localVoiceManager.isReady();
     if (!this.hasWhisper && localVoiceManager.isModelInstalled()) {
       void localVoiceManager.ensureReady().then((ok) => {
@@ -88,14 +90,14 @@ export class DualEngineSTTProvider implements STTProvider {
       });
     }
 
-    if (!this.recognition && !localVoiceManager.isModelInstalled()) {
+    const apiKey = resolveGeminiApiKey();
+    if (!this.recognition && !localVoiceManager.isModelInstalled() && !apiKey) {
       onError(
-        'No speech engine available. Install the on-device transcription model from Settings → Voice Models.'
+        'Gemini API key required for voice dictation. Add your key in Settings.'
       );
     }
 
-    // 1. Browser WebSpeech gives free zero-latency live words where it exists
-    //    (Chrome). Electron has no SpeechRecognition, so Whisper does the work.
+    // 1. Browser WebSpeech gives instant zero-latency live streaming words
     if (this.recognition) {
       try {
         this.setupRecognitionListeners();
@@ -105,7 +107,7 @@ export class DualEngineSTTProvider implements STTProvider {
       }
     }
 
-    // 2. Rolling on-device transcription while the user is still holding to talk.
+    // 2. Rolling audio transcription
     this.startRollingTranscription();
   }
 
@@ -124,22 +126,15 @@ export class DualEngineSTTProvider implements STTProvider {
   }
 
   /**
-   * Transcribes everything recorded since the last committed sample and appends
-   * it to the live transcript. Used both for rolling partials while holding and
-   * for the final tail on release.
+   * Transcribes recorded audio slices. Where browser WebSpeech exists, it provides
+   * instant live typing; for finalization (and primary in Electron), Gemini transcription
+   * provides verbatim, high-speed text recognition.
    */
   private async transcribePendingSlice(isFinal: boolean): Promise<string> {
     if (!this.active) return '';
     if (this.isProcessingChunk) return '';
-    // Where the browser streams live words for free, let it own the transcript —
-    // running Whisper in parallel would duplicate every phrase. Whisper only takes
-    // over on release if WebSpeech came back empty (and always in Electron).
-    if (this.webSpeechProducedText) return '';
+    if (this.webSpeechProducedText && !isFinal) return '';
     if (!isFinal && this.recognition) return '';
-    if (!this.hasWhisper) {
-      this.hasWhisper = localVoiceManager.isReady();
-      if (!this.hasWhisper) return '';
-    }
 
     const recorded = pcmRecorder.getRecordedAudio();
     if (!recorded) return '';
@@ -150,29 +145,53 @@ export class DualEngineSTTProvider implements STTProvider {
 
     this.isProcessingChunk = true;
     this.transcribing = true;
+
     try {
       const slice = new Float32Array(pending);
-      const text = await this.withTimeout(
-        localVoiceManager.transcribeSamples(slice),
-        isFinal ? FLUSH_TIMEOUT_MS : CHUNK_TIMEOUT_MS
-      );
-      this.committedSampleCount += slice.length;
 
-      const clean = (text || '').trim();
-      if (clean) {
-        this.fullTranscript += (this.fullTranscript ? ' ' : '') + clean;
-        this.onTranscriptCallback?.({ transcript: this.fullTranscript, isFinal });
+      // Primary: Gemini Cloud STT (fast, accurate, no model downloads)
+      const apiKey = resolveGeminiApiKey();
+      if (apiKey) {
+        if (isFinal) {
+          const res = await geminiTranscriptionService.transcribeAudio(recorded.blob, 'audio/wav');
+          if (res.text) {
+            this.fullTranscript = res.text.trim();
+            this.committedSampleCount = recorded.samples.length;
+            this.onTranscriptCallback?.({ transcript: this.fullTranscript, isFinal: true });
+            return this.fullTranscript;
+          } else if (res.error && !this.webSpeechProducedText) {
+            this.onErrorCallback?.(res.error);
+          }
+        } else {
+          // Rolling partial slice via Gemini
+          const res = await geminiTranscriptionService.transcribeSamples(slice);
+          if (res.text) {
+            this.committedSampleCount += slice.length;
+            this.fullTranscript += (this.fullTranscript ? ' ' : '') + res.text.trim();
+            this.onTranscriptCallback?.({ transcript: this.fullTranscript, isFinal: false });
+            return res.text.trim();
+          }
+        }
       }
-      return clean;
-    } catch (e: any) {
-      if (e?.message === 'timeout') {
-        this.onErrorCallback?.(
-          'Transcription is taking too long on this device. Try a shorter recording.'
+
+      // Secondary: On-device Whisper if installed
+      if (this.hasWhisper || localVoiceManager.isModelInstalled()) {
+        const text = await this.withTimeout(
+          localVoiceManager.transcribeSamples(slice),
+          isFinal ? FLUSH_TIMEOUT_MS : CHUNK_TIMEOUT_MS
         );
-      } else {
-        console.warn('[DualEngineSTT] Transcription warning:', e);
-        this.onErrorCallback?.('On-device transcription failed. Please try again.');
+        this.committedSampleCount += slice.length;
+        const clean = (text || '').trim();
+        if (clean) {
+          this.fullTranscript += (this.fullTranscript ? ' ' : '') + clean;
+          this.onTranscriptCallback?.({ transcript: this.fullTranscript, isFinal });
+        }
+        return clean;
       }
+
+      return '';
+    } catch (e: any) {
+      console.warn('[DualEngineSTT] Transcription warning:', e);
       return '';
     } finally {
       this.isProcessingChunk = false;
@@ -233,8 +252,6 @@ export class DualEngineSTTProvider implements STTProvider {
       if (error === 'not-allowed') {
         this.onErrorCallback?.('Microphone access was denied. Please allow microphone permissions.');
       }
-      // On 'network' or other WebSpeech browser errors we do NOT crash:
-      // the PCM recorder + on-device Whisper take over seamlessly.
     };
 
     this.recognition.onend = () => {
@@ -251,41 +268,60 @@ export class DualEngineSTTProvider implements STTProvider {
   }
 
   /**
-   * Finalizes the current turn: transcribes whatever is still uncommitted and
-   * returns the complete transcript. Always terminates — bounded by FLUSH_TIMEOUT_MS.
-   * `reason` distinguishes an explicit release (worth reporting silence) from a
-   * background VAD pause (silence is normal there, so stay quiet).
+   * Finalizes the current turn: transcribes whatever is recorded and returns
+   * the complete transcript. Never silently hangs.
    */
   public async flush(reason: 'release' | 'vad' = 'release'): Promise<string> {
     if (!this.active) return this.fullTranscript.trim();
 
     this.clearRollTimer();
 
-    // Wait for an in-flight rolling slice instead of racing it.
+    // Wait for any in-flight rolling slice
     const waitedStart = Date.now();
     while (this.isProcessingChunk && Date.now() - waitedStart < CHUNK_TIMEOUT_MS) {
       await new Promise((r) => setTimeout(r, 60));
     }
 
+    // If WebSpeech produced complete text, we already have words!
+    if (this.webSpeechProducedText && this.fullTranscript.trim()) {
+      const result = this.fullTranscript.trim();
+      this.committedSampleCount = 0;
+      pcmRecorder.resetTurn();
+      this.startRollingTranscription();
+      return result;
+    }
+
+    // Transcribe recorded audio with Gemini
     await this.transcribePendingSlice(true);
 
-    if (reason === 'release' && !this.fullTranscript.trim()) {
-      if (!this.hasWhisper && !this.recognition) {
-        this.onErrorCallback?.(
-          'The on-device transcription model is still loading. Give it a moment, then hold and speak again.'
-        );
-      } else {
-        this.onErrorCallback?.(
-          'No speech was detected in that recording. Hold and speak a little closer to the microphone.'
-        );
+    if (!this.fullTranscript.trim()) {
+      const recorded = pcmRecorder.getRecordedAudio();
+      if (recorded && recorded.samples.length >= MIN_FINAL_SAMPLES) {
+        const res = await geminiTranscriptionService.transcribeAudio(recorded.blob, 'audio/wav');
+        if (res.text) {
+          this.fullTranscript = res.text.trim();
+          this.onTranscriptCallback?.({ transcript: this.fullTranscript, isFinal: true });
+        } else if (res.error && reason === 'release') {
+          this.onErrorCallback?.(res.error);
+        }
       }
     }
 
+    if (reason === 'release' && !this.fullTranscript.trim()) {
+      const apiKey = resolveGeminiApiKey();
+      if (!apiKey && !this.recognition) {
+        this.onErrorCallback?.('Gemini API key required for voice dictation. Add your key in Settings.');
+      } else {
+        this.onErrorCallback?.('No speech was detected in that recording. Speak a little closer to the microphone.');
+      }
+    }
+
+    const finalResult = this.fullTranscript.trim();
     this.committedSampleCount = 0;
     pcmRecorder.resetTurn();
     this.startRollingTranscription();
 
-    return this.fullTranscript.trim();
+    return finalResult;
   }
 
   /** Discards the current turn without transcribing (used when voice mode stops). */

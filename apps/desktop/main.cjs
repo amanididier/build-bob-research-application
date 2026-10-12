@@ -242,15 +242,14 @@ function startBridge() {
       const prompt = body.prompt || ''
       const systemInstruction = body.systemInstruction || ''
       const jsonMode = Boolean(body.jsonMode)
-      const requestedModel = body.model || store.verifiedModel || 'gemini-2.0-flash'
+      const requestedModel = body.model || store.verifiedModel || 'gemini-3.8-flash'
 
       let candidateModels = [
         requestedModel,
         store.verifiedModel,
-        'gemini-2.0-flash',
-        'gemini-2.0-flash-lite',
-        'gemini-1.5-flash',
-        'gemini-1.5-pro'
+        'gemini-3.8-flash',
+        'gemini-3.1-flash-lite',
+        'gemini-3.1-pro-preview'
       ].filter(Boolean)
       let uniqueModels = [...new Set(candidateModels)]
 
