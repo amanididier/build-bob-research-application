@@ -1,27 +1,16 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
-import { BookOpen, ArrowRightLeft, Target, CheckSquare } from 'lucide-react';
+import { BookOpen, Map } from 'lucide-react';
 
 export const ToolsMenu: React.FC = () => {
-  const { 
-    isToolsMenuOpen, 
-    setIsToolsMenuOpen, 
-    setIsBridgeOpen, 
-    navigateTo, 
-    isSidebarClosed 
-  } = useApp();
-
+  const { isToolsMenuOpen, setIsToolsMenuOpen, navigateTo, isSidebarClosed } = useApp();
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setIsToolsMenuOpen(false);
-      }
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setIsToolsMenuOpen(false);
     };
-    if (isToolsMenuOpen) {
-      document.addEventListener('mousedown', handleClick);
-    }
+    if (isToolsMenuOpen) document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [isToolsMenuOpen, setIsToolsMenuOpen]);
 
@@ -30,93 +19,36 @@ export const ToolsMenu: React.FC = () => {
   return (
     <div
       ref={menuRef}
-      className={`fixed z-40 bottom-24 bg-[var(--s)] border border-[var(--line)] shadow-2xl rounded-2xl p-2.5 w-72 animate-in fade-in zoom-in-95 duration-100 ${
-        isSidebarClosed
-          ? 'left-[calc(50%-340px)]'
-          : 'left-[calc(275px+(100vw-275px)/2-340px)]'
+      className={`fixed z-40 bottom-24 bg-white border border-[#e6e1d6] shadow-[0_18px_50px_rgba(40,35,20,0.12)] rounded-[22px] p-2 w-[280px] ${
+        isSidebarClosed ? 'left-[calc(50%-140px)]' : 'left-[calc(275px+(100vw-275px)/2-140px)]'
       }`}
     >
-      <div className="text-[10px] text-[#999] tracking-wider uppercase font-bold px-2 py-1">
-        Bob tools
-      </div>
-
-      <div className="space-y-1 mt-1">
-        {/* Notes */}
-        <button
-          onClick={() => {
-            setIsToolsMenuOpen(false);
-            navigateTo('notes');
-          }}
-          className="w-full text-left p-2 rounded-xl hover:bg-[var(--s2)] flex items-start gap-2.5 transition-colors"
-        >
-          <div className="w-8 h-8 rounded-lg bg-[var(--s2)] grid place-items-center flex-shrink-0 text-[var(--t)]">
-            <BookOpen className="w-4 h-4" />
-          </div>
-          <div>
-            <b className="text-[12px] text-[var(--t)] block">Notes</b>
-            <small className="text-[9px] text-[var(--m)] block">
-              Capture a thought without leaving research.
-            </small>
-          </div>
-        </button>
-
-        {/* Bridge */}
-        <button
-          onClick={() => {
-            setIsToolsMenuOpen(false);
-            setIsBridgeOpen(true);
-          }}
-          className="w-full text-left p-2 rounded-xl hover:bg-[var(--s2)] flex items-start gap-2.5 transition-colors"
-        >
-          <div className="w-8 h-8 rounded-lg bg-[var(--s2)] grid place-items-center flex-shrink-0 text-[var(--t)]">
-            <ArrowRightLeft className="w-4 h-4 text-[var(--b)]" />
-          </div>
-          <div>
-            <b className="text-[12px] text-[var(--t)] block">Bridge</b>
-            <small className="text-[9px] text-[var(--m)] block">
-              Move context cleanly from one AI to another.
-            </small>
-          </div>
-        </button>
-
-        {/* Focus & Goals */}
-        <button
-          onClick={() => {
-            setIsToolsMenuOpen(false);
-            navigateTo('home');
-          }}
-          className="w-full text-left p-2 rounded-xl hover:bg-[var(--s2)] flex items-start gap-2.5 transition-colors"
-        >
-          <div className="w-8 h-8 rounded-lg bg-[var(--s2)] grid place-items-center flex-shrink-0 text-[var(--t)]">
-            <Target className="w-4 h-4 text-[var(--y)]" />
-          </div>
-          <div>
-            <b className="text-[12px] text-[var(--t)] block">Focus & goals</b>
-            <small className="text-[9px] text-[var(--m)] block">
-              See progress toward what matters.
-            </small>
-          </div>
-        </button>
-
-        {/* Tasks & deadlines */}
-        <button
-          onClick={() => {
-            setIsToolsMenuOpen(false);
-            navigateTo('tasks');
-          }}
-          className="w-full text-left p-2 rounded-xl hover:bg-[var(--s2)] flex items-start gap-2.5 transition-colors"
-        >
-          <div className="w-8 h-8 rounded-lg bg-[var(--s2)] grid place-items-center flex-shrink-0 text-[var(--t)]">
-            <CheckSquare className="w-4 h-4 text-[var(--g)]" />
-          </div>
-          <div>
-            <b className="text-[12px] text-[var(--t)] block">Tasks & deadlines</b>
-            <small className="text-[9px] text-[var(--m)] block">
-              Turn research into finishable actions.
-            </small>
-          </div>
-        </button>
-      </div>
+      <div className="text-[10px] tracking-[0.14em] uppercase font-bold text-[#8a8175] px-3 pt-2 pb-1">Tools</div>
+      <button
+        type="button"
+        onClick={() => { setIsToolsMenuOpen(false); navigateTo('notes'); }}
+        className="w-full text-left px-3 py-2.5 rounded-2xl hover:bg-[#f6f3ec] flex items-center gap-3 cursor-pointer"
+      >
+        <span className="w-9 h-9 rounded-xl bg-[#f6f3ec] grid place-items-center"><BookOpen className="w-4 h-4" /></span>
+        <span>
+          <b className="block text-[13px] text-[#171717]">Notes</b>
+          <small className="block text-[11px] text-[#6b6560]">A thought, kept with the work.</small>
+        </span>
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          setIsToolsMenuOpen(false);
+          window.dispatchEvent(new Event('bob-open-roadmap'));
+        }}
+        className="w-full text-left px-3 py-2.5 rounded-2xl hover:bg-[#f6f3ec] flex items-center gap-3 cursor-pointer"
+      >
+        <span className="w-9 h-9 rounded-xl bg-[#f6f3ec] grid place-items-center"><Map className="w-4 h-4" /></span>
+        <span>
+          <b className="block text-[13px] text-[#171717]">Roadmap</b>
+          <small className="block text-[11px] text-[#6b6560]">Name the work, then the order.</small>
+        </span>
+      </button>
     </div>
   );
 };
