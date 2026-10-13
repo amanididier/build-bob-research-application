@@ -301,39 +301,8 @@ export const BottomComposer: React.FC = () => {
             </div>
           )}
 
-          {/* Direct Hands-Free Mic Button (ChatGPT / Gemini style dictation) */}
-          <button
-            onClick={handleToggleMic}
-            title={
-              voiceState === 'SPEAKING'
-                ? 'Interrupt speech'
-                : isVoiceActive && voiceMode === 'prompt'
-                ? 'Stop dictation'
-                : 'Dictate message (hands-free)'
-            }
-            className={`w-8 h-8 rounded-full grid place-items-center transition-all cursor-pointer ${
-              isVoiceActive && voiceMode === 'prompt'
-                ? 'bg-[var(--y)] text-neutral-900 shadow-md ring-2 ring-[var(--y)]/40 scale-105'
-                : 'hover:bg-[var(--s2)] text-[var(--m)] hover:text-[var(--t)]'
-            }`}
-          >
-            {isVoiceActive && voiceMode === 'prompt' ? (
-              <MicOff className="w-4 h-4 stroke-[2]" />
-            ) : (
-              <Mic className="w-4 h-4 stroke-[1.8]" />
-            )}
-          </button>
-
-          {/* Direct Live Call Mode Button (ChatGPT Advanced Voice / Gemini Live style) */}
-          <button
-            onClick={handleStartCall}
-            title="Start live voice call with Bob"
-            className="w-8 h-8 rounded-full grid place-items-center transition-all cursor-pointer bg-[var(--s2)] hover:bg-[var(--y)] text-[var(--t)] hover:text-[#171717] hover:shadow-xs active:scale-95"
-          >
-            <Phone className="w-3.5 h-3.5 stroke-[2]" />
-          </button>
-
           {/* Send Button */}
+
           <button
             onClick={() => handleSend()}
             disabled={!prompt.trim() || isAiGenerating}

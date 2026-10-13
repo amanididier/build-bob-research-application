@@ -13,7 +13,10 @@ import {
   ChevronRight,
   ExternalLink,
   Volume2,
-  VolumeX
+  VolumeX,
+  Compass,
+  ArrowRight,
+  Target
 } from 'lucide-react';
 import { bobVoice } from '../../lib/voiceAgent';
 
@@ -362,24 +365,8 @@ export const ChatView: React.FC = () => {
                         <span>{extractedTasks[msg.id] ? 'Task Added' : 'Turn into Task'}</span>
                       </button>
 
-                      <button
-                        onClick={() => handleSpeakMessage(msg.id, msg.text)}
-                        className={`px-2 py-1 rounded-lg transition-colors flex items-center gap-1 font-medium ${
-                          speakingMsgId === msg.id
-                            ? 'text-amber-500 bg-[var(--s2)] font-semibold'
-                            : 'hover:bg-[var(--s2)] text-[var(--m)] hover:text-[var(--t)]'
-                        }`}
-                        title={speakingMsgId === msg.id ? 'Pause voice' : 'Listen with Bob humanistic voice'}
-                      >
-                        {speakingMsgId === msg.id ? (
-                          <VolumeX className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
-                        ) : (
-                          <Volume2 className="w-3.5 h-3.5" />
-                        )}
-                        <span>{speakingMsgId === msg.id ? 'Speaking' : 'Read Aloud'}</span>
-                      </button>
-
                       <span className="flex-1" />
+
 
                       <button
                         onClick={() => sendMessage('Can you rephrase this with a comparison table?')}
@@ -410,7 +397,44 @@ export const ChatView: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Suggestion Card: Create the Roadmap when project requires multiple steps */}
+        {messages.length > 0 && !isAiGenerating && (
+          <div className="my-5 p-5 rounded-[24px] bg-[var(--s)] border border-[var(--line)] shadow-[0_8px_30px_rgba(0,0,0,0.04)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-2xl bg-[var(--ys)] text-[#765700] dark:text-[#f4d35e] flex items-center justify-center shrink-0 shadow-inner">
+                <Compass className="w-5 h-5 text-[var(--y)]" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-[var(--y)]">
+                    Project Roadmap
+                  </span>
+                  <span className="text-[10.5px] text-[var(--m)]">· Recommended next step</span>
+                </div>
+                <h4 className="text-[15px] font-extrabold text-[var(--t)] mt-0.5 mb-1 m-0">
+                  Ready to turn these insights into an organized roadmap?
+                </h4>
+                <p className="text-[12.5px] text-[var(--m)] leading-relaxed m-0 max-w-[540px]">
+                  Bob will structure each phase, specify tools on each page, and guide you sequentially with dynamic milestone icons.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                window.dispatchEvent(new Event('bob-open-roadmap'));
+              }}
+              className="px-4 py-2.5 rounded-xl bg-[#171717] dark:bg-[var(--y)] hover:bg-black text-white dark:text-[#171717] font-extrabold text-[12.5px] flex items-center gap-2 transition-all active:scale-95 shadow-sm cursor-pointer shrink-0"
+            >
+              <span>Create the roadmap</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
       </div>
+
 
       {/* Auth Pop-up Card on First Response */}
       <AuthModal

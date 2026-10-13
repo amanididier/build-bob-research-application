@@ -207,18 +207,6 @@ export const HomePage: React.FC = () => {
             />
 
             <button
-              type="button"
-              onClick={() => {
-                const newId = createNewResearchSession();
-                navigateTo('research', 'chat', newId);
-              }}
-              title="Speak with Bob"
-              className="w-9 h-9 rounded-xl hover:bg-neutral-200/60 dark:hover:bg-neutral-800 text-neutral-600 dark:text-neutral-300 grid place-items-center transition-colors cursor-pointer shrink-0"
-            >
-              <Mic className="w-4 h-4" />
-            </button>
-
-            <button
               type="submit"
               disabled={!composerInput.trim() || isSubmitting}
               className="h-10 px-4 rounded-xl bg-[var(--y)] hover:bg-[#ebd200] text-[#171717] font-bold text-[13px] flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0 shadow-sm"

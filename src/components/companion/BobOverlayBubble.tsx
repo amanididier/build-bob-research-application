@@ -219,20 +219,8 @@ export const BobOverlayBubble: React.FC = () => {
         {/* 1. Hover Quick-Pill (Talk | Chat | Research | Side Panel) */}
         {(isHovered || isExpanded) && !isProactiveSpeaking && (
           <div className="mb-3 px-1.5 py-1 rounded-full bg-[var(--s)]/90 backdrop-blur-md border border-[var(--line)] shadow-xl flex items-center gap-1 animate-in fade-in slide-in-from-bottom-2 duration-150">
-            {/* Direct 1-Click Voice Call Button */}
             <button
-              type="button"
-              onClick={() => {
-                void startVoiceMode('call');
-              }}
-              title={hasGeminiKey ? "Start Live Voice Call (Gemini Live API)" : "Start Voice Call (Local Fallback)"}
-              className="px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 shadow-sm"
-            >
-              <Mic className="w-3.5 h-3.5 animate-pulse text-emerald-400" />
-              <span>Talk</span>
-            </button>
 
-            <button
               type="button"
               onClick={() => {
                 setBubbleMode('chat');

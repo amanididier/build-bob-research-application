@@ -12,6 +12,7 @@ import { GoogleGenAI } from '@google/genai';
 import { localMemoryBank, MemoryNode } from './researchMemory';
 import { detectSystemHardware, MODEL_CATALOG, SystemHardwareInfo } from './hardware';
 import { ModelTier } from '../types';
+import { resolveGeminiApiKey } from './ai/keyManager';
 
 export interface ModelDownloadStatus {
   tier: ModelTier;
@@ -110,6 +111,8 @@ class BobAiManager {
   }
 
   public getGeminiKey(): string | null {
+    const resolved = resolveGeminiApiKey();
+    if (resolved) return resolved;
     if (typeof window !== 'undefined') {
       return localStorage.getItem(GEMINI_KEY_STORAGE) || this.geminiKey;
     }
@@ -180,8 +183,8 @@ class BobAiManager {
 
     const candidateModels = [
       this.verifiedModel,
-      'gemini-3.8-flash',
       'gemini-3.1-flash-lite',
+      'gemini-3.8-flash',
       'gemini-3.1-pro-preview'
     ].filter(Boolean);
     const uniqueModels = [...new Set(candidateModels)];
@@ -278,11 +281,12 @@ class BobAiManager {
     if (geminiKey) {
       const candidateModels = [
         this.verifiedModel,
-        'gemini-3.8-flash',
         'gemini-3.1-flash-lite',
+        'gemini-3.8-flash',
         'gemini-3.1-pro-preview'
       ].filter(Boolean);
       const uniqueModels = [...new Set(candidateModels)];
+
       const systemPrompt = `You are Bob, an intelligent, helpful research companion.
 Speak naturally, warmly, and clearly like ChatGPT or Gemini.
 When presenting comparisons or structured findings, use clean markdown tables.

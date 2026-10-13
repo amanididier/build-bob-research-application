@@ -11,8 +11,10 @@ import {
   Lock, 
   ArrowRight,
   Clock,
-  Play
+  Play,
+  Send
 } from 'lucide-react';
+
 import { PhasedTask } from './RoadmapWizardModal';
 import { TaskUnlockModal } from './TaskUnlockModal';
 import { useApp } from '../../context/AppContext';
@@ -47,6 +49,12 @@ export const TaskStepExecutionView: React.FC<TaskStepExecutionViewProps> = ({
     setCopiedIndex(idx);
     triggerThinking('Prompt Copied', 'Prompt copied to clipboard. Ready to paste.', 'Clipboard updated');
     setTimeout(() => setCopiedIndex(null), 2000);
+  };
+
+  const handleSendToChatGPT = (text: string) => {
+    const url = `https://chatgpt.com/?q=${encodeURIComponent(text)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+    triggerThinking('Sent to ChatGPT', 'Opened ChatGPT composer with prompt ready.', 'Prompt sent');
   };
 
   const nextTask = allTasks.find((t) => t.priority === task.priority + 1);
@@ -188,24 +196,38 @@ export const TaskStepExecutionView: React.FC<TaskStepExecutionViewProps> = ({
                             <span className="font-extrabold text-[var(--y)] mr-2">{letter}.</span>
                             <span>{promptText}</span>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyPrompt(promptText, pIdx)}
-                            className={`p-1.5 rounded-lg border shrink-0 transition-all ${
-                              isCopied
-                                ? 'bg-[var(--g)] text-white border-[var(--g)]'
-                                : 'bg-[var(--s)] hover:bg-[var(--line)] text-[var(--m)] hover:text-[var(--t)] border-[var(--line)]'
-                            }`}
-                            title="Copy prompt"
-                          >
-                            {isCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                          </button>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleCopyPrompt(promptText, pIdx)}
+                              className={`px-2 py-1.5 rounded-lg border text-[11px] font-semibold transition-all flex items-center gap-1 ${
+                                isCopied
+                                  ? 'bg-[var(--g)] text-white border-[var(--g)]'
+                                  : 'bg-[var(--s)] hover:bg-[var(--line)] text-[var(--m)] hover:text-[var(--t)] border-[var(--line)]'
+                              }`}
+                              title="Copy prompt"
+                            >
+                              {isCopied ? <Check className="w-3.5 h-3.5 text-white" /> : <Copy className="w-3.5 h-3.5" />}
+                              <span>{isCopied ? 'Copied' : 'Copy'}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleSendToChatGPT(promptText)}
+                              className="px-2.5 py-1.5 rounded-lg bg-[#10a37f] hover:bg-[#0e8f6f] text-white font-bold text-[11px] transition-all flex items-center gap-1 shadow-xs cursor-pointer active:scale-95"
+                              title="Send to ChatGPT composer"
+                            >
+                              <Send className="w-3 h-3" />
+                              <span>Send</span>
+                            </button>
+                          </div>
                         </div>
                       );
                     })}
                   </div>
                 </div>
               )}
+
 
               {/* Step 3: Coding tool terminal instruction card */}
               {st.tool === 'claude_code' && (
