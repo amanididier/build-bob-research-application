@@ -41,6 +41,7 @@ export const ChatPage: React.FC = () => {
   const [messages, setMessages] = useState<MessengerMsg[]>(loadMessages);
   const [draft, setDraft] = useState('');
   const [isBobTyping, setIsBobTyping] = useState(false);
+  const [showRoadmapSuggestion, setShowRoadmapSuggestion] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const sendingRef = useRef(false);
 
@@ -96,6 +97,8 @@ export const ChatPage: React.FC = () => {
     if (!text || sendingRef.current) return;
     sendingRef.current = true;
     setDraft('');
+    const roadmapIntent = /\b(ready to (make|create|build|plan)|create (a |my )?roadmap|make (a |my )?roadmap|help me plan|turn this into a plan|plan this project)\b/i.test(text);
+    if (roadmapIntent) setShowRoadmapSuggestion(true);
     setMessages((prev) => [
       ...prev,
       { id: `m-${Date.now()}`, role: 'user', text, ts: Date.now() },
@@ -202,6 +205,35 @@ export const ChatPage: React.FC = () => {
             </React.Fragment>
           );
         })}
+
+        {showRoadmapSuggestion && (
+          <div className="flex justify-start animate-in fade-in slide-in-from-bottom-1 duration-200">
+            <div className="max-w-[90%] rounded-2xl border border-[var(--y)]/40 bg-[var(--s)] px-4 py-3 shadow-sm">
+              <p className="m-0 text-[12px] font-semibold text-[var(--t)]">Want to shape this into a clear plan?</p>
+              <p className="mt-1 mb-3 text-[11px] leading-relaxed text-[var(--m)]">Bob will guide you through a few focused questions, then build an editable roadmap.</p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.dispatchEvent(new CustomEvent('bob-open-roadmap', { detail: { title: messages.filter((m) => m.role === 'user').slice(-1)[0]?.text || '' } }));
+                    setShowRoadmapSuggestion(false);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-[var(--y)] px-3.5 py-2 text-[11px] font-bold text-[#171717] transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--y)]"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Create roadmap
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowRoadmapSuggestion(false)}
+                  className="rounded-full px-3 py-2 text-[11px] font-medium text-[var(--m)] hover:text-[var(--t)]"
+                >
+                  Not now
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {isBobTyping && (
           <div className="flex justify-start animate-in fade-in duration-200">
