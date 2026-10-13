@@ -67,13 +67,14 @@ export const RoadmapSheet: React.FC = () => {
       setCustomText('');
       setUploadedFile(null);
 
-      // Rotate or pick sticker set based on query
-      const q = query.toLowerCase();
-      let pickedSet = 'construction';
-      if (/cook|bake|recipe|meal|food|kitchen/.test(q)) pickedSet = 'kitchen';
-      else if (/travel|trip|holiday|vacation|tour/.test(q)) pickedSet = 'holiday';
-      else if (/launch|ship|deploy|rocket|market/.test(q)) pickedSet = 'launch';
-      else if (/garden|plant|nature|grow|habit/.test(q)) pickedSet = 'garden';
+      // Stickers are Bob's journey, not an illustration of the user's project type.
+      // Rotate sets between projects; never infer the sticker story from the goal text.
+      let completedRoadmaps = 0;
+      try {
+        completedRoadmaps = JSON.parse(localStorage.getItem('bob_roadmaps_v1') || '[]').length;
+      } catch {}
+      const savedSet = localStorage.getItem('bob_roadmap_sticker_set');
+      const pickedSet = savedSet || STICKER_SETS[completedRoadmaps % STICKER_SETS.length];
       setStickerSet(pickedSet);
     };
 
@@ -85,29 +86,14 @@ export const RoadmapSheet: React.FC = () => {
   const pages: PageModel[] = useMemo(() => {
     const name = userName || 'Researcher';
     const goalTitle = goalQuery || 'your upcoming project';
-    const totalSteps = 7;
+    const totalSteps = 6;
 
     return [
-      // Page 1: Hook (Fact Card)
-      {
-        page_id: 'hook',
-        role: 'question',
-        progress: { step: 1, of: totalSteps },
-        eyebrow: 'YOUR SIGNAL',
-        title: `${name}, focused roadmaps finish 4× faster.`,
-        subtitle: 'A clear finish line saves weeks of aimless browsing.',
-        layout: 'fact_card',
-        fact: { number: '4×', sentence: 'Researchers who lock a single deliverable before researching finish in under 3 weeks.' },
-        primary: { label: 'Get Started', action: 'next' },
-        skip: { label: 'Skip overview' },
-        sticker: { set: stickerSet, stage: 1 }
-      },
-
       // Page 2: Goal (Option Rows)
       {
         page_id: 'goal',
         role: 'question',
-        progress: { step: 2, of: totalSteps },
+        progress: { step: 1, of: totalSteps },
         eyebrow: 'YOUR GOAL',
         title: `${name}, what are you actually building?`,
         subtitle: 'One line is enough. We will tighten the finish line next.',
@@ -119,14 +105,14 @@ export const RoadmapSheet: React.FC = () => {
           { value: 'other', label: 'Something else...', reveals_input: true }
         ],
         primary: { label: 'Continue', action: 'next' },
-        sticker: { set: stickerSet, stage: 2 }
+        sticker: { set: stickerSet, stage: 1 }
       },
 
       // Page 3: Time Budget (Segmented Choice)
       {
         page_id: 'time_budget',
         role: 'question',
-        progress: { step: 3, of: totalSteps },
+        progress: { step: 2, of: totalSteps },
         eyebrow: 'YOUR TIME',
         title: 'How much focused time can you give this each week?',
         subtitle: 'Pacing determines whether we recommend 2-week sprints or deep passes.',
@@ -144,7 +130,7 @@ export const RoadmapSheet: React.FC = () => {
       {
         page_id: 'tools',
         role: 'question',
-        progress: { step: 4, of: totalSteps },
+        progress: { step: 3, of: totalSteps },
         eyebrow: 'YOUR WORKBENCH',
         title: 'Select the primary tools you want on your bench:',
         subtitle: 'Pick the essential stack. Extra tools are how an afternoon disappears.',
@@ -159,14 +145,14 @@ export const RoadmapSheet: React.FC = () => {
           { value: 'git', label: 'Git & Terminal' }
         ],
         primary: { label: 'Confirm Tools', action: 'next' },
-        sticker: { set: stickerSet, stage: 3 }
+        sticker: { set: stickerSet, stage: 2 }
       },
 
       // Page 5: Optional Materials (Dropzone Optional)
       {
         page_id: 'materials',
         role: 'question',
-        progress: { step: 5, of: totalSteps },
+        progress: { step: 4, of: totalSteps },
         eyebrow: 'REFERENCE MATERIALS',
         title: 'Have notes, a brief, or resume to anchor this?',
         subtitle: 'Optional. Bob extracts quotes and facts to tailor your roadmap steps.',
@@ -180,16 +166,16 @@ export const RoadmapSheet: React.FC = () => {
       {
         page_id: 'reveal',
         role: 'reveal',
-        progress: { step: 6, of: totalSteps },
+        progress: { step: 5, of: totalSteps },
         eyebrow: 'YOUR PATH',
-        title: `${name}, your roadmap can reach completion in 3 to 5 weeks.`,
+        title: `${name}, here is your estimated path forward.`,
         subtitle: 'Here is how your phases sequence together before we generate execution steps.',
         layout: 'timeline_estimate',
         phases: ['Clarify', 'Structure', 'Execute', 'Ship'],
         current_phase: 0,
         estimate: {
-          range: '3 to 5 weeks',
-          basis: 'Based on 6 focused hours per week, verified tools, and zero dependency bloat.'
+          range: 'To be refined from your answers',
+          basis: 'This is an estimate, not a promise. Bob should refine the range using your deadline, available hours, tools, and constraints.'
         },
         primary: { label: 'Generate Actionable Roadmap', action: 'next' },
         sticker: { set: stickerSet, stage: 4 }
@@ -199,7 +185,7 @@ export const RoadmapSheet: React.FC = () => {
       {
         page_id: 'roadmap_view',
         role: 'roadmap',
-        progress: { step: 7, of: totalSteps },
+        progress: { step: 6, of: totalSteps },
         eyebrow: 'YOUR ROADMAP',
         title: 'Step-by-Step Action Roadmap',
         subtitle: 'Small, reliable momentum. Click ChatGPT to open any prompt directly.',
@@ -340,16 +326,14 @@ export const RoadmapSheet: React.FC = () => {
 
   return (
     <div 
-      className={`fixed inset-0 z-[70] backdrop-blur-md flex items-center justify-center p-2 sm:p-5 animate-in fade-in duration-200 ${
-        isDark ? 'bg-black/80 text-[#F4EFE6]' : 'bg-[#1F1A14]/40 text-[#1F1A14]'
+      className={`fixed inset-0 z-[70] flex items-center justify-center animate-in fade-in duration-200 ${
+        isDark ? 'bg-[#0E0D0B] text-[#F4EFE6]' : 'bg-[#FBF8F2] text-[#1F1A14]'
       }`}
     >
       {/* Full-Page Centered Column (480px to 560px on desktop) */}
       <div 
-        className={`w-full max-w-[620px] h-[94vh] max-h-[820px] rounded-[24px] border flex flex-col shadow-2xl overflow-hidden transition-colors duration-300 relative ${
-          isDark 
-            ? 'bg-[#0E0D0B] border-[#2A2620]' 
-            : 'bg-[#FBF8F2] border-[#E7E0D3]'
+        className={`w-full h-full max-w-none max-h-none rounded-none border-0 shadow-none flex flex-col overflow-hidden transition-colors duration-300 relative ${
+          isDark ? 'bg-[#0E0D0B]' : 'bg-[#FBF8F2]'
         }`}
       >
         {/* TOP BAR: back chevron, wordmark, thin progress line across width, step count at right, theme toggle */}
