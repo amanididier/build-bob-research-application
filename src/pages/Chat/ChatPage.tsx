@@ -152,6 +152,18 @@ export const ChatPage: React.FC = () => {
               <br />
               Messages stay on this device.
             </p>
+            <div className="mt-5 flex flex-col items-center gap-2">
+              <p className="text-sm text-[var(--t)] font-medium m-0">Have an idea you want to make real?</p>
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent('bob-open-roadmap', { detail: { title: '' } }))}
+                className="inline-flex items-center gap-2 rounded-full border border-[var(--y)]/60 bg-[var(--y)]/10 px-4 py-2.5 text-[12px] font-semibold text-[var(--t)] transition-colors hover:bg-[var(--y)]/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--y)]"
+              >
+                <Sparkles className="h-4 w-4 text-[var(--y)]" />
+                Create roadmap
+              </button>
+              <span className="text-[11px] text-[var(--m)]">We’ll shape the idea together, one step at a time.</span>
+            </div>
           </div>
         )}
 
