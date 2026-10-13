@@ -14,7 +14,6 @@ import { ChromeExtensionModal } from '../modals/ChromeExtensionModal';
 import { OnboardingFlow } from '../onboarding/OnboardingFlow';
 import { AuthModal } from '../modals/AuthModal';
 import { ErrorBoundary } from '../ErrorBoundary';
-import { BobOverlayBubble } from '../companion/BobOverlayBubble';
 import { DailySplash } from '../companion/DailySplash';
 import { RoadmapSheet } from '../roadmap/RoadmapSheet';
 import { HomePage } from '../../pages/Home/HomePage';
@@ -80,7 +79,6 @@ export const AppShell: React.FC = () => {
       />
       <DailySplash />
       <RoadmapSheet />
-      <BobOverlayBubble />
     </div>
   );
 };
