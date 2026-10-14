@@ -324,7 +324,7 @@ export const RoadmapSheet: React.FC = () => {
         for (const step of phase.steps || []) {
           const title = String(step.title || '').trim();
           if (title) {
-            addTask(`[${phase.phase}] ${title}`, 'Roadmap', activeResearchId);
+            addTask(`[${phase.phase}] ${title}`, 'Roadmap', activeResearchId, { sourceConnection: 'Bob Roadmap', isAiGenerated: true });
             created += 1;
           }
         }
