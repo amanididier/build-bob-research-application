@@ -313,6 +313,13 @@ export const RoadmapSheet: React.FC = () => {
       return;
     }
     setGoalQuery(effectiveGoal);
+    const needsAnswer = ['option_rows', 'segmented_choice', 'chip_select', 'slider_value', 'text_input'].includes(currentPage.layout);
+    const currentValue = answers[currentPage.page_id];
+    if (needsAnswer && (currentValue === undefined || currentValue === null || currentValue === '' || (Array.isArray(currentValue) && currentValue.length === 0))) {
+      triggerThinking('One quick answer first', 'Choose or enter an answer so Bob can make the next page useful.', 'Waiting for your answer');
+      return;
+    }
+
     setIsGenerating(true);
     try {
       const next = await generateNextRoadmapPage({
@@ -327,6 +334,7 @@ export const RoadmapSheet: React.FC = () => {
       });
       const normalized = normalizeRoadmapPage(next, pages.length + 1, pages.length + 2, stickerSet);
       setPageModels((previous) => [...previous.map((page, index) => ({ ...page, progress: { step: index + 1, of: normalized.role === 'roadmap' ? previous.length + 1 : previous.length + 2 } })), { ...normalized, progress: { step: previous.length + 1, of: normalized.role === 'roadmap' ? previous.length + 1 : previous.length + 2 } }]);
+      setCustomText('');
       setPageIndex((previous) => previous + 1);
     } catch (error) {
       console.error('[Bob roadmap] Could not generate next page:', error);
@@ -336,6 +344,7 @@ export const RoadmapSheet: React.FC = () => {
         pages.length + 1
       );
       setPageModels((previous) => [...previous.map((page, index) => ({ ...page, progress: { step: index + 1, of: previous.length + 2 } })), { ...fallback, progress: { step: previous.length + 1, of: previous.length + 2 } }]);
+      setCustomText('');
       setPageIndex((previous) => previous + 1);
       triggerThinking('Roadmap is continuing offline', 'Gemini could not generate the next page. Bob added a simple fallback question; check your Gemini key or connection if this repeats.', 'Using safe fallback');
     } finally {
@@ -495,10 +504,10 @@ export const RoadmapSheet: React.FC = () => {
               {currentPage.layout === 'option_rows' && (
                 <OptionRowsLayout
                   options={currentPage.options}
-                  value={answers[currentPage.page_id] || currentPage.options?.[0]?.value || ''}
+                  value={answers[currentPage.page_id] || ''}
                   customText={customText}
                   onChange={(val) => setAnswers({ ...answers, [currentPage.page_id]: val })}
-                  onCustomTextChange={(txt) => setCustomText(txt)}
+                  onCustomTextChange={(txt) => { setCustomText(txt); setAnswers((previous) => ({ ...previous, [currentPage.page_id + '_custom']: txt })); }}
                   isDark={isDark}
                 />
               )}
@@ -506,7 +515,7 @@ export const RoadmapSheet: React.FC = () => {
               {currentPage.layout === 'segmented_choice' && (
                 <SegmentedChoiceLayout
                   options={currentPage.options}
-                  value={answers[currentPage.page_id] || currentPage.options?.[1]?.value || ''}
+                  value={answers[currentPage.page_id] || ''}
                   onChange={(val) => setAnswers({ ...answers, [currentPage.page_id]: val })}
                   isDark={isDark}
                 />
@@ -515,7 +524,7 @@ export const RoadmapSheet: React.FC = () => {
               {currentPage.layout === 'chip_select' && (
                 <ChipSelectLayout
                   chips={currentPage.chips}
-                  selectedValues={answers[currentPage.page_id] || ['chatgpt', 'notes']}
+                  selectedValues={answers[currentPage.page_id] || []}
                   onChange={(vals) => setAnswers({ ...answers, [currentPage.page_id]: vals })}
                   isDark={isDark}
                 />
@@ -524,7 +533,7 @@ export const RoadmapSheet: React.FC = () => {
               {currentPage.layout === 'slider_value' && (
                 <SliderValueLayout
                   slider={currentPage.slider}
-                  value={answers[currentPage.page_id] ?? 10}
+                  value={answers[currentPage.page_id] ?? currentPage.slider?.default ?? 10}
                   onChange={(val) => setAnswers({ ...answers, [currentPage.page_id]: val })}
                   isDark={isDark}
                 />
