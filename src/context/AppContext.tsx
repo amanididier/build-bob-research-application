@@ -152,6 +152,7 @@ interface AppContextType {
   addTask: (title: string, dueDate?: string, projectId?: string) => void;
   extractAiTasks: () => Promise<number>;
   addNote: (noteData: Omit<ResearchNoteItem, 'id' | 'createdAt'>) => void;
+  updateNote: (id: string, updates: Partial<Pick<ResearchNoteItem, 'title' | 'selectedText' | 'sourceTitle' | 'sourceUrl' | 'color'>>) => void;
   polishNote: (id: string) => Promise<void>;
 
   // Notifications
@@ -926,6 +927,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshMemoryStats();
   };
 
+  const updateNote = (noteId: string, updates: Partial<Pick<ResearchNoteItem, 'title' | 'selectedText' | 'sourceTitle' | 'sourceUrl' | 'color'>>) => {
+    setNotes((prev) => prev.map((note) => note.id === noteId ? { ...note, ...updates } : note));
+  };
+
   const polishNote = async (noteId: string) => {
     const target = notes.find((n) => n.id === noteId);
     if (!target) return;
@@ -1029,6 +1034,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addTask,
         extractAiTasks,
         addNote,
+        updateNote,
         polishNote,
         unreadNotifications,
         markNotificationsRead,
