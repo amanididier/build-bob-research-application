@@ -102,7 +102,7 @@ jobs:
       - name: Build and publish Windows installer
         working-directory: apps/desktop
         env:
-          GH_TOKEN: ${ secrets.GITHUB_TOKEN }
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --win nsis --publish always
 
       - name: Generate versioned installer alias
@@ -118,7 +118,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.70
-          target_commitish: ${ github.sha }
+          target_commitish: ${{ github.sha }}
           name: Bob v1.0.70
           draft: false
           prerelease: false
