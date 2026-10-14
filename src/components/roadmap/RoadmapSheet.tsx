@@ -57,7 +57,7 @@ function makeRoadmapStarter(name: string, goal: string, stickerSet: string): Pag
 }
 
 function normalizeRoadmapPage(raw: any, step: number, total: number, stickerSet: string): PageModel {
-  const layouts = new Set(['option_rows', 'option_tiles', 'segmented_choice', 'chip_select', 'slider_value', 'text_input', 'dropzone_optional', 'timeline_estimate', 'step_list']);
+  const layouts = new Set(['fact_card', 'option_rows', 'option_tiles', 'segmented_choice', 'chip_select', 'slider_value', 'text_input', 'dropzone_optional', 'timeline_estimate', 'step_list']);
   if (!raw || typeof raw !== 'object') throw new Error('Gemini returned an empty page.');
   const role = raw.role === 'roadmap' ? 'roadmap' : raw.role === 'reveal' ? 'reveal' : 'question';
   const layout = role === 'roadmap' ? 'step_list' : layouts.has(raw.layout) ? raw.layout : 'option_rows';
@@ -84,6 +84,7 @@ function normalizeRoadmapPage(raw: any, step: number, total: number, stickerSet:
     title,
     subtitle: typeof raw.subtitle === 'string' ? raw.subtitle.slice(0, 280) : undefined,
     layout,
+    fact: raw.fact && typeof raw.fact === 'object' ? { number: String(raw.fact.number || 'DID YOU KNOW').slice(0, 50), sentence: String(raw.fact.sentence || '').slice(0, 320) } : undefined,
     options: cleanOptions,
     chips: cleanChips,
     slider: raw.slider && Number.isFinite(Number(raw.slider.min)) && Number.isFinite(Number(raw.slider.max))
@@ -126,12 +127,12 @@ CAN_RETURN_FINAL_ROADMAP: ${input.canGeneratePlan}
 Product principles:
 - Use a warm, brief, plain-language tone. Ask one focused question at a time; do not repeat answered questions.
 - Make the page specifically useful for this goal. Use only the highest-value missing detail, commonly success criteria, audience, deadline, available hours, existing tools, constraints, current progress, or source materials.
-- Vary the page layout naturally. Allowed layouts: option_rows (options[]), option_tiles (options[]), segmented_choice (options[]), chip_select (chips[]), slider_value (slider {min,max,step,default,unit}), text_input, dropzone_optional, timeline_estimate (phases[], estimate {range,basis}), step_list (roadmap_phases[]).
+- Vary the page layout naturally. Allowed layouts: fact_card (fact {number,sentence}), option_rows (options[]), option_tiles (options[]), segmented_choice (options[]), chip_select (chips[]), slider_value (slider {min,max,step,default,unit}), text_input, dropzone_optional, timeline_estimate (phases[], estimate {range,basis}), step_list (roadmap_phases[]).
 - Keep titles conversational and concise; subtitle one short sentence. Never invent facts, statistics, deadlines, or capabilities.
 - Return a roadmap only when enough information is known to make a useful plan, normally after 3–6 useful answers. If CAN_RETURN_FINAL_ROADMAP is false, do not return role=roadmap. If CAN_RETURN_FINAL_ROADMAP is true, return the final roadmap now unless one truly essential detail is missing. When ready, return role=roadmap and layout=step_list with 2–6 phases and 2–6 actionable steps per phase. Each step must include title, why, tools array, and status 'todo'. Steps must be concrete, ordered, and tailored to the goal. Don't promise success or unrealistic durations.
 - For a normal question, return role='question', a unique page_id, layout, title, eyebrow, subtitle, primary {label,action:'next'}, optional skip {label}, and only fields required for that layout.
 - For a reveal, use role='reveal' and layout='timeline_estimate' only when a useful, grounded estimate is possible.
-- Use a fact_card only if supported by supplied context; otherwise choose a question.
+- Use fact_card only for an insight supported by supplied context or a clearly labeled planning principle; never invent a statistic or numerical claim. Otherwise choose a question.
 - JSON object only. No markdown fences.`;
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${encodeURIComponent(input.apiKey)}`, {
     method: 'POST',
