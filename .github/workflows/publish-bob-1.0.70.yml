@@ -1,0 +1,80 @@
+name: Publish Bob v1.0.70
+
+on:
+  push:
+    branches:
+      - main
+      - release/premium-roadmap-v1.0.70
+
+permissions:
+  contents: write
+
+jobs:
+  validate_release:
+    if: ${{ startsWith(github.event.head_commit.message, 'release: Bob v1.0.70') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install root dependencies
+        run: npm install --legacy-peer-deps
+      - name: TypeScript validation
+        run: npm run lint
+      - name: Build web app and extension
+        run: npm run build
+      - name: Verify version and extension scripts
+        run: |
+          ROOT_VERSION=$(node -p "require('./package.json').version")
+          DESKTOP_VERSION=$(node -p "require('./apps/desktop/package.json').version")
+          test "$ROOT_VERSION" = "1.0.70"
+          test "$DESKTOP_VERSION" = "$ROOT_VERSION"
+          node --check chrome-extension/background.js
+          node --check chrome-extension/content.js
+          node --check chrome-extension/sidepanel.js
+
+  publish_desktop:
+    needs: validate_release
+    if: ${{ startsWith(github.event.head_commit.message, 'release: Bob v1.0.70') }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install root dependencies and build web/extension
+        run: |
+          npm install --legacy-peer-deps
+          npm run build
+      - name: Install desktop dependencies
+        working-directory: apps/desktop
+        run: npm install --no-audit --no-fund
+      - name: Build and publish Windows installer
+        working-directory: apps/desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --win nsis --publish always
+      - name: Add versioned installer alias
+        shell: bash
+        run: |
+          if [ -f "apps/desktop/dist/Bob-Research-Companion-Setup.exe" ]; then
+            cp "apps/desktop/dist/Bob-Research-Companion-Setup.exe" "apps/desktop/dist/Bob-Research-Companion-Setup-1.0.70.exe"
+            if [ -f "apps/desktop/dist/Bob-Research-Companion-Setup.exe.blockmap" ]; then
+              cp "apps/desktop/dist/Bob-Research-Companion-Setup.exe.blockmap" "apps/desktop/dist/Bob-Research-Companion-Setup-1.0.70.exe.blockmap"
+            fi
+          fi
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.70
+          target_commitish: ${{ github.sha }}
+          name: Bob v1.0.70
+          draft: false
+          prerelease: false
+          make_latest: true
+          files: |
+            apps/desktop/dist/*.exe
+            apps/desktop/dist/*.blockmap
+            apps/desktop/dist/latest.yml
+            public/bob-chrome-extension.zip
