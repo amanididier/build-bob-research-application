@@ -44,15 +44,15 @@ const formatDay = (ts: number) => {
 
 // Casual fallback responses with caring follow-up questions
 const CASUAL_FOLLOWUPS = [
-  "How did that step you were working on earlier turn out? Did you run into any hurdles or was it smooth sailing?",
-  "By the way, did you get a chance to test out that recent change, or did you decide to take a breather first?",
-  "How is your energy holding up today? Did that milestone step feel satisfying once you got through it?",
-  "Did you manage to take that short break away from the screen, or are you still powering through?",
-  "How did things wrap up with the latest step you took? Totally okay if you're taking it one gentle pace at a time."
+  "What has been the nicest part of your day so far?",
+  "Have you heard any good music or watched anything you enjoyed lately?",
+  "Is there something small you are looking forward to this week?",
+  "Have you had a chance to enjoy a good meal or take a little break today?",
+  "What kind of thing helps you feel relaxed when your mind is busy?"
 ];
 
 export const ChatPage: React.FC = () => {
-  const { userName, tasks } = useApp();
+  const { userName } = useApp();
   const [messages, setMessages] = useState<MessengerMsg[]>(loadMessages);
   const [draft, setDraft] = useState('');
   const [isBobTyping, setIsBobTyping] = useState(false);
@@ -107,8 +107,6 @@ export const ChatPage: React.FC = () => {
   // Generate casual, relaxing companion response with occasional gentle follow-up question
   const generateRelaxedResponse = async (userInput: string): Promise<string> => {
     const key = resolveGeminiApiKey();
-    const recentTask = tasks.find(t => !t.completed);
-    const recentStepHint = recentTask ? `They have a task titled "${recentTask.title}".` : '';
 
     if (key) {
       try {
@@ -116,10 +114,11 @@ export const ChatPage: React.FC = () => {
         const systemPrompt = `You are Bob, a warm, relaxed, and thoughtful companion chatting casually with ${userName || 'your friend'} in their quiet lounge.
 This is NOT a technical project dashboard or research lecture. Keep this a relaxing haven.
 Rules:
-1. Speak casually, warmly, concisely (1 to 3 natural sentences max).
+1. Speak casually, warmly, and concisely (1 to 3 natural sentences max).
 2. Avoid bullet lists, corporate jargon, or heavy essays.
-3. At natural moments, ask a friendly follow-up question about a thing or step they would have taken recently (e.g., how a recent step went, if they took a break, or how their energy feels). ${recentStepHint}
-4. If they just want to chat about coffee, hobbies, unwinding, or random thoughts, keep it light and peaceful.`;
+3. Do not bring up research, projects, tasks, deadlines, or work unless the user asks about them first.
+4. At natural moments, ask a friendly follow-up about their day, interests, music, food, entertainment, or how they are feeling.
+5. Keep this chat separate from the research workspace: no unsolicited work reminders or project advice.`;
 
         const response = await ai.models.generateContent({
           model: 'gemini-3.1-flash-lite',
@@ -147,10 +146,6 @@ Rules:
     if (lower.includes('how are you') || lower.includes('what are you doing') || lower.includes('hey bob') || lower.includes('hello')) {
       return `I'm feeling calm and happy to hang out with you here! Just soaking in the peaceful atmosphere. ${randomFollowup}`;
     }
-    if (lower.includes('step') || lower.includes('task') || lower.includes('done') || lower.includes('finished') || lower.includes('work')) {
-      return `That's great progress! It feels good when things fall into place step by step. What's the feeling now—ready to relax for a bit or letting ideas simmer?`;
-    }
-
     return `It's really nice just chatting without all the hustle and bustle. ${randomFollowup}`;
   };
 
@@ -220,10 +215,10 @@ Rules:
               </button>
               <button
                 type="button"
-                onClick={() => handleSend("I was thinking about the steps I took today.")}
+                onClick={() => handleSend("I have something on my mind and would like to talk casually.")}
                 className="px-3 py-1.5 rounded-full bg-[var(--s2)] hover:bg-[var(--y)] hover:text-[#171717] border border-[var(--line)] text-xs font-semibold text-[var(--t)] transition-colors"
               >
-                ✨ Reflect on my steps
+                ✨ Share a thought
               </button>
             </div>
           </div>
@@ -292,10 +287,10 @@ Rules:
         </button>
         <button
           type="button"
-          onClick={() => handleSend("Hey Bob, how did that step I worked on sound to you?")}
+          onClick={() => handleSend("Hey Bob, can we talk about something fun or interesting?")}
           className="px-2.5 py-1 rounded-full bg-[var(--s2)] hover:bg-[var(--y)] hover:text-[#171717] text-[11px] font-medium text-[var(--m)] hover:text-[var(--t)] transition-colors shrink-0"
         >
-          ✨ Ask about my step
+          ✨ Share a thought
         </button>
         <button
           type="button"
