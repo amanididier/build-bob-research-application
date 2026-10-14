@@ -17,6 +17,7 @@ import {
   PageModel, 
   FactCardLayout, 
   OptionRowsLayout, 
+  OptionTilesLayout,
   SegmentedChoiceLayout, 
   ChipSelectLayout, 
   SliderValueLayout, 
@@ -56,7 +57,7 @@ function makeRoadmapStarter(name: string, goal: string, stickerSet: string): Pag
 }
 
 function normalizeRoadmapPage(raw: any, step: number, total: number, stickerSet: string): PageModel {
-  const layouts = new Set(['option_rows', 'segmented_choice', 'chip_select', 'slider_value', 'text_input', 'dropzone_optional', 'timeline_estimate', 'step_list']);
+  const layouts = new Set(['option_rows', 'option_tiles', 'segmented_choice', 'chip_select', 'slider_value', 'text_input', 'dropzone_optional', 'timeline_estimate', 'step_list']);
   if (!raw || typeof raw !== 'object') throw new Error('Gemini returned an empty page.');
   const role = raw.role === 'roadmap' ? 'roadmap' : raw.role === 'reveal' ? 'reveal' : 'question';
   const layout = role === 'roadmap' ? 'step_list' : layouts.has(raw.layout) ? raw.layout : 'option_rows';
@@ -121,7 +122,7 @@ CAN_RETURN_FINAL_ROADMAP: ${input.canGeneratePlan}
 Product principles:
 - Use a warm, brief, plain-language tone. Ask one focused question at a time; do not repeat answered questions.
 - Make the page specifically useful for this goal. Use only the highest-value missing detail, commonly success criteria, audience, deadline, available hours, existing tools, constraints, current progress, or source materials.
-- Vary the page layout naturally. Allowed layouts: option_rows (options[]), segmented_choice (options[]), chip_select (chips[]), slider_value (slider {min,max,step,default,unit}), text_input, dropzone_optional, timeline_estimate (phases[], estimate {range,basis}), step_list (roadmap_phases[]).
+- Vary the page layout naturally. Allowed layouts: option_rows (options[]), option_tiles (options[]), segmented_choice (options[]), chip_select (chips[]), slider_value (slider {min,max,step,default,unit}), text_input, dropzone_optional, timeline_estimate (phases[], estimate {range,basis}), step_list (roadmap_phases[]).
 - Keep titles conversational and concise; subtitle one short sentence. Never invent facts, statistics, deadlines, or capabilities.
 - Return a roadmap only when enough information is known to make a useful plan, normally after 3–6 useful answers. If CAN_RETURN_FINAL_ROADMAP is false, do not return role=roadmap. If CAN_RETURN_FINAL_ROADMAP is true, return the final roadmap now unless one truly essential detail is missing. When ready, return role=roadmap and layout=step_list with 2–6 phases and 2–6 actionable steps per phase. Each step must include title, why, tools array, and status 'todo'. Steps must be concrete, ordered, and tailored to the goal. Don't promise success or unrealistic durations.
 - For a normal question, return role='question', a unique page_id, layout, title, eyebrow, subtitle, primary {label,action:'next'}, optional skip {label}, and only fields required for that layout.
@@ -528,6 +529,17 @@ export const RoadmapSheet: React.FC = () => {
 
               {currentPage.layout === 'option_rows' && (
                 <OptionRowsLayout
+                  options={currentPage.options}
+                  value={answers[currentPage.page_id] || ''}
+                  customText={customText}
+                  onChange={(val) => setAnswers({ ...answers, [currentPage.page_id]: val })}
+                  onCustomTextChange={(txt) => { setCustomText(txt); setAnswers((previous) => ({ ...previous, [currentPage.page_id + '_custom']: txt })); }}
+                  isDark={isDark}
+                />
+              )}
+
+              {currentPage.layout === 'option_tiles' && (
+                <OptionTilesLayout
                   options={currentPage.options}
                   value={answers[currentPage.page_id] || ''}
                   customText={customText}
