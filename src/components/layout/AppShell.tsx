@@ -61,7 +61,7 @@ export const AppShell: React.FC = () => {
               {renderCurrentPage()}
             </ErrorBoundary>
           </main>
-          {currentPage !== 'chat' && <BottomComposer />}
+          {currentPage !== 'chat' && currentPage !== 'home' && <BottomComposer />}
         </div>
       </div>
       <ToolsMenu />
