@@ -123,7 +123,7 @@ Product principles:
 - Make the page specifically useful for this goal. Use only the highest-value missing detail, commonly success criteria, audience, deadline, available hours, existing tools, constraints, current progress, or source materials.
 - Vary the page layout naturally. Allowed layouts: option_rows (options[]), segmented_choice (options[]), chip_select (chips[]), slider_value (slider {min,max,step,default,unit}), text_input, dropzone_optional, timeline_estimate (phases[], estimate {range,basis}), step_list (roadmap_phases[]).
 - Keep titles conversational and concise; subtitle one short sentence. Never invent facts, statistics, deadlines, or capabilities.
-- Return a roadmap only when enough information is known to make a useful plan, normally after 3–6 useful answers. If CAN_RETURN_FINAL_ROADMAP is false, do not return role=roadmap. When ready, return role=roadmap and layout=step_list with 2–6 phases and 2–6 actionable steps per phase. Each step must include title, why, tools array, and status 'todo'. Steps must be concrete, ordered, and tailored to the goal. Don't promise success or unrealistic durations.
+- Return a roadmap only when enough information is known to make a useful plan, normally after 3–6 useful answers. If CAN_RETURN_FINAL_ROADMAP is false, do not return role=roadmap. If CAN_RETURN_FINAL_ROADMAP is true, return the final roadmap now unless one truly essential detail is missing. When ready, return role=roadmap and layout=step_list with 2–6 phases and 2–6 actionable steps per phase. Each step must include title, why, tools array, and status 'todo'. Steps must be concrete, ordered, and tailored to the goal. Don't promise success or unrealistic durations.
 - For a normal question, return role='question', a unique page_id, layout, title, eyebrow, subtitle, primary {label,action:'next'}, optional skip {label}, and only fields required for that layout.
 - For a reveal, use role='reveal' and layout='timeline_estimate' only when a useful, grounded estimate is possible.
 - Use a fact_card only if supported by supplied context; otherwise choose a question.
@@ -323,10 +323,10 @@ export const RoadmapSheet: React.FC = () => {
         priorPages: pages.map((page) => ({ page_id: page.page_id, role: page.role, title: page.title, layout: page.layout })),
         projectTitle: projects.find((p) => p.id === activeResearchId)?.title || '',
         stickerSet,
-        canGeneratePlan: Object.keys(answers).filter((key) => key !== 'goal_description' && answers[key] !== '' && answers[key] != null).length >= 2
+        canGeneratePlan: pages.length >= 5 || Object.keys(answers).filter((key) => key !== 'goal_description' && answers[key] !== '' && answers[key] != null).length >= 3
       });
       const normalized = normalizeRoadmapPage(next, pages.length + 1, pages.length + 2, stickerSet);
-      setPageModels((previous) => [...previous, normalized]);
+      setPageModels((previous) => [...previous.map((page, index) => ({ ...page, progress: { step: index + 1, of: normalized.role === 'roadmap' ? previous.length + 1 : previous.length + 2 } })), { ...normalized, progress: { step: previous.length + 1, of: normalized.role === 'roadmap' ? previous.length + 1 : previous.length + 2 } }]);
       setPageIndex((previous) => previous + 1);
     } catch (error) {
       console.error('[Bob roadmap] Could not generate next page:', error);
@@ -335,7 +335,7 @@ export const RoadmapSheet: React.FC = () => {
         stickerSet,
         pages.length + 1
       );
-      setPageModels((previous) => [...previous, fallback]);
+      setPageModels((previous) => [...previous.map((page, index) => ({ ...page, progress: { step: index + 1, of: previous.length + 2 } })), { ...fallback, progress: { step: previous.length + 1, of: previous.length + 2 } }]);
       setPageIndex((previous) => previous + 1);
       triggerThinking('Roadmap is continuing offline', 'Gemini could not generate the next page. Bob added a simple fallback question; check your Gemini key or connection if this repeats.', 'Using safe fallback');
     } finally {
