@@ -145,7 +145,31 @@ Product principles:
   return parsed;
 }
 
-function makeFallbackRoadmapPage(answerCount: number, stickerSet: string, step: number): PageModel {
+function makeFallbackRoadmapPage(answerCount: number, stickerSet: string, step: number, goal = 'your project'): PageModel {
+  if (answerCount >= 2 || step >= 6) {
+    return {
+      page_id: 'fallback_final_roadmap', role: 'roadmap', progress: { step, of: step },
+      eyebrow: 'YOUR ROADMAP', title: 'A practical plan for your project',
+      subtitle: 'This starter plan is based on your goal and answers. Connect Gemini to make future roadmaps more deeply tailored.',
+      layout: 'step_list',
+      roadmap_phases: [
+        { phase: 'Clarify the outcome', steps: [
+          { title: `Write the finish line for: ${goal.slice(0, 90)}`, why: 'A concrete outcome makes it easier to decide what belongs in the project and what can wait.', tools: ['Bob Notes', 'Project brief'], status: 'todo' },
+          { title: 'Gather the essential materials and evidence', why: 'Collect the sources, requirements, examples, and resources you will need before committing to a solution.', tools: ['Browser tabs', 'Bob Notes'], status: 'todo' }
+        ]},
+        { phase: 'Make steady progress', steps: [
+          { title: 'Break the work into the smallest useful milestone', why: 'A small first deliverable helps reveal missing information early and keeps the work manageable.', tools: ['Task list', 'Chosen project tools'], status: 'todo' },
+          { title: 'Complete the first milestone and record decisions', why: 'Capture what worked, what remains uncertain, and what should happen next.', tools: ['Project workspace', 'Bob Notes'], status: 'todo' }
+        ]},
+        { phase: 'Verify and finish', steps: [
+          { title: 'Check the result against the finish line', why: 'Review the result, correct gaps, and confirm that it meets the original need before calling it complete.', tools: ['Checklist', 'Relevant tests or sources'], status: 'todo' },
+          { title: 'Document the result and choose the next action', why: 'Leave a clear record of the outcome and any follow-up work.', tools: ['Bob Notes', 'Tasks'], status: 'todo' }
+        ]}
+      ],
+      primary: { label: 'Save roadmap to Tasks', action: 'submit' },
+      sticker: { set: stickerSet, stage: 5 }
+    };
+  }
   const page: PageModel = answerCount < 1 ? {
     page_id: `fallback_success_${step}`, role: 'question', progress: { step, of: step + 2 },
     eyebrow: 'DEFINE SUCCESS', title: 'What would make this project feel finished?',
@@ -341,7 +365,8 @@ export const RoadmapSheet: React.FC = () => {
       const fallback = makeFallbackRoadmapPage(
         Object.keys(answers).filter((key) => key !== 'goal_description' && answers[key] != null && answers[key] !== '').length,
         stickerSet,
-        pages.length + 1
+        pages.length + 1,
+        effectiveGoal
       );
       setPageModels((previous) => [...previous.map((page, index) => ({ ...page, progress: { step: index + 1, of: previous.length + 2 } })), { ...fallback, progress: { step: previous.length + 1, of: previous.length + 2 } }]);
       setCustomText('');
