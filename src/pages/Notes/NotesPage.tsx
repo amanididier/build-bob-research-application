@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
   Bookmark, 
@@ -9,7 +9,10 @@ import {
   Plus, 
   HardDrive,
   ExternalLink,
-  Bot
+  Bot,
+  Pencil,
+  Save,
+  X
 } from 'lucide-react';
 
 export const NotesPage: React.FC = () => {
@@ -17,13 +20,18 @@ export const NotesPage: React.FC = () => {
     notes, 
     projects, 
     addNote, 
+    updateNote,
     polishNote, 
     memoryStats, 
     activeResearchId 
   } = useApp();
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedProject, setSelectedProject] = useState<string>('all');
+  const [selectedProject, setSelectedProject] = useState<string>(activeResearchId || 'all');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editText, setEditText] = useState('');
+  const [editSource, setEditSource] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // New Note Modal/Form toggle
@@ -31,6 +39,29 @@ export const NotesPage: React.FC = () => {
   const [newTitle, setNewTitle] = useState('');
   const [newText, setNewText] = useState('');
   const [newSource, setNewSource] = useState('');
+
+  useEffect(() => {
+    if (activeResearchId) setSelectedProject(activeResearchId);
+  }, [activeResearchId]);
+
+  const startEditing = (note: (typeof notes)[number]) => {
+    setEditingId(note.id);
+    setEditTitle(note.title);
+    setEditText(note.selectedText);
+    setEditSource(note.sourceUrl || note.sourceTitle || '');
+  };
+
+  const saveEditing = (id: string) => {
+    if (!editTitle.trim() || !editText.trim()) return;
+    const source = editSource.trim();
+    updateNote(id, {
+      title: editTitle.trim(),
+      selectedText: editText.trim(),
+      sourceTitle: source || 'Manual research note',
+      sourceUrl: /^https?:\/\//i.test(source) ? source : (source ? `local://${encodeURIComponent(source)}` : 'local://notebook')
+    });
+    setEditingId(null);
+  };
 
   const filteredNotes = notes.filter((n) => {
     const matchesProj = selectedProject === 'all' || n.projectId === selectedProject;
@@ -173,85 +204,89 @@ export const NotesPage: React.FC = () => {
         </form>
       )}
 
-      {/* Notes Grid */}
+      {/* Project-scoped notes board */}
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <div>
+          <h2 className="text-[17px] font-extrabold text-[var(--t)]">
+            {projects.find((project) => project.id === selectedProject)?.title || 'All project notes'}
+          </h2>
+          <p className="text-[11px] text-[var(--m)] mt-1">Each note keeps its project, date, and original source attached.</p>
+        </div>
+        <span className="text-[11px] font-semibold text-[var(--m)]">{filteredNotes.length} notes</span>
+      </div>
+
       {filteredNotes.length === 0 ? (
-        <div className="text-center py-20 bg-[var(--s)] border border-[var(--line)] rounded-[20px] p-8">
+        <div className="text-center py-20 bg-[var(--s)] border border-[var(--line)] rounded-[24px] p-8">
           <Bookmark className="w-10 h-10 text-[var(--m)] mx-auto mb-3 opacity-40" />
-          <h3 className="text-[15px] font-bold text-[var(--t)] m-0 mb-1">No notes found</h3>
+          <h3 className="text-[15px] font-bold text-[var(--t)] m-0 mb-1">No notes in this project yet</h3>
           <p className="text-[12px] text-[var(--m)] max-w-sm mx-auto">
-            Add a note manually or highlight text in Chrome to grow Bob's local knowledge bank on this PC.
+            Save a passage from a source or add a note manually. Bob will keep it attached to this project.
           </p>
+          <button onClick={() => setIsAddingNote(true)} className="mt-4 h-9 px-4 rounded-xl bg-[var(--y)] text-[#171717] font-bold text-[12px] inline-flex items-center gap-2">
+            <Plus className="w-3.5 h-3.5" /> Add the first note
+          </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredNotes.map((note) => (
-            <div
-              key={note.id}
-              className="bg-[var(--s)] border border-[var(--line)] rounded-[18px] p-5 shadow-[0_5px_25px_rgba(0,0,0,0.02)] flex flex-col justify-between hover:shadow-md transition-shadow relative"
-            >
-              <div>
-                <div className="flex items-center justify-between gap-2 mb-2.5">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[var(--y)] flex-shrink-0" />
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--m)]">
-                      {note.projectId}
-                    </span>
-                    {note.isPolished && (
-                      <span className="text-[9px] font-semibold text-[var(--b)] bg-[var(--bs)] px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <Bot className="w-2.5 h-2.5" />
-                        <span>Bob Polished</span>
-                      </span>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {filteredNotes.map((note, index) => {
+            const colorClass = {
+              emerald: 'bg-[#e9f7ec] border-[#c9e9d0] dark:bg-[#1b3025] dark:border-[#31543f]',
+              blue: 'bg-[#eaf3ff] border-[#cbdfff] dark:bg-[#1b293b] dark:border-[#2d4565]',
+              yellow: 'bg-[#fff7d9] border-[#f1e3a8] dark:bg-[#352e19] dark:border-[#5a4c25]',
+              red: 'bg-[#fff0eb] border-[#f2d0c5] dark:bg-[#38251f] dark:border-[#674035]'
+            }[note.color || (index % 4 === 0 ? 'yellow' : index % 3 === 0 ? 'blue' : 'emerald')];
+            const projectName = projects.find((project) => project.id === note.projectId)?.title || 'Unassigned project';
+            const isEditing = editingId === note.id;
+            return (
+              <article key={note.id} className={`min-h-[260px] rounded-[22px] border p-5 flex flex-col shadow-sm hover:shadow-md transition-all ${colorClass}`}>
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="min-w-0">
+                    <span className="text-[9px] uppercase tracking-[0.14em] font-extrabold opacity-65">{projectName}</span>
+                    {isEditing ? (
+                      <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="mt-2 w-full rounded-lg border border-black/10 bg-white/70 dark:bg-black/20 px-2.5 py-2 text-[14px] font-bold outline-none" aria-label="Edit note title" />
+                    ) : (
+                      <h3 className="text-[16px] font-extrabold leading-snug mt-2">{note.title}</h3>
                     )}
                   </div>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[var(--ys)] text-[#765700] font-bold">
-                    {note.relevance}% relevance
-                  </span>
-                </div>
-
-                <h3 className="text-[15px] font-bold text-[var(--t)] m-0 mb-2 leading-snug">
-                  {note.title}
-                </h3>
-
-                <blockquote className="text-[12px] text-[#50504b] dark:text-[#d3ccc3] leading-relaxed border-l-2 border-[var(--y)] pl-3 my-3 italic whitespace-pre-line">
-                  {note.selectedText}
-                </blockquote>
-              </div>
-
-              <div className="pt-3 border-t border-[var(--line)] mt-3 flex items-center justify-between text-[11px] text-[var(--m)]">
-                <div className="truncate max-w-[200px]">
-                  <b className="text-[var(--t)] block truncate">{note.sourceTitle}</b>
-                  <span className="text-[10px] block truncate">{note.sourceUrl}</span>
-                </div>
-
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  {/* Hybrid Polish Button */}
-                  {!note.isPolished && (
-                    <button
-                      onClick={() => polishNote(note.id)}
-                      className="p-1.5 rounded-lg hover:bg-[var(--s2)] text-[var(--y)] transition-colors flex items-center gap-1 text-[10.5px] font-semibold"
-                      title="Polish with Bob AI"
-                    >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>Polish</span>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {note.isPolished && <span className="p-1.5 rounded-full bg-white/50 dark:bg-black/15" title="Polished by Bob"><Bot className="w-3.5 h-3.5" /></span>}
+                    <button onClick={() => isEditing ? setEditingId(null) : startEditing(note)} className="p-1.5 rounded-lg hover:bg-white/50 dark:hover:bg-black/15" title={isEditing ? 'Cancel edit' : 'Edit note'}>
+                      {isEditing ? <X className="w-3.5 h-3.5" /> : <Pencil className="w-3.5 h-3.5" />}
                     </button>
-                  )}
-
-                  <button
-                    onClick={() => handleCopy(note.id, note.selectedText)}
-                    className="p-1.5 rounded-lg hover:bg-[var(--s2)] text-[var(--m)] hover:text-[var(--t)] transition-colors"
-                    title="Copy quote"
-                  >
-                    {copiedId === note.id ? (
-                      <Check className="w-3.5 h-3.5 text-[var(--g)]" />
-                    ) : (
-                      <Copy className="w-3.5 h-3.5" />
-                    )}
-                  </button>
-                  <span className="text-[10px]">{note.createdAt}</span>
+                  </div>
                 </div>
-              </div>
-            </div>
-          ))}
+
+                {isEditing ? (
+                  <textarea value={editText} onChange={(e) => setEditText(e.target.value)} rows={5} className="w-full flex-1 rounded-xl border border-black/10 bg-white/70 dark:bg-black/20 p-3 text-[12px] leading-relaxed outline-none resize-y" aria-label="Edit note content" />
+                ) : (
+                  <p className="text-[12px] leading-[1.75] opacity-85 whitespace-pre-line flex-1">{note.selectedText}</p>
+                )}
+
+                <div className="mt-4 pt-3 border-t border-black/10 dark:border-white/10">
+                  {isEditing ? (
+                    <div className="space-y-2">
+                      <input value={editSource} onChange={(e) => setEditSource(e.target.value)} placeholder="Source URL or document name" className="w-full rounded-lg border border-black/10 bg-white/70 dark:bg-black/20 px-2.5 py-2 text-[11px] outline-none" aria-label="Edit note source" />
+                      <button onClick={() => saveEditing(note.id)} disabled={!editTitle.trim() || !editText.trim()} className="w-full h-9 rounded-xl bg-[#171717] text-white dark:bg-[#f2eee7] dark:text-[#171717] font-bold text-[11px] inline-flex items-center justify-center gap-2 disabled:opacity-40"><Save className="w-3.5 h-3.5" /> Save changes</button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <span className="block text-[10px] font-bold truncate">{note.sourceTitle}</span>
+                          <span className="block text-[9px] opacity-65 truncate">{note.createdAt}</span>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {!note.isPolished && <button onClick={() => polishNote(note.id)} className="p-1.5 rounded-lg hover:bg-white/50 dark:hover:bg-black/15" title="Polish note with Bob"><Sparkles className="w-3.5 h-3.5" /></button>}
+                          <button onClick={() => handleCopy(note.id, note.selectedText)} className="p-1.5 rounded-lg hover:bg-white/50 dark:hover:bg-black/15" title="Copy note">{copiedId === note.id ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}</button>
+                        </div>
+                      </div>
+                      {/^https?:\/\//i.test(note.sourceUrl) && <a href={note.sourceUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-[10px] underline underline-offset-2 opacity-75"><ExternalLink className="w-3 h-3" /> Open original source</a>}
+                    </>
+                  )}
+                </div>
+              </article>
+            );
+          })}
         </div>
       )}
     </div>

@@ -870,6 +870,50 @@
     renderTrafficPill();
   }
 
+  async function highlightCurrentSelection(color = 'yellow') {
+    const selection = window.getSelection();
+    const selectedRange = selection && !selection.isCollapsed && selection.rangeCount
+      ? selection.getRangeAt(0).cloneRange()
+      : currentSelection.range;
+    const quote = String(selection && !selection.isCollapsed ? selection.toString() : currentSelection.text || '').trim();
+    if (!quote || !selectedRange || selectedRange.collapsed || isBobUi(selectedRange.commonAncestorContainer)) {
+      showToast('Select text on the page first, then highlight it.', 'info');
+      return { ok: false, reason: 'no-selection' };
+    }
+
+    const safeColor = ['green', 'blue', 'yellow'].includes(color) ? color : 'yellow';
+    const category = safeColor === 'green' ? 'data' : safeColor === 'blue' ? 'claim' : 'conclusion';
+    const id = 'manual_' + Date.now().toString(36);
+    const existing = highlights.map((item) => ({
+      id: item.id,
+      quote: item.quote,
+      reason: item.reason,
+      category: item.category,
+      score: item.score,
+    }));
+    existing.push({ id, quote, reason: 'Manually highlighted selection', category, score: 1 });
+    applyHighlights(existing);
+
+    const record = {
+      id,
+      url: location.href,
+      pageTitle: document.title || location.hostname,
+      selectedText: quote.slice(0, 20000),
+      quote: quote.slice(0, 20000),
+      category,
+      color: safeColor,
+      reason: 'Manually highlighted selection',
+      score: 1,
+    };
+    const saved = await send({ type: 'SAVE_HIGHLIGHT', highlight: record });
+    if (saved && saved.ok) {
+      showToast('Highlighted and saved to Bob.', 'ok');
+      return { ok: true, highlight: record };
+    }
+    showToast('Text highlighted, but Bob could not save it. Check the extension permissions.', 'info');
+    return { ok: true, saved: false, reason: saved && saved.reason };
+  }
+
   async function autoHighlight(goal = '') {
     const blocks = candidateBlocks();
     if (!blocks.length) {
@@ -924,6 +968,11 @@
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const type = message && message.type;
+
+    if (type === 'BOB_HIGHLIGHT_SELECTION') {
+      highlightCurrentSelection(message.color || 'yellow').then(sendResponse);
+      return true;
+    }
 
     if (type === 'BOB_AUTO_HIGHLIGHT') {
       autoHighlight(message.goal || message.focus || '').then(sendResponse);

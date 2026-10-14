@@ -15,9 +15,49 @@ import {
   Sliders
 } from 'lucide-react';
 
+// Fixed logo registry: model output can select a known tool key, never a URL.
+const TOOL_FAVICONS: Record<string, string> = {
+  chatgpt: 'https://www.google.com/s2/favicons?domain=chatgpt.com&sz=64',
+  openai: 'https://www.google.com/s2/favicons?domain=openai.com&sz=64',
+  claude: 'https://www.google.com/s2/favicons?domain=claude.ai&sz=64',
+  claude_code: 'https://www.google.com/s2/favicons?domain=claude.ai&sz=64',
+  gemini: 'https://www.google.com/s2/favicons?domain=gemini.google.com&sz=64',
+  gemini_api: 'https://www.google.com/s2/favicons?domain=ai.google.dev&sz=64',
+  notes: 'https://www.google.com/s2/favicons?domain=notion.so&sz=64',
+  notion: 'https://www.google.com/s2/favicons?domain=notion.so&sz=64',
+  browser: 'https://www.google.com/s2/favicons?domain=google.com&sz=64',
+  browser_tabs: 'https://www.google.com/s2/favicons?domain=google.com&sz=64',
+  timer: 'https://www.google.com/s2/favicons?domain=clockify.me&sz=64',
+  sheets: 'https://www.google.com/s2/favicons?domain=sheets.google.com&sz=64',
+  google_sheets: 'https://www.google.com/s2/favicons?domain=sheets.google.com&sz=64',
+  docs: 'https://www.google.com/s2/favicons?domain=docs.google.com&sz=64',
+  google_docs: 'https://www.google.com/s2/favicons?domain=docs.google.com&sz=64',
+  git: 'https://www.google.com/s2/favicons?domain=github.com&sz=64',
+  github: 'https://www.google.com/s2/favicons?domain=github.com&sz=64',
+  excel: 'https://www.google.com/s2/favicons?domain=excel.cloud.microsoft&sz=64',
+  microsoft_excel: 'https://www.google.com/s2/favicons?domain=excel.cloud.microsoft&sz=64',
+  figma: 'https://www.google.com/s2/favicons?domain=figma.com&sz=64',
+  gmail: 'https://www.google.com/s2/favicons?domain=gmail.com&sz=64',
+  youtube: 'https://www.google.com/s2/favicons?domain=youtube.com&sz=64',
+  vscode: 'https://www.google.com/s2/favicons?domain=code.visualstudio.com&sz=64',
+  visual_studio_code: 'https://www.google.com/s2/favicons?domain=code.visualstudio.com&sz=64',
+  supabase: 'https://www.google.com/s2/favicons?domain=supabase.com&sz=64',
+  slack: 'https://www.google.com/s2/favicons?domain=slack.com&sz=64',
+  trello: 'https://www.google.com/s2/favicons?domain=trello.com&sz=64',
+  linear: 'https://www.google.com/s2/favicons?domain=linear.app&sz=64',
+  drive: 'https://www.google.com/s2/favicons?domain=drive.google.com&sz=64'
+};
+
+function getToolFavicon(value: string, label: string): string | null {
+  const key = value.toLowerCase().trim().replace(/[\s/-]+/g, '_');
+  const labelKey = label.toLowerCase().trim().replace(/[\s/-]+/g, '_');
+  return TOOL_FAVICONS[key] || TOOL_FAVICONS[labelKey] || null;
+}
+
 export type PageLayoutType = 
   | 'fact_card'
   | 'option_rows'
+  | 'option_tiles'
   | 'segmented_choice'
   | 'chip_select'
   | 'slider_value'
@@ -67,10 +107,10 @@ export const FactCardLayout: React.FC<{
   return (
     <div className="py-6 text-center space-y-4 animate-in fade-in duration-300">
       <div className="text-[64px] sm:text-[76px] font-black tracking-[-0.04em] font-mono text-[var(--accent,#F5B82E)] leading-none">
-        {fact?.number || '7s'}
+        {fact?.number || 'DID YOU KNOW'}
       </div>
       <p className={`text-[17px] sm:text-[19px] font-medium leading-relaxed max-w-[480px] mx-auto ${isDark ? 'text-[#e5dec9]' : 'text-[#2e261d]'}`}>
-        {fact?.sentence || subtitle || 'A focused researcher forms a strong signal in the first moments.'}
+        {fact?.sentence || subtitle || 'A clear next step is easier to act on when it has one outcome and a reason.'}
       </p>
     </div>
   );
@@ -138,6 +178,40 @@ export const OptionRowsLayout: React.FC<{
   );
 };
 
+// 2b. Colorful Option Tiles — for visual, single-choice questions.
+export const OptionTilesLayout: React.FC<{
+  options?: Array<{ value: string; label: string; sublabel?: string; reveals_input?: boolean }>;
+  value: string;
+  customText?: string;
+  onChange: (val: string) => void;
+  onCustomTextChange?: (text: string) => void;
+  isDark: boolean;
+}> = ({ options = [], value, customText = '', onChange, onCustomTextChange, isDark }) => {
+  const tones = [
+    isDark ? 'bg-[#18372f] border-[#28584a]' : 'bg-[#e6f5ed] border-[#c9e6d5]',
+    isDark ? 'bg-[#1b2f47] border-[#2c4c70]' : 'bg-[#e8f2ff] border-[#ccdef7]',
+    isDark ? 'bg-[#352744] border-[#59406f]' : 'bg-[#f2eaff] border-[#e0d0f3]',
+    isDark ? 'bg-[#3b311b] border-[#645326]' : 'bg-[#fff3d6] border-[#f0dfad]'
+  ];
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 py-3">
+      {options.slice(0, 4).map((option, index) => {
+        const selected = value === option.value;
+        return (
+          <div key={option.value} className="space-y-2">
+            <button type="button" onClick={() => onChange(option.value)} className={`relative w-full min-h-[112px] p-4 rounded-[16px] border text-left transition-all hover:-translate-y-0.5 ${tones[index % tones.length]} ${selected ? 'ring-2 ring-[var(--accent,#F5B82E)] ring-offset-2 ring-offset-[#0E0D0B]' : ''}`}>
+              <span className={`block text-[13px] font-extrabold leading-snug ${isDark ? 'text-white' : 'text-[#202018]'}`}>{option.label}</span>
+              {option.sublabel && <span className={`block mt-2 text-[11px] leading-relaxed ${isDark ? 'text-white/65' : 'text-[#5c5b54]'}`}>{option.sublabel}</span>}
+              {selected && <span className="absolute top-3 right-3 w-5 h-5 rounded-full bg-[var(--accent,#F5B82E)] text-[#171717] grid place-items-center"><Check className="w-3 h-3 stroke-[3]" /></span>}
+            </button>
+            {option.reveals_input && selected && <input value={customText} onChange={(event) => onCustomTextChange?.(event.target.value)} placeholder="Add a few details…" className={`w-full h-10 px-3 rounded-xl border text-[12px] outline-none ${isDark ? 'bg-[#14120e] border-[#2A2620] text-white' : 'bg-white border-[#E7E0D3] text-[#171717]'}`} />}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 // 3. Segmented Choice Component
 export const SegmentedChoiceLayout: React.FC<{
   options?: Array<{ value: string; label: string }>;
@@ -198,7 +272,18 @@ export const ChipSelectLayout: React.FC<{
                 : (isDark ? 'bg-[#17150F] border-[#2A2620] text-[#e5dec9] hover:border-[#3e382e]' : 'bg-white border-[#E7E0D3] text-[#2e261d] hover:border-[#b8afa0]')
             }`}
           >
-            <span>{c.label}</span>
+            <span className="flex items-center gap-2">
+              {getToolFavicon(c.value, c.label) && (
+                <img
+                  src={getToolFavicon(c.value, c.label) || ''}
+                  alt=""
+                  loading="lazy"
+                  className={`w-5 h-5 rounded-md object-contain ${isSelected ? 'bg-white p-0.5' : 'bg-white p-0.5'}`}
+                  onError={(event) => { event.currentTarget.style.display = 'none'; }}
+                />
+              )}
+              <span>{c.label}</span>
+            </span>
             {isSelected && <Check className="w-3.5 h-3.5 stroke-[2.5]" />}
           </button>
         );
@@ -273,48 +358,70 @@ export const TextInputComponent: React.FC<{
 
 // 7. Dropzone Optional Component
 export const DropzoneOptionalLayout: React.FC<{
-  fileInfo?: { name: string; size: string } | null;
-  onFileSelect: (name: string, size: string) => void;
+  fileInfo?: { name: string; size: string; status?: string } | null;
+  onFileSelect: (name: string, size: string, content?: string, status?: string) => void;
   onSkipUpload: () => void;
   isDark: boolean;
 }> = ({ fileInfo, onFileSelect, onSkipUpload, isDark }) => {
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    if (e.dataTransfer.files?.[0]) {
-      const f = e.dataTransfer.files[0];
-      onFileSelect(f.name, `${Math.round(f.size / 1024)} KB`);
+  const inputRef = React.useRef<HTMLInputElement | null>(null);
+  const handleFile = async (file: File) => {
+    const size = `${Math.max(1, Math.round(file.size / 1024))} KB`;
+    const extension = file.name.split('.').pop()?.toLowerCase() || '';
+    if (file.size > 2 * 1024 * 1024) {
+      onFileSelect(file.name, size, '', 'File is larger than 2 MB. Choose a smaller file or paste the key details in your answers.');
+      return;
     }
+    if (['txt', 'md', 'csv', 'json'].includes(extension)) {
+      try {
+        const content = (await file.text()).slice(0, 12000);
+        onFileSelect(file.name, size, content, 'Text extracted and ready for Bob');
+      } catch {
+        onFileSelect(file.name, size, '', 'The file was selected, but its text could not be read.');
+      }
+      return;
+    }
+    onFileSelect(file.name, size, '', 'File selected. Automatic text extraction for PDF/DOCX is not enabled in this build; paste a short summary into your answers so Bob can use its contents.');
+  };
+  const handleDrop = (event: React.DragEvent) => {
+    event.preventDefault();
+    const file = event.dataTransfer.files?.[0];
+    if (file) void handleFile(file);
   };
 
   return (
     <div className="py-3 space-y-3">
-      <div
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={handleDrop}
-        className={`border-2 border-dashed rounded-[16px] p-8 text-center transition-colors cursor-pointer ${
-          isDark 
-            ? 'border-[#2A2620] hover:border-[var(--accent,#F5B82E)] bg-[#17150F]/50' 
-            : 'border-[#E7E0D3] hover:border-[var(--accent,#F5B82E)] bg-[#faf8f2]'
-        }`}
-        onClick={() => {
-          onFileSelect('reference-research-brief.pdf', '340 KB');
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".pdf,.docx,.txt,.md,.csv,.json"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) void handleFile(file);
+          event.currentTarget.value = '';
         }}
+      />
+      <div
+        role="button"
+        tabIndex={0}
+        onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') inputRef.current?.click(); }}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={handleDrop}
+        onClick={() => inputRef.current?.click()}
+        className={`border-2 border-dashed rounded-[16px] p-8 text-center transition-colors cursor-pointer ${isDark ? 'border-[#2A2620] hover:border-[var(--accent,#F5B82E)] bg-[#17150F]/50' : 'border-[#E7E0D3] hover:border-[var(--accent,#F5B82E)] bg-[#faf8f2]'}`}
       >
         <Upload className="w-8 h-8 mx-auto mb-3 text-[var(--accent,#F5B82E)] opacity-90" />
         <b className={`block text-[14px] ${isDark ? 'text-white' : 'text-[#171717]'}`}>
-          {fileInfo ? fileInfo.name : 'Drop existing notes, outline or resume, or click to choose'}
+          {fileInfo ? fileInfo.name : 'Drop existing notes or a brief here, or click to choose'}
         </b>
         <span className={`block text-[11px] mt-1 font-mono uppercase tracking-wider ${isDark ? 'text-[#8A8175]' : 'text-[#6B6358]'}`}>
-          {fileInfo ? `${fileInfo.size} · Uploaded` : 'PDF, DOCX, TXT, MD (Optional)'}
+          {fileInfo ? `${fileInfo.size} · Selected` : 'TXT, MD, CSV, JSON, PDF, DOCX · 2 MB max'}
         </span>
+        {fileInfo?.status && <p className={`text-[11px] leading-relaxed mt-3 max-w-sm mx-auto ${isDark ? 'text-[#c9c0b1]' : 'text-[#6B6358]'}`}>{fileInfo.status}</p>}
       </div>
 
       <div className="text-center">
-        <button
-          type="button"
-          onClick={onSkipUpload}
-          className={`text-[12px] font-semibold underline cursor-pointer ${isDark ? 'text-[#8A8175] hover:text-white' : 'text-[#6B6358] hover:text-[#171717]'}`}
-        >
+        <button type="button" onClick={onSkipUpload} className={`text-[12px] font-semibold underline cursor-pointer ${isDark ? 'text-[#8A8175] hover:text-white' : 'text-[#6B6358] hover:text-[#171717]'}`}>
           I do not have one yet
         </button>
       </div>

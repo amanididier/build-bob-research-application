@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Sparkles, 
-  MessageSquare, 
   PanelRight, 
   Clock, 
   Volume2, 
@@ -37,8 +36,8 @@ export const BobOverlayBubble: React.FC = () => {
 
   // Bubble open/close state
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
-  const [isHovered, setIsHovered] = useState<boolean>(false);
   const [hasUnreadMessage, setHasUnreadMessage] = useState<boolean>(false);
+  const [videoFailed, setVideoFailed] = useState(false);
 
   // Mini chat messages in bubble (chat only)
   const [chatInput, setChatInput] = useState<string>('');
@@ -48,6 +47,18 @@ export const BobOverlayBubble: React.FC = () => {
       text: `Hey ${userName || 'buddy'}! I'm here beside you while you browse. We can chat casually about anything!`,
     },
   ]);
+
+  const routineVideoPath = currentRoutine.id === 'speaking'
+    ? '/assets/companion-loops/bob-speaking.webm'
+    : currentRoutine.id === 'listening'
+      ? '/assets/companion-loops/bob-listening.webm'
+      : currentRoutine.id === 'thinking'
+        ? '/assets/companion-loops/bob-thinking.webm'
+        : '/assets/companion-loops/bob-idle.webm';
+
+  useEffect(() => {
+    setVideoFailed(false);
+  }, [routineVideoPath]);
 
   // Subscribe to routine manager
   useEffect(() => {
@@ -149,45 +160,8 @@ export const BobOverlayBubble: React.FC = () => {
   return (
     <>
       {/* Floating Container in bottom-right (Chrome overlay only) */}
-      <div 
-        className="fixed bottom-6 right-6 z-40 flex flex-col items-end select-none pointer-events-auto"
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-      >
-        {/* 1. Hover Quick-Pill: Chat only & Chrome Side Panel */}
-        {(isHovered || isExpanded) && (
-          <div className="mb-3 px-1.5 py-1 rounded-full bg-[var(--s)]/90 backdrop-blur-md border border-[var(--line)] shadow-xl flex items-center gap-1 animate-in fade-in slide-in-from-bottom-2 duration-150">
-            <button
-              type="button"
-              onClick={() => {
-                setIsExpanded(true);
-                setHasUnreadMessage(false);
-              }}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 ${
-                isExpanded
-                  ? 'bg-[var(--y)] text-[#171717] shadow-sm'
-                  : 'text-[var(--t)] hover:bg-[var(--s2)]'
-              }`}
-            >
-              <MessageSquare className="w-3.5 h-3.5" />
-              <span>Chat</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                navigateTo('chrome');
-                openChromeBridge();
-              }}
-              title="Open Chrome Side Panel"
-              className="p-1.5 rounded-full text-[var(--m)] hover:text-[var(--t)] hover:bg-[var(--s2)] transition-colors"
-            >
-              <PanelRight className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-
-        {/* 2. Expanded Chat / Interaction Drawer */}
+      <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end select-none pointer-events-auto">
+        {/* Expanded chat opens directly from the Bob bubble; no hover quick-pill. */}
         {isExpanded && (
           <div className="mb-3 w-80 sm:w-96 bg-[var(--s)]/95 backdrop-blur-xl border border-[var(--line)] rounded-[26px] shadow-2xl p-4 flex flex-col max-h-[460px] animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
             {/* Header */}
@@ -361,8 +335,21 @@ export const BobOverlayBubble: React.FC = () => {
               background: `radial-gradient(circle at 35% 35%, #2a2a2a, #121212)`,
             }}
           >
-            {/* Visual Routine Animation Graphics */}
-            <div className="relative flex flex-col items-center justify-center text-center">
+            {/* Use registered Bob loops when supplied; fall back to accessible routine icons. */}
+            {!videoFailed && (
+              <video
+                key={routineVideoPath}
+                src={routineVideoPath}
+                autoPlay
+                loop
+                muted
+                playsInline
+                aria-label="Bob companion animation"
+                onError={() => setVideoFailed(true)}
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+            )}
+            {videoFailed && <div className="relative flex flex-col items-center justify-center text-center">
               {currentRoutine.id === 'waking_up' && (
                 <Sun className="w-6 h-6 text-amber-400 animate-spin duration-3000" />
               )}
@@ -397,7 +384,7 @@ export const BobOverlayBubble: React.FC = () => {
               {currentRoutine.id === 'speaking' && (
                 <Volume2 className="w-6 h-6 text-green-400 animate-pulse" />
               )}
-            </div>
+            </div>}
 
             {/* Micro status badge on the bottom-right */}
             <span

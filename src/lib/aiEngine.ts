@@ -270,6 +270,8 @@ class BobAiManager {
   ): Promise<AiSynthesisResponse> {
     const startTime = performance.now();
     const memory = localMemoryBank.buildPromptContext(query, projectId);
+    let dailyFocus = '';
+    try { dailyFocus = localStorage.getItem('bob_custom_focus_goal') || ''; } catch {}
     const citations = memory.citedNodes.map((m) => ({
       title: m.title,
       url: m.sourceUrl,
@@ -289,8 +291,12 @@ class BobAiManager {
 
       const systemPrompt = `You are Bob, an intelligent, helpful research companion.
 Speak naturally, warmly, and clearly like ChatGPT or Gemini.
+Keep ordinary answers concise: lead with the direct answer in 2–5 short sentences unless the user asks for depth.
+If key information is missing, ask one focused clarifying question instead of listing many questions or guessing.
+Help the user describe and understand the project before prescribing a full plan. Do not dump unnecessary background, repeat the prompt, or create long lists unless requested.
 When presenting comparisons or structured findings, use clean markdown tables.
 Synthesize the user's research context smoothly without sounding robotic or repetitive.
+${dailyFocus ? `User's active focus for today: "${dailyFocus}". Keep this in mind when relevant, but do not force unrelated answers toward it.` : ''}
 ${tastePreference ? `User Tone & Personality Preference: "${tastePreference}". Adapt your voice and phrasing strictly to this preference.` : ''}
 Here is the available context:
 ${memory.contextText}`;

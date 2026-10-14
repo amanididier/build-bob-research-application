@@ -6,6 +6,7 @@ import { researchOrchestrator } from '../lib/research/researchOrchestrator';
 
 export type AppPage =
   | 'home'
+  | 'dashboard'
   | 'research'
   | 'chat'
   | 'word'
@@ -149,9 +150,10 @@ interface AppContextType {
   tasks: ResearchTaskItem[];
   notes: ResearchNoteItem[];
   toggleTask: (id: string) => void;
-  addTask: (title: string, dueDate?: string, projectId?: string) => void;
+  addTask: (title: string, dueDate?: string, projectId?: string, options?: { sourceConnection?: string; isAiGenerated?: boolean }) => void;
   extractAiTasks: () => Promise<number>;
   addNote: (noteData: Omit<ResearchNoteItem, 'id' | 'createdAt'>) => void;
+  updateNote: (id: string, updates: Partial<Pick<ResearchNoteItem, 'title' | 'selectedText' | 'sourceTitle' | 'sourceUrl' | 'color'>>) => void;
   polishNote: (id: string) => Promise<void>;
 
   // Notifications
@@ -874,16 +876,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  const addTask = (title: string, dueDate: string = 'Today', projectId: string = activeResearchId) => {
+  const addTask = (title: string, dueDate: string = 'Today', projectId: string = activeResearchId, options: { sourceConnection?: string; isAiGenerated?: boolean } = {}) => {
     if (!title.trim()) return;
     const newTask: ResearchTaskItem = {
       id: `t-${Date.now()}`,
       title: title.trim(),
       dueDate,
-      sourceConnection: 'Created by user',
+      sourceConnection: options.sourceConnection || 'Created by user',
       completed: false,
       projectId,
-      isAiGenerated: false,
+      isAiGenerated: Boolean(options.isAiGenerated),
     };
     setTasks((prev) => [newTask, ...prev]);
   };
@@ -910,7 +912,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newNote: ResearchNoteItem = {
       ...noteData,
       id: `n-${Date.now()}`,
-      createdAt: 'Just now',
+      createdAt: new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
     };
     setNotes((prev) => [newNote, ...prev]);
 
@@ -924,6 +926,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       relevanceWeight: newNote.relevance / 100,
     });
     refreshMemoryStats();
+  };
+
+  const updateNote = (noteId: string, updates: Partial<Pick<ResearchNoteItem, 'title' | 'selectedText' | 'sourceTitle' | 'sourceUrl' | 'color'>>) => {
+    setNotes((prev) => prev.map((note) => note.id === noteId ? { ...note, ...updates } : note));
   };
 
   const polishNote = async (noteId: string) => {
@@ -1029,6 +1035,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addTask,
         extractAiTasks,
         addNote,
+        updateNote,
         polishNote,
         unreadNotifications,
         markNotificationsRead,

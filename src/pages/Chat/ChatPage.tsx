@@ -44,15 +44,15 @@ const formatDay = (ts: number) => {
 
 // Casual fallback responses with caring follow-up questions
 const CASUAL_FOLLOWUPS = [
-  "How did that step you were working on earlier turn out? Did you run into any hurdles or was it smooth sailing?",
-  "By the way, did you get a chance to test out that recent change, or did you decide to take a breather first?",
-  "How is your energy holding up today? Did that milestone step feel satisfying once you got through it?",
-  "Did you manage to take that short break away from the screen, or are you still powering through?",
-  "How did things wrap up with the latest step you took? Totally okay if you're taking it one gentle pace at a time."
+  "What has been the nicest part of your day so far?",
+  "Have you heard any good music or watched anything you enjoyed lately?",
+  "Is there something small you are looking forward to this week?",
+  "Have you had a chance to enjoy a good meal or take a little break today?",
+  "What kind of thing helps you feel relaxed when your mind is busy?"
 ];
 
 export const ChatPage: React.FC = () => {
-  const { userName, tasks } = useApp();
+  const { userName } = useApp();
   const [messages, setMessages] = useState<MessengerMsg[]>(loadMessages);
   const [draft, setDraft] = useState('');
   const [isBobTyping, setIsBobTyping] = useState(false);
@@ -107,8 +107,6 @@ export const ChatPage: React.FC = () => {
   // Generate casual, relaxing companion response with occasional gentle follow-up question
   const generateRelaxedResponse = async (userInput: string): Promise<string> => {
     const key = resolveGeminiApiKey();
-    const recentTask = tasks.find(t => !t.completed);
-    const recentStepHint = recentTask ? `They have a task titled "${recentTask.title}".` : '';
 
     if (key) {
       try {
@@ -116,10 +114,11 @@ export const ChatPage: React.FC = () => {
         const systemPrompt = `You are Bob, a warm, relaxed, and thoughtful companion chatting casually with ${userName || 'your friend'} in their quiet lounge.
 This is NOT a technical project dashboard or research lecture. Keep this a relaxing haven.
 Rules:
-1. Speak casually, warmly, concisely (1 to 3 natural sentences max).
+1. Speak casually, warmly, and concisely (1 to 3 natural sentences max).
 2. Avoid bullet lists, corporate jargon, or heavy essays.
-3. At natural moments, ask a friendly follow-up question about a thing or step they would have taken recently (e.g., how a recent step went, if they took a break, or how their energy feels). ${recentStepHint}
-4. If they just want to chat about coffee, hobbies, unwinding, or random thoughts, keep it light and peaceful.`;
+3. Do not bring up research, projects, tasks, deadlines, or work unless the user asks about them first.
+4. At natural moments, ask a friendly follow-up about their day, interests, music, food, entertainment, or how they are feeling.
+5. Keep this chat separate from the research workspace: no unsolicited work reminders or project advice.`;
 
         const response = await ai.models.generateContent({
           model: 'gemini-3.1-flash-lite',
@@ -147,10 +146,6 @@ Rules:
     if (lower.includes('how are you') || lower.includes('what are you doing') || lower.includes('hey bob') || lower.includes('hello')) {
       return `I'm feeling calm and happy to hang out with you here! Just soaking in the peaceful atmosphere. ${randomFollowup}`;
     }
-    if (lower.includes('step') || lower.includes('task') || lower.includes('done') || lower.includes('finished') || lower.includes('work')) {
-      return `That's great progress! It feels good when things fall into place step by step. What's the feeling now—ready to relax for a bit or letting ideas simmer?`;
-    }
-
     return `It's really nice just chatting without all the hustle and bustle. ${randomFollowup}`;
   };
 
@@ -180,29 +175,12 @@ Rules:
   const lastBobIndex = messages.reduce((acc, m, i) => (m.role === 'bob' ? i : acc), -1);
 
   return (
-    <div className="w-full h-full flex flex-col bg-[var(--bg)] [background-image:radial-gradient(circle_at_1px_1px,var(--line)_1px,transparent_0)] [background-size:22px_22px] animate-in fade-in duration-300">
-      {/* Messenger header: Full-width edge-to-edge */}
-      <div className="w-full flex items-center gap-3 px-6 py-3.5 border-b border-[var(--line)] bg-[var(--s)]/85 backdrop-blur-md shrink-0">
-        <div className="relative">
-          <img src={bobOrb} alt="Bob" className="w-10 h-10 rounded-full object-cover border border-[var(--line)]" />
-          <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-amber-400 border-2 border-[var(--s)]" />
-        </div>
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <b className="block text-[14px] text-[var(--t)] leading-tight">Bob</b>
-            <span className="px-2 py-0.5 rounded-full bg-amber-400/15 text-amber-600 dark:text-amber-300 text-[10px] font-bold">
-              Relaxing Lounge
-            </span>
-          </div>
-          <small className="block text-[11px] text-[var(--m)] font-medium">
-            {isBobTyping ? 'thinking gently…' : 'online · casual chats & reflections'}
-          </small>
-        </div>
-        <div className="ml-auto flex items-center gap-2 text-[11px] text-[var(--m)]">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--s2)] border border-[var(--line)] font-medium">
-            <Coffee className="w-3.5 h-3.5 text-amber-500" />
-            <span>Casual WhatsApp Lounge</span>
-          </span>
+    <div className="w-full h-full flex flex-col bg-[#efeae2] dark:bg-[#0b141a] [background-image:radial-gradient(circle_at_1px_1px,rgba(0,0,0,0.035)_1px,transparent_0)] dark:[background-image:radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.035)_1px,transparent_0)] [background-size:22px_22px] animate-in fade-in duration-300">
+      {/* Minimal WhatsApp-inspired chat header — no connection/status card. */}
+      <div className="w-full flex items-center justify-between px-5 sm:px-7 py-3 border-b border-black/5 dark:border-white/10 bg-[#f7f5f0]/90 dark:bg-[#111b21]/90 backdrop-blur-md shrink-0">
+        <div>
+          <b className="block text-[14px] text-[var(--t)] leading-tight">Chat</b>
+          <small className="block text-[11px] text-[var(--m)] mt-0.5">{isBobTyping ? 'Bob is typing…' : 'A quiet place to talk about anything'}</small>
         </div>
       </div>
 
@@ -237,10 +215,10 @@ Rules:
               </button>
               <button
                 type="button"
-                onClick={() => handleSend("I was thinking about the steps I took today.")}
+                onClick={() => handleSend("I have something on my mind and would like to talk casually.")}
                 className="px-3 py-1.5 rounded-full bg-[var(--s2)] hover:bg-[var(--y)] hover:text-[#171717] border border-[var(--line)] text-xs font-semibold text-[var(--t)] transition-colors"
               >
-                ✨ Reflect on my steps
+                ✨ Share a thought
               </button>
             </div>
           </div>
@@ -309,10 +287,10 @@ Rules:
         </button>
         <button
           type="button"
-          onClick={() => handleSend("Hey Bob, how did that step I worked on sound to you?")}
+          onClick={() => handleSend("Hey Bob, can we talk about something fun or interesting?")}
           className="px-2.5 py-1 rounded-full bg-[var(--s2)] hover:bg-[var(--y)] hover:text-[#171717] text-[11px] font-medium text-[var(--m)] hover:text-[var(--t)] transition-colors shrink-0"
         >
-          ✨ Ask about my step
+          ✨ Share a thought
         </button>
         <button
           type="button"
@@ -346,6 +324,9 @@ Rules:
           <Send className="w-4 h-4" />
         </button>
       </form>
+      <p className="px-4 py-2 text-center text-[10.5px] text-[#6c756d] dark:text-[#869b91] bg-[#f7f5f0]/85 dark:bg-[#111b21]/85 border-t border-black/5 dark:border-white/10">
+        {userName || 'You'}, don’t worry — your chat is saved only on this device.
+      </p>
     </div>
   );
 };

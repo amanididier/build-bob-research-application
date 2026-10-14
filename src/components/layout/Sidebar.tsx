@@ -43,7 +43,7 @@ export const Sidebar: React.FC = () => {
   return (
     <aside className="w-[260px] bg-[var(--s)] border-r border-[var(--line)] px-4 py-4 flex flex-col flex-shrink-0 z-20 h-full select-none">
       {/* 1. Header: Small Bob mascot + Bob */}
-      <div className="flex items-center gap-2.5 px-1 mb-5">
+      <div onClick={() => navigateTo('home')} className="flex items-center gap-2.5 px-1 mb-5 cursor-pointer" title="Return to Bob start">
         <BobLogo size={26} shape="transparent" />
         <span className="text-[19px] font-semibold text-[var(--t)] tracking-tight">
           Bob
@@ -86,9 +86,9 @@ export const Sidebar: React.FC = () => {
 
           {/* Dashboard */}
           <button
-            onClick={() => navigateTo('home')}
+            onClick={() => navigateTo('dashboard')}
             className={`h-10 w-full text-left px-3 rounded-lg text-[13.5px] flex items-center gap-3 transition-colors duration-150 cursor-pointer ${
-              currentPage === 'home'
+              currentPage === 'dashboard'
                 ? 'bg-[var(--s2)] text-[var(--t)] font-semibold'
                 : 'text-[var(--t)] hover:bg-[var(--s2)]/70 font-medium'
             }`}
