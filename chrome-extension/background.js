@@ -375,10 +375,13 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     case 'bob-highlight-blue':
     case 'bob-highlight-yellow':
       if (selection) {
-        await relayToTab(tab.id, {
+        const result = await relayToTab(tab.id, {
           type: 'BOB_HIGHLIGHT_SELECTION',
           color: info.menuItemId.replace('bob-highlight-', ''),
         });
+        if (!result || !result.ok) await notifyHighlightFailure(result || { reason: 'no-response' });
+      } else {
+        await notifyHighlightFailure({ reason: 'no-selection' });
       }
       break;
     case 'bob-ask':
@@ -400,7 +403,8 @@ chrome.commands.onCommand.addListener(async (command) => {
     const settings = await getSettings();
     const color = HIGHLIGHT_COLORS[settings.highlightCycleIndex % HIGHLIGHT_COLORS.length];
     await setSettings({ highlightCycleIndex: (settings.highlightCycleIndex + 1) % HIGHLIGHT_COLORS.length });
-    await relayToTab(tab.id, { type: 'BOB_HIGHLIGHT_SELECTION', color });
+    const result = await relayToTab(tab.id, { type: 'BOB_HIGHLIGHT_SELECTION', color });
+    if (!result || !result.ok) await notifyHighlightFailure(result || { reason: 'no-response' });
   } else if (command === 'bob-save-note') {
     await relayToTab(tab.id, { type: 'BOB_SAVE_SELECTION_AS_NOTE' });
   } else if (command === 'bob-ask') {
@@ -410,9 +414,44 @@ chrome.commands.onCommand.addListener(async (command) => {
 
 async function relayToTab(tabId, message) {
   try {
-    return await chrome.tabs.sendMessage(tabId, message);
+    const first = await chrome.tabs.sendMessage(tabId, message);
+    if (first !== undefined && first !== null) return first;
+  } catch {
+    // A freshly navigated tab may not have the content script yet; try one safe injection below.
+  }
+
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['responseRenderer.js', 'content.js']
+    });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const retry = await chrome.tabs.sendMessage(tabId, message);
+    return retry !== undefined && retry !== null ? retry : { ok: false, reason: 'no-response' };
   } catch (err) {
-    return { ok: false, reason: (err && err.message) || 'content-script-unavailable' };
+    const reason = String((err && err.message) || 'content-script-unavailable');
+    return { ok: false, reason: /cannot access|extensions gallery|chrome:\/\//i.test(reason) ? 'restricted-page' : reason };
+  }
+}
+
+async function notifyHighlightFailure(result) {
+  if (!chrome.notifications || !chrome.notifications.create) return;
+  const reason = result && result.reason;
+  const message = reason === 'no-selection'
+    ? 'Select some text on the webpage first, then try highlighting again.'
+    : reason === 'restricted-page'
+      ? 'Chrome does not allow extensions to highlight this page. Try a normal website instead.'
+      : 'Bob could not reach the page script. Reload the webpage and try again.';
+  try {
+    await chrome.notifications.create(nowId('highlight-error'), {
+      type: 'basic',
+      iconUrl: chrome.runtime.getURL('icons/bob-logo.png'),
+      title: 'Bob could not highlight this text',
+      message,
+      priority: 1
+    });
+  } catch {
+    // The page action still returns a useful error even if notifications are blocked.
   }
 }
 
@@ -1269,7 +1308,9 @@ async function handleMessage(message, sender) {
     case 'HIGHLIGHT_SELECTION_IN_PAGE': {
       const tab = await activeTab(sender);
       if (!tab || !tab.id) return { ok: false, reason: 'no-tab' };
-      return relayToTab(tab.id, { type: 'BOB_HIGHLIGHT_SELECTION', color: message.color || 'yellow' });
+      const result = await relayToTab(tab.id, { type: 'BOB_HIGHLIGHT_SELECTION', color: message.color || 'yellow' });
+      if (!result || !result.ok) await notifyHighlightFailure(result || { reason: 'no-response' });
+      return result;
     }
 
     case 'TRIGGER_AUTO_HIGHLIGHT': {
