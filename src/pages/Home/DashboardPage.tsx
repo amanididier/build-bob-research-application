@@ -39,6 +39,7 @@ export const DashboardPage: React.FC = () => {
   const [customFocusText, setCustomFocusText] = useState('');
   const [selectedFocusProjectId, setSelectedFocusProjectId] = useState<string>(() => typeof window !== 'undefined' ? localStorage.getItem('bob_focus_project_id') || '' : '');
   const [showFocusPrompt, setShowFocusPrompt] = useState(false);
+  const [focusPickerStep, setFocusPickerStep] = useState<'project' | 'task'>('project');
   const [selectedFocusOverride, setSelectedFocusOverride] = useState<string | null>(() => {
     return typeof window !== 'undefined' ? localStorage.getItem('bob_custom_focus_goal') : null;
   });
@@ -132,7 +133,7 @@ export const DashboardPage: React.FC = () => {
         <div className="max-w-[1140px] mx-auto px-5 md:px-8 pt-5">
           <div className="rounded-2xl border border-[var(--y)]/50 bg-[var(--ys)] dark:bg-[#352b15] px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div><b className="text-[12px] text-[var(--t)]">Nice work finishing your focus.</b><p className="text-[11px] text-[var(--m)] mt-0.5">Would you like to choose the next important task for this project?</p></div>
-            <div className="flex items-center gap-2"><button onClick={() => setShowFocusPrompt(false)} className="px-3 py-2 rounded-lg text-[11px] font-semibold text-[var(--m)] hover:bg-black/5">Not now</button><button onClick={() => { setIsSetFocusModalOpen(true); setShowFocusPrompt(false); }} className="px-3 py-2 rounded-lg bg-[var(--y)] text-[#171717] text-[11px] font-bold">Choose another focus</button></div>
+            <div className="flex items-center gap-2"><button onClick={() => setShowFocusPrompt(false)} className="px-3 py-2 rounded-lg text-[11px] font-semibold text-[var(--m)] hover:bg-black/5">Not now</button><button onClick={() => { setFocusPickerStep('project'); setIsSetFocusModalOpen(true); setShowFocusPrompt(false); }} className="px-3 py-2 rounded-lg bg-[var(--y)] text-[#171717] text-[11px] font-bold">Choose another focus</button></div>
           </div>
         </div>
       )}
@@ -269,7 +270,7 @@ export const DashboardPage: React.FC = () => {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsSetFocusModalOpen(true)}
+                  onClick={() => { setFocusPickerStep('project'); setIsSetFocusModalOpen(true); }}
                   className="px-2.5 py-1 text-xs font-bold rounded-lg bg-[var(--y)]/20 hover:bg-[var(--y)]/30 border border-[var(--y)]/50 text-[var(--t)] flex items-center gap-1 transition-all"
                 >
                   <Target className="w-3 h-3 text-[var(--y)]" />
@@ -359,26 +360,38 @@ export const DashboardPage: React.FC = () => {
               First choose the project you want to move forward. Then select the one task that matters most today.
             </p>
 
-            <div className="mb-4">
-              <div className="text-[11px] font-bold text-[var(--m)] mb-2">1 · Main project</div>
-              <div className="flex flex-wrap gap-2">
-                {projects.map((project) => (
-                  <button key={project.id} type="button" onClick={() => { setSelectedFocusProjectId(project.id); setSelectedFocusOverride(null); if (typeof window !== 'undefined') { localStorage.setItem('bob_focus_project_id', project.id); localStorage.removeItem('bob_custom_focus_goal'); } }} className={`px-3 py-2 rounded-xl border text-[11px] font-semibold transition-colors ${(selectedFocusProjectId || focusProject?.id) === project.id ? 'bg-[var(--y)]/20 border-[var(--y)] text-[var(--t)]' : 'bg-[var(--s2)] border-[var(--line)] text-[var(--m)] hover:border-[var(--y)]'}`}>
-                    {project.title}
-                  </button>
-                ))}
+            {focusPickerStep === 'project' ? (
+              <div className="mb-4">
+                <div className="text-[11px] font-bold text-[var(--m)] mb-2">1 · Choose your main project</div>
+                <div className="space-y-2">
+                  {projects.map((project) => (
+                    <button key={project.id} type="button" onClick={() => {
+                      setSelectedFocusProjectId(project.id);
+                      setSelectedFocusOverride(null);
+                      if (typeof window !== 'undefined') { localStorage.setItem('bob_focus_project_id', project.id); localStorage.removeItem('bob_custom_focus_goal'); }
+                      setFocusPickerStep('task');
+                    }} className={`w-full px-3.5 py-3 rounded-xl border text-left flex items-center justify-between gap-3 transition-colors ${(selectedFocusProjectId || focusProject?.id) === project.id ? 'bg-[var(--y)]/15 border-[var(--y)] text-[var(--t)]' : 'bg-[var(--s2)] border-[var(--line)] text-[var(--m)] hover:border-[var(--y)]'}`}>
+                      <span className="min-w-0"><b className="block text-[12px] truncate">{project.title}</b><small className="block mt-0.5 text-[10px] opacity-70">{project.sourceCount} sources · {project.openTasks} open tasks</small></span>
+                      <ArrowRight className="w-4 h-4 shrink-0" />
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-
-            <div className="space-y-1.5 mb-4 max-h-40 overflow-y-auto">
-              <div className="text-[11px] font-bold text-[var(--m)] mb-2">2 · One task inside {focusProject?.title || 'this project'}</div>
-              {projectOpenTasks.length ? projectOpenTasks.slice(0, 8).map((task) => (
-                <button key={task.id} type="button" onClick={() => handleSelectTaskAsFocus(task.title, focusProject?.id)} className="w-full p-2.5 rounded-xl border border-[var(--line)] hover:border-[var(--y)] bg-[var(--s2)]/40 hover:bg-[var(--s2)] text-left text-xs font-semibold text-[var(--t)] flex items-center justify-between transition-colors">
-                  <span className="truncate">{task.title}</span><span className="text-[10px] text-[var(--m)] font-mono">{task.dueDate}</span>
-                </button>
-              )) : <p className="text-[11px] text-[var(--m)] py-2">No open tasks in this project yet. You can set a custom focus below.</p>}
-            </div>
-
+            ) : (
+              <div className="mb-4">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="text-[11px] font-bold text-[var(--m)]">2 · What matters most in {focusProject?.title || 'this project'}?</div>
+                  <button type="button" onClick={() => setFocusPickerStep('project')} className="text-[10px] font-semibold text-[var(--y)] hover:underline">Change project</button>
+                </div>
+                <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                  {projectOpenTasks.length ? projectOpenTasks.slice(0, 8).map((task) => (
+                    <button key={task.id} type="button" onClick={() => handleSelectTaskAsFocus(task.title, focusProject?.id)} className="w-full p-2.5 rounded-xl border border-[var(--line)] hover:border-[var(--y)] bg-[var(--s2)]/40 hover:bg-[var(--s2)] text-left text-xs font-semibold text-[var(--t)] flex items-center justify-between transition-colors">
+                      <span className="truncate">{task.title}</span><span className="text-[10px] text-[var(--m)] font-mono">{task.dueDate}</span>
+                    </button>
+                  )) : <p className="text-[11px] text-[var(--m)] py-2">No open tasks in this project yet. You can create a custom focus below.</p>}
+                </div>
+              </div>
+            )}
             {/* Custom Focus Form */}
             <form onSubmit={handleSaveCustomFocus} className="space-y-3">
               <div className="text-[11px] font-bold text-[var(--m)]">Or Custom Goal:</div>
