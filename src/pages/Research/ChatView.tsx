@@ -101,6 +101,20 @@ export const ChatView: React.FC = () => {
     return unsub;
   }, []);
 
+  const pendingPromptHandled = React.useRef(false);
+  React.useEffect(() => {
+    if (pendingPromptHandled.current) return;
+    let pending = '';
+    try {
+      pending = localStorage.getItem('bob_pending_research_prompt') || '';
+      if (pending) localStorage.removeItem('bob_pending_research_prompt');
+    } catch {}
+    if (!pending.trim()) return;
+    pendingPromptHandled.current = true;
+    const timer = window.setTimeout(() => sendMessage(pending.trim()), 120);
+    return () => window.clearTimeout(timer);
+  }, [activeResearchId]);
+
   const handleSpeakMessage = (id: string, text: string) => {
     if (speakingMsgId === id) {
       bobVoice.stopSpeaking();
