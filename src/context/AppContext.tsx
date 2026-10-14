@@ -6,6 +6,7 @@ import { researchOrchestrator } from '../lib/research/researchOrchestrator';
 
 export type AppPage =
   | 'home'
+  | 'dashboard'
   | 'research'
   | 'chat'
   | 'word'
