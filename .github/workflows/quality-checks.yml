@@ -64,7 +64,7 @@ jobs:
 
   publish_desktop_release:
     needs: validate
-    if: startsWith(github.event.head_commit.message, 'release: Bob v1.0.70')
+    if: startsWith(github.event.head_commit.message, 'release-bob-v1.0.70')
     runs-on: ubuntu-latest
     steps:
       - name: Release gate smoke test
