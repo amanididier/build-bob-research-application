@@ -363,7 +363,7 @@ export const DashboardPage: React.FC = () => {
               <div className="text-[11px] font-bold text-[var(--m)] mb-2">1 · Main project</div>
               <div className="flex flex-wrap gap-2">
                 {projects.map((project) => (
-                  <button key={project.id} type="button" onClick={() => setSelectedFocusProjectId(project.id)} className={`px-3 py-2 rounded-xl border text-[11px] font-semibold transition-colors ${(selectedFocusProjectId || focusProject?.id) === project.id ? 'bg-[var(--y)]/20 border-[var(--y)] text-[var(--t)]' : 'bg-[var(--s2)] border-[var(--line)] text-[var(--m)] hover:border-[var(--y)]'}`}>
+                  <button key={project.id} type="button" onClick={() => { setSelectedFocusProjectId(project.id); setSelectedFocusOverride(null); if (typeof window !== 'undefined') { localStorage.setItem('bob_focus_project_id', project.id); localStorage.removeItem('bob_custom_focus_goal'); } }} className={`px-3 py-2 rounded-xl border text-[11px] font-semibold transition-colors ${(selectedFocusProjectId || focusProject?.id) === project.id ? 'bg-[var(--y)]/20 border-[var(--y)] text-[var(--t)]' : 'bg-[var(--s2)] border-[var(--line)] text-[var(--m)] hover:border-[var(--y)]'}`}>
                     {project.title}
                   </button>
                 ))}
