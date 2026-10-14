@@ -10,24 +10,29 @@ permissions:
   contents: write
 
 jobs:
-  validate_release:
+  gate:
     runs-on: ubuntu-latest
+    steps:
+      - name: Confirm release gate is active
+        run: echo "Release publishing runs only for a commit titled 'release: Bob v1.0.70'."
+
+  publish_desktop:
+    needs: gate
+    if: ${{ startsWith(github.event.head_commit.message, 'release: Bob v1.0.70') }}
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - name: Install root dependencies
-        if: ${{ startsWith(github.event.head_commit.message, 'release: Bob v1.0.70') }}
         run: npm install --legacy-peer-deps
       - name: TypeScript validation
-        if: ${{ startsWith(github.event.head_commit.message, 'release: Bob v1.0.70') }}
         run: npm run lint
       - name: Build web app and extension
-        if: ${{ startsWith(github.event.head_commit.message, 'release: Bob v1.0.70') }}
         run: npm run build
-      - name: Verify version and extension scripts
-        if: ${{ startsWith(github.event.head_commit.message, 'release: Bob v1.0.70') }}
+      - name: Verify release version and extension scripts
+        shell: bash
         run: |
           ROOT_VERSION=$(node -p "require('./package.json').version")
           DESKTOP_VERSION=$(node -p "require('./apps/desktop/package.json').version")
@@ -36,20 +41,8 @@ jobs:
           node --check chrome-extension/background.js
           node --check chrome-extension/content.js
           node --check chrome-extension/sidepanel.js
-
-  publish_desktop:
-    needs: validate_release
-    if: ${{ startsWith(github.event.head_commit.message, 'release: Bob v1.0.70') }}
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Install root dependencies and build web/extension
-        run: |
-          npm install --legacy-peer-deps
-          npm run build
+          node --check apps/desktop/main.cjs
+          node --check apps/desktop/preload.cjs
       - name: Install desktop dependencies
         working-directory: apps/desktop
         run: npm install --no-audit --no-fund
