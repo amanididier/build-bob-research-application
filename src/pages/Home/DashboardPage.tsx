@@ -376,6 +376,7 @@ export const DashboardPage: React.FC = () => {
                     </button>
                   ))}
                 </div>
+                <button type="button" onClick={() => setFocusPickerStep('task')} className="mt-3 w-full px-3 py-2.5 rounded-xl border border-dashed border-[var(--line)] text-[11px] font-semibold text-[var(--m)] hover:border-[var(--y)] hover:text-[var(--t)]">Other · define a custom focus</button>
               </div>
             ) : (
               <div className="mb-4">
@@ -393,7 +394,7 @@ export const DashboardPage: React.FC = () => {
               </div>
             )}
             {/* Custom Focus Form */}
-            <form onSubmit={handleSaveCustomFocus} className="space-y-3">
+            {focusPickerStep === 'task' && <form onSubmit={handleSaveCustomFocus} className="space-y-3">
               <div className="text-[11px] font-bold text-[var(--m)]">Or Custom Goal:</div>
               <input
                 type="text"
@@ -417,7 +418,7 @@ export const DashboardPage: React.FC = () => {
                   Set as Today's Focus
                 </button>
               </div>
-            </form>
+            </form>}
           </div>
         </div>
       )}
