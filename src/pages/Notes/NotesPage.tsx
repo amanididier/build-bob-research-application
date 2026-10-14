@@ -58,7 +58,7 @@ export const NotesPage: React.FC = () => {
       title: editTitle.trim(),
       selectedText: editText.trim(),
       sourceTitle: source || 'Manual research note',
-      sourceUrl: /^https?:\\/\\//i.test(source) ? source : (source ? `local://${encodeURIComponent(source)}` : 'local://notebook')
+      sourceUrl: /^https?:\/\//i.test(source) ? source : (source ? `local://${encodeURIComponent(source)}` : 'local://notebook')
     });
     setEditingId(null);
   };
@@ -280,7 +280,7 @@ export const NotesPage: React.FC = () => {
                           <button onClick={() => handleCopy(note.id, note.selectedText)} className="p-1.5 rounded-lg hover:bg-white/50 dark:hover:bg-black/15" title="Copy note">{copiedId === note.id ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}</button>
                         </div>
                       </div>
-                      {/^https?:\\/\\//i.test(note.sourceUrl) && <a href={note.sourceUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-[10px] underline underline-offset-2 opacity-75"><ExternalLink className="w-3 h-3" /> Open original source</a>}
+                      {/^https?:\/\//i.test(note.sourceUrl) && <a href={note.sourceUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-[10px] underline underline-offset-2 opacity-75"><ExternalLink className="w-3 h-3" /> Open original source</a>}
                     </>
                   )}
                 </div>
