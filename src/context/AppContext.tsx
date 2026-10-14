@@ -911,7 +911,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newNote: ResearchNoteItem = {
       ...noteData,
       id: `n-${Date.now()}`,
-      createdAt: 'Just now',
+      createdAt: new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
     };
     setNotes((prev) => [newNote, ...prev]);
 
