@@ -107,10 +107,10 @@ export const FactCardLayout: React.FC<{
   return (
     <div className="py-6 text-center space-y-4 animate-in fade-in duration-300">
       <div className="text-[64px] sm:text-[76px] font-black tracking-[-0.04em] font-mono text-[var(--accent,#F5B82E)] leading-none">
-        {fact?.number || '7s'}
+        {fact?.number || 'DID YOU KNOW'}
       </div>
       <p className={`text-[17px] sm:text-[19px] font-medium leading-relaxed max-w-[480px] mx-auto ${isDark ? 'text-[#e5dec9]' : 'text-[#2e261d]'}`}>
-        {fact?.sentence || subtitle || 'A focused researcher forms a strong signal in the first moments.'}
+        {fact?.sentence || subtitle || 'A clear next step is easier to act on when it has one outcome and a reason.'}
       </p>
     </div>
   );
