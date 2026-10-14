@@ -31,7 +31,9 @@ export const TopBar: React.FC = () => {
   const getPageTitle = () => {
     switch (currentPage) {
       case 'home':
-        return 'Today';
+        return 'Start';
+      case 'dashboard':
+        return 'Dashboard';
       case 'research':
         return 'Research workspace';
       case 'chat':
