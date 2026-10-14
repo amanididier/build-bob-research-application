@@ -24,7 +24,8 @@ export const DashboardPage: React.FC = () => {
     userName, 
     createNewResearchSession,
     triggerThinking,
-    addTask
+    addTask,
+    activeResearchId
   } = useApp();
 
   // Determine daytime vs night from current clock
@@ -36,6 +37,8 @@ export const DashboardPage: React.FC = () => {
   const [isRoadmapWizardOpen, setIsRoadmapWizardOpen] = useState(false);
   const [isSetFocusModalOpen, setIsSetFocusModalOpen] = useState(false);
   const [customFocusText, setCustomFocusText] = useState('');
+  const [selectedFocusProjectId, setSelectedFocusProjectId] = useState<string>(() => typeof window !== 'undefined' ? localStorage.getItem('bob_focus_project_id') || '' : '');
+  const [showFocusPrompt, setShowFocusPrompt] = useState(false);
   const [selectedFocusOverride, setSelectedFocusOverride] = useState<string | null>(() => {
     return typeof window !== 'undefined' ? localStorage.getItem('bob_custom_focus_goal') : null;
   });
@@ -43,42 +46,55 @@ export const DashboardPage: React.FC = () => {
   const isMorning = timeMode === 'morning';
   const heroImage = isMorning ? sunflowerMorning : sunflowerNight;
 
-  // Today's Focus is derived from real tasks and projects, or user's custom focus override
+  // The selected focus belongs to a project; tasks shown in the focus chooser stay scoped to it.
   const openTasks = tasks.filter((t) => !t.completed);
-  const dueToday = openTasks.filter((t) => (t.dueDate || '').toLowerCase().startsWith('today'));
-  const focusTask = dueToday[0] || openTasks[0] || null;
-  const focusProject =
-    projects.find((p) => p.id === (focusTask ? focusTask.projectId : '')) || projects[0] || null;
-  const projectTasks = focusProject ? tasks.filter((t) => t.projectId === focusProject.id) : [];
+  const focusProject = projects.find((project) => project.id === selectedFocusProjectId) || projects[0] || null;
+  const projectTasks = focusProject ? tasks.filter((task) => task.projectId === focusProject.id) : [];
+  const projectOpenTasks = projectTasks.filter((task) => !task.completed);
+  const dueToday = projectOpenTasks.filter((task) => (task.dueDate || '').toLowerCase().startsWith('today'));
+  const focusTask = projectTasks.find((task) => task.title === selectedFocusOverride && !task.completed)
+    || dueToday[0]
+    || projectOpenTasks[0]
+    || null;
   const doneInProject = projectTasks.filter((t) => t.completed).length;
-  const focusProgress = projectTasks.length
-    ? Math.round((doneInProject / projectTasks.length) * 100)
-    : 0;
+  const focusProgress = projectTasks.length ? Math.round((doneInProject / projectTasks.length) * 100) : 0;
   const doneToday = tasks.filter((t) => t.completed).length;
-
   const activeFocusTitle = selectedFocusOverride || (focusTask ? focusTask.title : focusProject ? focusProject.title : 'Plan your first study');
+
+  useEffect(() => {
+    if (!selectedFocusOverride || !selectedFocusProjectId) return;
+    const finishedFocus = tasks.some((task) => task.projectId === selectedFocusProjectId && task.title === selectedFocusOverride && task.completed);
+    if (finishedFocus) setShowFocusPrompt(true);
+  }, [tasks, selectedFocusOverride, selectedFocusProjectId]);
 
   const handleSaveCustomFocus = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customFocusText.trim()) return;
     const text = customFocusText.trim();
+    const projectId = selectedFocusProjectId || focusProject?.id || activeResearchId;
     setSelectedFocusOverride(text);
+    setSelectedFocusProjectId(projectId);
+    setShowFocusPrompt(false);
     if (typeof window !== 'undefined') {
       localStorage.setItem('bob_custom_focus_goal', text);
+      localStorage.setItem('bob_focus_project_id', projectId);
     }
-    addTask(text, 'Today');
+    addTask(text, 'Today', projectId);
     setCustomFocusText('');
     setIsSetFocusModalOpen(false);
-    triggerThinking('Focus Updated', `Set primary daily focus to "${text}"`, 'Focus active');
+    triggerThinking('Focus Updated', `Set today’s focus for ${focusProject?.title || 'your project'} to "${text}"`, 'Focus active');
   };
 
-  const handleSelectTaskAsFocus = (taskTitle: string) => {
+  const handleSelectTaskAsFocus = (taskTitle: string, projectId = focusProject?.id || activeResearchId) => {
     setSelectedFocusOverride(taskTitle);
+    setSelectedFocusProjectId(projectId);
+    setShowFocusPrompt(false);
     if (typeof window !== 'undefined') {
       localStorage.setItem('bob_custom_focus_goal', taskTitle);
+      localStorage.setItem('bob_focus_project_id', projectId);
     }
     setIsSetFocusModalOpen(false);
-    triggerThinking('Focus Set', `Prioritized "${taskTitle}" as today’s focus.`, 'Focus set');
+    triggerThinking('Focus Set', `Prioritized "${taskTitle}" in ${projects.find((project) => project.id === projectId)?.title || 'your project'}.`, 'Focus set');
   };
 
   return (
@@ -111,6 +127,15 @@ export const DashboardPage: React.FC = () => {
           </p>
         </div>
       </div>
+
+      {showFocusPrompt && (
+        <div className="max-w-[1140px] mx-auto px-5 md:px-8 pt-5">
+          <div className="rounded-2xl border border-[var(--y)]/50 bg-[var(--ys)] dark:bg-[#352b15] px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div><b className="text-[12px] text-[var(--t)]">Nice work finishing your focus.</b><p className="text-[11px] text-[var(--m)] mt-0.5">Would you like to choose the next important task for this project?</p></div>
+            <div className="flex items-center gap-2"><button onClick={() => setShowFocusPrompt(false)} className="px-3 py-2 rounded-lg text-[11px] font-semibold text-[var(--m)] hover:bg-black/5">Not now</button><button onClick={() => { setIsSetFocusModalOpen(true); setShowFocusPrompt(false); }} className="px-3 py-2 rounded-lg bg-[var(--y)] text-[#171717] text-[11px] font-bold">Choose another focus</button></div>
+          </div>
+        </div>
+      )}
 
       {/* 2. Main Dashboard Content inside max-w container */}
       <div className="max-w-[1140px] mx-auto px-5 md:px-8 py-8 space-y-8">
@@ -330,27 +355,29 @@ export const DashboardPage: React.FC = () => {
               </button>
             </div>
 
-            <p className="text-xs text-[var(--m)] mb-4">
-              Select one of your unfinished roadmap tasks or type a custom focus intention for today:
+            <p className="text-xs text-[var(--m)] mb-3">
+              First choose the project you want to move forward. Then select the one task that matters most today.
             </p>
 
-            {/* Existing Unfinished Tasks */}
-            {openTasks.length > 0 && (
-              <div className="space-y-1.5 mb-4 max-h-40 overflow-y-auto">
-                <div className="text-[11px] font-bold text-[var(--m)]">Unfinished Tasks:</div>
-                {openTasks.slice(0, 4).map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => handleSelectTaskAsFocus(t.title)}
-                    className="w-full p-2.5 rounded-xl border border-[var(--line)] hover:border-[var(--y)] bg-[var(--s2)]/40 hover:bg-[var(--s2)] text-left text-xs font-semibold text-[var(--t)] flex items-center justify-between transition-colors"
-                  >
-                    <span className="truncate">{t.title}</span>
-                    <span className="text-[10px] text-[var(--m)] font-mono">{t.dueDate}</span>
+            <div className="mb-4">
+              <div className="text-[11px] font-bold text-[var(--m)] mb-2">1 · Main project</div>
+              <div className="flex flex-wrap gap-2">
+                {projects.map((project) => (
+                  <button key={project.id} type="button" onClick={() => setSelectedFocusProjectId(project.id)} className={`px-3 py-2 rounded-xl border text-[11px] font-semibold transition-colors ${(selectedFocusProjectId || focusProject?.id) === project.id ? 'bg-[var(--y)]/20 border-[var(--y)] text-[var(--t)]' : 'bg-[var(--s2)] border-[var(--line)] text-[var(--m)] hover:border-[var(--y)]'}`}>
+                    {project.title}
                   </button>
                 ))}
               </div>
-            )}
+            </div>
+
+            <div className="space-y-1.5 mb-4 max-h-40 overflow-y-auto">
+              <div className="text-[11px] font-bold text-[var(--m)] mb-2">2 · One task inside {focusProject?.title || 'this project'}</div>
+              {projectOpenTasks.length ? projectOpenTasks.slice(0, 8).map((task) => (
+                <button key={task.id} type="button" onClick={() => handleSelectTaskAsFocus(task.title, focusProject?.id)} className="w-full p-2.5 rounded-xl border border-[var(--line)] hover:border-[var(--y)] bg-[var(--s2)]/40 hover:bg-[var(--s2)] text-left text-xs font-semibold text-[var(--t)] flex items-center justify-between transition-colors">
+                  <span className="truncate">{task.title}</span><span className="text-[10px] text-[var(--m)] font-mono">{task.dueDate}</span>
+                </button>
+              )) : <p className="text-[11px] text-[var(--m)] py-2">No open tasks in this project yet. You can set a custom focus below.</p>}
+            </div>
 
             {/* Custom Focus Form */}
             <form onSubmit={handleSaveCustomFocus} className="space-y-3">
