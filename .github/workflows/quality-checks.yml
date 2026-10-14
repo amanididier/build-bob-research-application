@@ -1,0 +1,62 @@
+name: Bob Quality Checks
+
+on:
+  push:
+    branches:
+      - release/premium-roadmap-v1.0.70
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: TypeScript validation
+        run: npm run lint
+
+      - name: Build web app and package extension
+        run: npm run build
+
+      - name: Check extension JavaScript syntax
+        run: |
+          node --check chrome-extension/background.js
+          node --check chrome-extension/content.js
+          node --check chrome-extension/sidepanel.js
+
+      - name: Verify release versions
+        run: |
+          ROOT_VERSION=$(node -p "require('./package.json').version")
+          DESKTOP_VERSION=$(node -p "require('./apps/desktop/package.json').version")
+          if [ "$ROOT_VERSION" != "$DESKTOP_VERSION" ]; then
+            echo "::error::Root version $ROOT_VERSION does not match desktop version $DESKTOP_VERSION"
+            exit 1
+          fi
+          echo "Bob release version: $ROOT_VERSION"
+          node -e "const m=require('./chrome-extension/manifest.json'); if (!/^\d+\.\d+\.\d+$/.test(m.version)) process.exit(1); console.log('Chrome extension version:', m.version)"
+
+      - name: Upload built app and extension bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: bob-quality-build
+          path: |
+            dist/
+            public/bob-chrome-extension.zip
+          if-no-files-found: error
+          retention-days: 7
