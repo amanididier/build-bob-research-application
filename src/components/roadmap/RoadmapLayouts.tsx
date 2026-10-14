@@ -15,6 +15,45 @@ import {
   Sliders
 } from 'lucide-react';
 
+// Fixed logo registry: model output can select a known tool key, never a URL.
+const TOOL_FAVICONS: Record<string, string> = {
+  chatgpt: 'https://www.google.com/s2/favicons?domain=chatgpt.com&sz=64',
+  openai: 'https://www.google.com/s2/favicons?domain=openai.com&sz=64',
+  claude: 'https://www.google.com/s2/favicons?domain=claude.ai&sz=64',
+  claude_code: 'https://www.google.com/s2/favicons?domain=claude.ai&sz=64',
+  gemini: 'https://www.google.com/s2/favicons?domain=gemini.google.com&sz=64',
+  gemini_api: 'https://www.google.com/s2/favicons?domain=ai.google.dev&sz=64',
+  notes: 'https://www.google.com/s2/favicons?domain=notion.so&sz=64',
+  notion: 'https://www.google.com/s2/favicons?domain=notion.so&sz=64',
+  browser: 'https://www.google.com/s2/favicons?domain=google.com&sz=64',
+  browser_tabs: 'https://www.google.com/s2/favicons?domain=google.com&sz=64',
+  timer: 'https://www.google.com/s2/favicons?domain=clockify.me&sz=64',
+  sheets: 'https://www.google.com/s2/favicons?domain=sheets.google.com&sz=64',
+  google_sheets: 'https://www.google.com/s2/favicons?domain=sheets.google.com&sz=64',
+  docs: 'https://www.google.com/s2/favicons?domain=docs.google.com&sz=64',
+  google_docs: 'https://www.google.com/s2/favicons?domain=docs.google.com&sz=64',
+  git: 'https://www.google.com/s2/favicons?domain=github.com&sz=64',
+  github: 'https://www.google.com/s2/favicons?domain=github.com&sz=64',
+  excel: 'https://www.google.com/s2/favicons?domain=excel.cloud.microsoft&sz=64',
+  microsoft_excel: 'https://www.google.com/s2/favicons?domain=excel.cloud.microsoft&sz=64',
+  figma: 'https://www.google.com/s2/favicons?domain=figma.com&sz=64',
+  gmail: 'https://www.google.com/s2/favicons?domain=gmail.com&sz=64',
+  youtube: 'https://www.google.com/s2/favicons?domain=youtube.com&sz=64',
+  vscode: 'https://www.google.com/s2/favicons?domain=code.visualstudio.com&sz=64',
+  visual_studio_code: 'https://www.google.com/s2/favicons?domain=code.visualstudio.com&sz=64',
+  supabase: 'https://www.google.com/s2/favicons?domain=supabase.com&sz=64',
+  slack: 'https://www.google.com/s2/favicons?domain=slack.com&sz=64',
+  trello: 'https://www.google.com/s2/favicons?domain=trello.com&sz=64',
+  linear: 'https://www.google.com/s2/favicons?domain=linear.app&sz=64',
+  drive: 'https://www.google.com/s2/favicons?domain=drive.google.com&sz=64'
+};
+
+function getToolFavicon(value: string, label: string): string | null {
+  const key = value.toLowerCase().trim().replace(/[\s/-]+/g, '_');
+  const labelKey = label.toLowerCase().trim().replace(/[\s/-]+/g, '_');
+  return TOOL_FAVICONS[key] || TOOL_FAVICONS[labelKey] || null;
+}
+
 export type PageLayoutType = 
   | 'fact_card'
   | 'option_rows'
@@ -233,7 +272,18 @@ export const ChipSelectLayout: React.FC<{
                 : (isDark ? 'bg-[#17150F] border-[#2A2620] text-[#e5dec9] hover:border-[#3e382e]' : 'bg-white border-[#E7E0D3] text-[#2e261d] hover:border-[#b8afa0]')
             }`}
           >
-            <span>{c.label}</span>
+            <span className="flex items-center gap-2">
+              {getToolFavicon(c.value, c.label) && (
+                <img
+                  src={getToolFavicon(c.value, c.label) || ''}
+                  alt=""
+                  loading="lazy"
+                  className={`w-5 h-5 rounded-md object-contain ${isSelected ? 'bg-white p-0.5' : 'bg-white p-0.5'}`}
+                  onError={(event) => { event.currentTarget.style.display = 'none'; }}
+                />
+              )}
+              <span>{c.label}</span>
+            </span>
             {isSelected && <Check className="w-3.5 h-3.5 stroke-[2.5]" />}
           </button>
         );
