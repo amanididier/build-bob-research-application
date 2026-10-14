@@ -358,48 +358,70 @@ export const TextInputComponent: React.FC<{
 
 // 7. Dropzone Optional Component
 export const DropzoneOptionalLayout: React.FC<{
-  fileInfo?: { name: string; size: string } | null;
-  onFileSelect: (name: string, size: string) => void;
+  fileInfo?: { name: string; size: string; status?: string } | null;
+  onFileSelect: (name: string, size: string, content?: string, status?: string) => void;
   onSkipUpload: () => void;
   isDark: boolean;
 }> = ({ fileInfo, onFileSelect, onSkipUpload, isDark }) => {
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    if (e.dataTransfer.files?.[0]) {
-      const f = e.dataTransfer.files[0];
-      onFileSelect(f.name, `${Math.round(f.size / 1024)} KB`);
+  const inputRef = React.useRef<HTMLInputElement | null>(null);
+  const handleFile = async (file: File) => {
+    const size = `${Math.max(1, Math.round(file.size / 1024))} KB`;
+    const extension = file.name.split('.').pop()?.toLowerCase() || '';
+    if (file.size > 2 * 1024 * 1024) {
+      onFileSelect(file.name, size, '', 'File is larger than 2 MB. Choose a smaller file or paste the key details in your answers.');
+      return;
     }
+    if (['txt', 'md', 'csv', 'json'].includes(extension)) {
+      try {
+        const content = (await file.text()).slice(0, 12000);
+        onFileSelect(file.name, size, content, 'Text extracted and ready for Bob');
+      } catch {
+        onFileSelect(file.name, size, '', 'The file was selected, but its text could not be read.');
+      }
+      return;
+    }
+    onFileSelect(file.name, size, '', 'File selected. Automatic text extraction for PDF/DOCX is not enabled in this build; paste a short summary into your answers so Bob can use its contents.');
+  };
+  const handleDrop = (event: React.DragEvent) => {
+    event.preventDefault();
+    const file = event.dataTransfer.files?.[0];
+    if (file) void handleFile(file);
   };
 
   return (
     <div className="py-3 space-y-3">
-      <div
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={handleDrop}
-        className={`border-2 border-dashed rounded-[16px] p-8 text-center transition-colors cursor-pointer ${
-          isDark 
-            ? 'border-[#2A2620] hover:border-[var(--accent,#F5B82E)] bg-[#17150F]/50' 
-            : 'border-[#E7E0D3] hover:border-[var(--accent,#F5B82E)] bg-[#faf8f2]'
-        }`}
-        onClick={() => {
-          onFileSelect('reference-research-brief.pdf', '340 KB');
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".pdf,.docx,.txt,.md,.csv,.json"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) void handleFile(file);
+          event.currentTarget.value = '';
         }}
+      />
+      <div
+        role="button"
+        tabIndex={0}
+        onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') inputRef.current?.click(); }}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={handleDrop}
+        onClick={() => inputRef.current?.click()}
+        className={`border-2 border-dashed rounded-[16px] p-8 text-center transition-colors cursor-pointer ${isDark ? 'border-[#2A2620] hover:border-[var(--accent,#F5B82E)] bg-[#17150F]/50' : 'border-[#E7E0D3] hover:border-[var(--accent,#F5B82E)] bg-[#faf8f2]'}`}
       >
         <Upload className="w-8 h-8 mx-auto mb-3 text-[var(--accent,#F5B82E)] opacity-90" />
         <b className={`block text-[14px] ${isDark ? 'text-white' : 'text-[#171717]'}`}>
-          {fileInfo ? fileInfo.name : 'Drop existing notes, outline or resume, or click to choose'}
+          {fileInfo ? fileInfo.name : 'Drop existing notes or a brief here, or click to choose'}
         </b>
         <span className={`block text-[11px] mt-1 font-mono uppercase tracking-wider ${isDark ? 'text-[#8A8175]' : 'text-[#6B6358]'}`}>
-          {fileInfo ? `${fileInfo.size} · Uploaded` : 'PDF, DOCX, TXT, MD (Optional)'}
+          {fileInfo ? `${fileInfo.size} · Selected` : 'TXT, MD, CSV, JSON, PDF, DOCX · 2 MB max'}
         </span>
+        {fileInfo?.status && <p className={`text-[11px] leading-relaxed mt-3 max-w-sm mx-auto ${isDark ? 'text-[#c9c0b1]' : 'text-[#6B6358]'}`}>{fileInfo.status}</p>}
       </div>
 
       <div className="text-center">
-        <button
-          type="button"
-          onClick={onSkipUpload}
-          className={`text-[12px] font-semibold underline cursor-pointer ${isDark ? 'text-[#8A8175] hover:text-white' : 'text-[#6B6358] hover:text-[#171717]'}`}
-        >
+        <button type="button" onClick={onSkipUpload} className={`text-[12px] font-semibold underline cursor-pointer ${isDark ? 'text-[#8A8175] hover:text-white' : 'text-[#6B6358] hover:text-[#171717]'}`}>
           I do not have one yet
         </button>
       </div>
