@@ -180,29 +180,12 @@ Rules:
   const lastBobIndex = messages.reduce((acc, m, i) => (m.role === 'bob' ? i : acc), -1);
 
   return (
-    <div className="w-full h-full flex flex-col bg-[var(--bg)] [background-image:radial-gradient(circle_at_1px_1px,var(--line)_1px,transparent_0)] [background-size:22px_22px] animate-in fade-in duration-300">
-      {/* Messenger header: Full-width edge-to-edge */}
-      <div className="w-full flex items-center gap-3 px-6 py-3.5 border-b border-[var(--line)] bg-[var(--s)]/85 backdrop-blur-md shrink-0">
-        <div className="relative">
-          <img src={bobOrb} alt="Bob" className="w-10 h-10 rounded-full object-cover border border-[var(--line)]" />
-          <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-amber-400 border-2 border-[var(--s)]" />
-        </div>
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <b className="block text-[14px] text-[var(--t)] leading-tight">Bob</b>
-            <span className="px-2 py-0.5 rounded-full bg-amber-400/15 text-amber-600 dark:text-amber-300 text-[10px] font-bold">
-              Relaxing Lounge
-            </span>
-          </div>
-          <small className="block text-[11px] text-[var(--m)] font-medium">
-            {isBobTyping ? 'thinking gently…' : 'online · casual chats & reflections'}
-          </small>
-        </div>
-        <div className="ml-auto flex items-center gap-2 text-[11px] text-[var(--m)]">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--s2)] border border-[var(--line)] font-medium">
-            <Coffee className="w-3.5 h-3.5 text-amber-500" />
-            <span>Casual WhatsApp Lounge</span>
-          </span>
+    <div className="w-full h-full flex flex-col bg-[#efeae2] dark:bg-[#0b141a] [background-image:radial-gradient(circle_at_1px_1px,rgba(0,0,0,0.035)_1px,transparent_0)] dark:[background-image:radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.035)_1px,transparent_0)] [background-size:22px_22px] animate-in fade-in duration-300">
+      {/* Minimal WhatsApp-inspired chat header — no connection/status card. */}
+      <div className="w-full flex items-center justify-between px-5 sm:px-7 py-3 border-b border-black/5 dark:border-white/10 bg-[#f7f5f0]/90 dark:bg-[#111b21]/90 backdrop-blur-md shrink-0">
+        <div>
+          <b className="block text-[14px] text-[var(--t)] leading-tight">Chat</b>
+          <small className="block text-[11px] text-[var(--m)] mt-0.5">{isBobTyping ? 'Bob is typing…' : 'A quiet place to talk about anything'}</small>
         </div>
       </div>
 
@@ -346,6 +329,9 @@ Rules:
           <Send className="w-4 h-4" />
         </button>
       </form>
+      <p className="px-4 py-2 text-center text-[10.5px] text-[#6c756d] dark:text-[#869b91] bg-[#f7f5f0]/85 dark:bg-[#111b21]/85 border-t border-black/5 dark:border-white/10">
+        {userName || 'You'}, don’t worry — your chat is saved only on this device.
+      </p>
     </div>
   );
 };
