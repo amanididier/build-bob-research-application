@@ -343,9 +343,9 @@ export const RoadmapSheet: React.FC = () => {
       return;
     }
     setGoalQuery(effectiveGoal);
-    const needsAnswer = ['option_rows', 'segmented_choice', 'chip_select', 'slider_value', 'text_input'].includes(currentPage.layout);
-    const currentValue = answers[currentPage.page_id];
-    if (needsAnswer && (currentValue === undefined || currentValue === null || currentValue === '' || (Array.isArray(currentValue) && currentValue.length === 0))) {
+    const needsAnswer = ['option_rows', 'option_tiles', 'segmented_choice', 'chip_select', 'slider_value', 'text_input'].includes(currentPage.layout);
+    const answerValue = answers[currentPage.page_id];
+    if (needsAnswer && (answerValue === undefined || answerValue === null || answerValue === '' || (Array.isArray(answerValue) && answerValue.length === 0))) {
       triggerThinking('One quick answer first', 'Choose or enter an answer so Bob can make the next page useful.', 'Waiting for your answer');
       return;
     }
