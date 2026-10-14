@@ -18,6 +18,7 @@ import {
 export type PageLayoutType = 
   | 'fact_card'
   | 'option_rows'
+  | 'option_tiles'
   | 'segmented_choice'
   | 'chip_select'
   | 'slider_value'
@@ -131,6 +132,40 @@ export const OptionRowsLayout: React.FC<{
                 autoFocus
               />
             )}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+// 2b. Colorful Option Tiles — for visual, single-choice questions.
+export const OptionTilesLayout: React.FC<{
+  options?: Array<{ value: string; label: string; sublabel?: string; reveals_input?: boolean }>;
+  value: string;
+  customText?: string;
+  onChange: (val: string) => void;
+  onCustomTextChange?: (text: string) => void;
+  isDark: boolean;
+}> = ({ options = [], value, customText = '', onChange, onCustomTextChange, isDark }) => {
+  const tones = [
+    isDark ? 'bg-[#18372f] border-[#28584a]' : 'bg-[#e6f5ed] border-[#c9e6d5]',
+    isDark ? 'bg-[#1b2f47] border-[#2c4c70]' : 'bg-[#e8f2ff] border-[#ccdef7]',
+    isDark ? 'bg-[#352744] border-[#59406f]' : 'bg-[#f2eaff] border-[#e0d0f3]',
+    isDark ? 'bg-[#3b311b] border-[#645326]' : 'bg-[#fff3d6] border-[#f0dfad]'
+  ];
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 py-3">
+      {options.slice(0, 4).map((option, index) => {
+        const selected = value === option.value;
+        return (
+          <div key={option.value} className="space-y-2">
+            <button type="button" onClick={() => onChange(option.value)} className={`relative w-full min-h-[112px] p-4 rounded-[16px] border text-left transition-all hover:-translate-y-0.5 ${tones[index % tones.length]} ${selected ? 'ring-2 ring-[var(--accent,#F5B82E)] ring-offset-2 ring-offset-[#0E0D0B]' : ''}`}>
+              <span className={`block text-[13px] font-extrabold leading-snug ${isDark ? 'text-white' : 'text-[#202018]'}`}>{option.label}</span>
+              {option.sublabel && <span className={`block mt-2 text-[11px] leading-relaxed ${isDark ? 'text-white/65' : 'text-[#5c5b54]'}`}>{option.sublabel}</span>}
+              {selected && <span className="absolute top-3 right-3 w-5 h-5 rounded-full bg-[var(--accent,#F5B82E)] text-[#171717] grid place-items-center"><Check className="w-3 h-3 stroke-[3]" /></span>}
+            </button>
+            {option.reveals_input && selected && <input value={customText} onChange={(event) => onCustomTextChange?.(event.target.value)} placeholder="Add a few details…" className={`w-full h-10 px-3 rounded-xl border text-[12px] outline-none ${isDark ? 'bg-[#14120e] border-[#2A2620] text-white' : 'bg-white border-[#E7E0D3] text-[#171717]'}`} />}
           </div>
         );
       })}
