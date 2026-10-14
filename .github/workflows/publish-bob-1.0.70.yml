@@ -11,7 +11,6 @@ permissions:
 
 jobs:
   validate_release:
-    if: ${{ startsWith(github.event.head_commit.message, 'release: Bob v1.0.70') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,12 +18,16 @@ jobs:
         with:
           node-version: 22
       - name: Install root dependencies
+        if: ${{ startsWith(github.event.head_commit.message, 'release: Bob v1.0.70') }}
         run: npm install --legacy-peer-deps
       - name: TypeScript validation
+        if: ${{ startsWith(github.event.head_commit.message, 'release: Bob v1.0.70') }}
         run: npm run lint
       - name: Build web app and extension
+        if: ${{ startsWith(github.event.head_commit.message, 'release: Bob v1.0.70') }}
         run: npm run build
       - name: Verify version and extension scripts
+        if: ${{ startsWith(github.event.head_commit.message, 'release: Bob v1.0.70') }}
         run: |
           ROOT_VERSION=$(node -p "require('./package.json').version")
           DESKTOP_VERSION=$(node -p "require('./apps/desktop/package.json').version")
