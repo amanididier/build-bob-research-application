@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
-import { bobAi } from '../../lib/aiEngine';
-import { Send, CheckCheck, Check, Sparkles } from 'lucide-react';
+import { Send, CheckCheck, Check, Sparkles, Coffee, Smile, Compass, RefreshCw } from 'lucide-react';
 import bobOrb from '../../assets/images/bob_mascot_orb_1791540734514.jpg';
+import { resolveGeminiApiKey } from '../../lib/ai/keyManager';
+import { GoogleGenAI } from '@google/genai';
 
 interface MessengerMsg {
   id: string;
@@ -12,11 +13,19 @@ interface MessengerMsg {
 }
 
 const STORE_KEY = 'bob_messenger_messages_v1';
+const NUDGE_KEY = 'bob_messenger_last_nudge';
+const IDLE_MS = 6 * 60 * 1000;
+const NUDGE_COOLDOWN_MS = 25 * 60 * 1000;
 
 function loadMessages(): MessengerMsg[] {
   try {
     const raw = typeof window !== 'undefined' ? localStorage.getItem(STORE_KEY) : null;
-    if (raw) return JSON.parse(raw) as MessengerMsg[];
+    if (raw) {
+      const parsed = JSON.parse(raw) as MessengerMsg[];
+      // Filter out old technical research dump essays so the chat is purely casual
+      const cleaned = parsed.filter(m => !m.text.includes('### Next Steps') && !m.text.includes('Define the Scope Boundary') && m.text.length < 500);
+      if (cleaned.length > 0) return cleaned;
+    }
   } catch {}
   return [];
 }
@@ -33,14 +42,20 @@ const formatDay = (ts: number) => {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 };
 
-const ROADMAP_INTENT = /\b(roadmap|help me plan|plan this project|turn this into a plan|make a plan|create a plan|break this down into steps)\b/i;
+// Casual fallback responses with caring follow-up questions
+const CASUAL_FOLLOWUPS = [
+  "How did that step you were working on earlier turn out? Did you run into any hurdles or was it smooth sailing?",
+  "By the way, did you get a chance to test out that recent change, or did you decide to take a breather first?",
+  "How is your energy holding up today? Did that milestone step feel satisfying once you got through it?",
+  "Did you manage to take that short break away from the screen, or are you still powering through?",
+  "How did things wrap up with the latest step you took? Totally okay if you're taking it one gentle pace at a time."
+];
 
 export const ChatPage: React.FC = () => {
-  const { userName, activeResearchId } = useApp();
+  const { userName, tasks } = useApp();
   const [messages, setMessages] = useState<MessengerMsg[]>(loadMessages);
   const [draft, setDraft] = useState('');
   const [isBobTyping, setIsBobTyping] = useState(false);
-  const [showRoadmapSuggestion, setShowRoadmapSuggestion] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const sendingRef = useRef(false);
 
@@ -58,81 +73,176 @@ export const ChatPage: React.FC = () => {
     ]);
   };
 
-  const handleSend = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const text = draft.trim();
+  // Bob is proactive in the casual lounge: after an idle stretch he gently checks in on the user's wellbeing and recent steps
+  useEffect(() => {
+    let idle = 0;
+    const tick = window.setInterval(() => {
+      idle += 15000;
+      if (idle < IDLE_MS) return;
+      idle = 0;
+      const last = Number(localStorage.getItem(NUDGE_KEY) || 0);
+      if (Date.now() - last < NUDGE_COOLDOWN_MS) return;
+      localStorage.setItem(NUDGE_KEY, String(Date.now()));
+      
+      const randomFollowup = CASUAL_FOLLOWUPS[Math.floor(Math.random() * CASUAL_FOLLOWUPS.length)];
+      pushBobMessage(
+        `Hey ${userName || 'friend'}, just taking a quiet moment to check in. ${randomFollowup}`
+      );
+    }, 15000);
+
+    const reset = () => {
+      idle = 0;
+    };
+    window.addEventListener('mousemove', reset);
+    window.addEventListener('keydown', reset);
+    window.addEventListener('click', reset);
+    return () => {
+      window.clearInterval(tick);
+      window.removeEventListener('mousemove', reset);
+      window.removeEventListener('keydown', reset);
+      window.removeEventListener('click', reset);
+    };
+  }, [userName]);
+
+  // Generate casual, relaxing companion response with occasional gentle follow-up question
+  const generateRelaxedResponse = async (userInput: string): Promise<string> => {
+    const key = resolveGeminiApiKey();
+    const recentTask = tasks.find(t => !t.completed);
+    const recentStepHint = recentTask ? `They have a task titled "${recentTask.title}".` : '';
+
+    if (key) {
+      try {
+        const ai = new GoogleGenAI({ apiKey: key });
+        const systemPrompt = `You are Bob, a warm, relaxed, and thoughtful companion chatting casually with ${userName || 'your friend'} in their quiet lounge.
+This is NOT a technical project dashboard or research lecture. Keep this a relaxing haven.
+Rules:
+1. Speak casually, warmly, concisely (1 to 3 natural sentences max).
+2. Avoid bullet lists, corporate jargon, or heavy essays.
+3. At natural moments, ask a friendly follow-up question about a thing or step they would have taken recently (e.g., how a recent step went, if they took a break, or how their energy feels). ${recentStepHint}
+4. If they just want to chat about coffee, hobbies, unwinding, or random thoughts, keep it light and peaceful.`;
+
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.1-flash-lite',
+          contents: `${systemPrompt}\n\nUser: "${userInput}"\nBob:`,
+        });
+
+        if (response.text && response.text.trim()) {
+          return response.text.trim();
+        }
+      } catch (err) {
+        console.warn('Gemini casual chat fallback:', err);
+      }
+    }
+
+    // Organic offline / fallback casual conversational generator
+    const lower = userInput.toLowerCase();
+    const randomFollowup = CASUAL_FOLLOWUPS[Math.floor(Math.random() * CASUAL_FOLLOWUPS.length)];
+
+    if (lower.includes('coffee') || lower.includes('tea') || lower.includes('drink') || lower.includes('eat') || lower.includes('break')) {
+      return `A good warm brew always resets the mind! I hope you're taking your time to enjoy it. ${randomFollowup}`;
+    }
+    if (lower.includes('tired') || lower.includes('exhausted') || lower.includes('sleep') || lower.includes('long day')) {
+      return `You've put in honest effort today. Don't hesitate to lean back and let the mind wander. Did that last step you tackled feel like a good spot to pause?`;
+    }
+    if (lower.includes('how are you') || lower.includes('what are you doing') || lower.includes('hey bob') || lower.includes('hello')) {
+      return `I'm feeling calm and happy to hang out with you here! Just soaking in the peaceful atmosphere. ${randomFollowup}`;
+    }
+    if (lower.includes('step') || lower.includes('task') || lower.includes('done') || lower.includes('finished') || lower.includes('work')) {
+      return `That's great progress! It feels good when things fall into place step by step. What's the feeling now—ready to relax for a bit or letting ideas simmer?`;
+    }
+
+    return `It's really nice just chatting without all the hustle and bustle. ${randomFollowup}`;
+  };
+
+  const handleSend = async (textToSend?: string) => {
+    const text = (textToSend || draft).trim();
     if (!text || sendingRef.current) return;
     sendingRef.current = true;
     setDraft('');
-    setShowRoadmapSuggestion(ROADMAP_INTENT.test(text));
+
     setMessages((prev) => [
       ...prev,
       { id: `m-${Date.now()}`, role: 'user', text, ts: Date.now() },
     ]);
     setIsBobTyping(true);
+
     try {
-      const res = await bobAi.generateResearchAnswer(
-        text,
-        activeResearchId || 'urugendo',
-        undefined,
-        bobAi.getTastePreference()
-      );
-      pushBobMessage(res.answer);
+      const reply = await generateRelaxedResponse(text);
+      pushBobMessage(reply);
     } catch {
-      pushBobMessage("I couldn't reach my reasoning engine just now. Try again in a moment?");
+      pushBobMessage("I'm right here beside you. Take a nice breath and we can chat whenever you're ready.");
     } finally {
       setIsBobTyping(false);
       sendingRef.current = false;
     }
   };
 
-  const openRoadmap = () => {
-    const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user')?.text || '';
-    window.dispatchEvent(new CustomEvent('bob-open-roadmap', { detail: { title: lastUserMessage } }));
-    setShowRoadmapSuggestion(false);
-  };
-
   const lastBobIndex = messages.reduce((acc, m, i) => (m.role === 'bob' ? i : acc), -1);
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-[860px] flex-col animate-in fade-in duration-300">
-      <header className="flex items-center gap-3 border-b border-[var(--line)] bg-[var(--s)]/70 px-5 py-3 backdrop-blur-md">
+    <div className="w-full h-full flex flex-col bg-[var(--bg)] [background-image:radial-gradient(circle_at_1px_1px,var(--line)_1px,transparent_0)] [background-size:22px_22px] animate-in fade-in duration-300">
+      {/* Messenger header: Full-width edge-to-edge */}
+      <div className="w-full flex items-center gap-3 px-6 py-3.5 border-b border-[var(--line)] bg-[var(--s)]/85 backdrop-blur-md shrink-0">
         <div className="relative">
-          <img src={bobOrb} alt="Bob" className="h-10 w-10 rounded-full border border-[var(--line)] object-cover" />
-          <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[var(--s)] bg-emerald-500" />
+          <img src={bobOrb} alt="Bob" className="w-10 h-10 rounded-full object-cover border border-[var(--line)]" />
+          <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-amber-400 border-2 border-[var(--s)]" />
         </div>
         <div className="min-w-0">
-          <b className="block text-[14px] leading-tight text-[var(--t)]">Bob</b>
-          <small className="block text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-            {isBobTyping ? 'thinking…' : 'Here with you'}
+          <div className="flex items-center gap-2">
+            <b className="block text-[14px] text-[var(--t)] leading-tight">Bob</b>
+            <span className="px-2 py-0.5 rounded-full bg-amber-400/15 text-amber-600 dark:text-amber-300 text-[10px] font-bold">
+              Relaxing Lounge
+            </span>
+          </div>
+          <small className="block text-[11px] text-[var(--m)] font-medium">
+            {isBobTyping ? 'thinking gently…' : 'online · casual chats & reflections'}
           </small>
         </div>
-        <span className="ml-auto flex items-center gap-1.5 text-[11px] text-[var(--m)]">
-          <Sparkles className="h-3.5 w-3.5 text-[var(--y)]" />
-          Saved on this device
-        </span>
-      </header>
+        <div className="ml-auto flex items-center gap-2 text-[11px] text-[var(--m)]">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--s2)] border border-[var(--line)] font-medium">
+            <Coffee className="w-3.5 h-3.5 text-amber-500" />
+            <span>Casual WhatsApp Lounge</span>
+          </span>
+        </div>
+      </div>
 
+      {/* Message thread: 100% full canvas */}
       <div
         ref={scrollRef}
-        className="flex-1 space-y-2.5 overflow-y-auto bg-[var(--bg)] px-4 py-5 [background-image:radial-gradient(circle_at_1px_1px,var(--line)_1px,transparent_0)] [background-size:22px_22px] sm:px-6"
+        className="flex-1 overflow-y-auto px-4 sm:px-10 py-6 space-y-3"
       >
         {messages.length === 0 && (
-          <div className="mt-16 animate-in fade-in zoom-in-95 text-center duration-500">
-            <img src={bobOrb} alt="" className="mx-auto mb-3 h-16 w-16 rounded-full border border-[var(--line)] opacity-90" />
-            <p className="m-0 text-[13px] leading-relaxed text-[var(--m)]">
-              Hey {userName || 'friend'} — how are you doing?
-              <br />
-              We can talk about anything, or pick up something you’ve been working on.
+          <div className="text-center mt-12 max-w-md mx-auto animate-in fade-in zoom-in-95 duration-500 p-6 rounded-2xl bg-[var(--s)] border border-[var(--line)] shadow-sm">
+            <img src={bobOrb} alt="" className="w-16 h-16 rounded-full mx-auto mb-3 opacity-95 border border-[var(--line)] shadow-md" />
+            <h3 className="text-base font-bold text-[var(--t)] mb-1">
+              Welcome to the Relaxing Lounge
+            </h3>
+            <p className="text-[13px] text-[var(--m)] leading-relaxed mb-4">
+              Hey {userName || 'friend'}! This is your quiet haven to talk with Bob casually about anything—ideas, your day, or just unwinding without the heavy project pressure.
             </p>
-            <button
-              type="button"
-              onClick={() => window.dispatchEvent(new CustomEvent('bob-open-roadmap', { detail: { title: '' } }))}
-              className="mx-auto mt-4 inline-flex items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--s)] px-3.5 py-2 text-[12px] font-semibold text-[var(--t)] transition-colors hover:border-[var(--y)]"
-            >
-              <Sparkles className="h-3.5 w-3.5 text-[var(--y)]" />
-              Create roadmap
-            </button>
+            <div className="flex flex-wrap justify-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => handleSend("Hey Bob, just taking a quick coffee break!")}
+                className="px-3 py-1.5 rounded-full bg-[var(--s2)] hover:bg-[var(--y)] hover:text-[#171717] border border-[var(--line)] text-xs font-semibold text-[var(--t)] transition-colors"
+              >
+                ☕ Coffee break
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSend("How's your day going, Bob?")}
+                className="px-3 py-1.5 rounded-full bg-[var(--s2)] hover:bg-[var(--y)] hover:text-[#171717] border border-[var(--line)] text-xs font-semibold text-[var(--t)] transition-colors"
+              >
+                🌿 Just unwinding
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSend("I was thinking about the steps I took today.")}
+                className="px-3 py-1.5 rounded-full bg-[var(--s2)] hover:bg-[var(--y)] hover:text-[#171717] border border-[var(--line)] text-xs font-semibold text-[var(--t)] transition-colors"
+              >
+                ✨ Reflect on my steps
+              </button>
+            </div>
           </div>
         )}
 
@@ -142,22 +252,29 @@ export const ChatPage: React.FC = () => {
           return (
             <React.Fragment key={m.id}>
               {showDay && (
-                <div className="my-3 flex justify-center">
-                  <span className="rounded-full border border-[var(--line)] bg-[var(--s2)] px-3 py-1 text-[10.5px] font-semibold text-[var(--m)]">
+                <div className="flex justify-center my-3">
+                  <span className="px-3 py-1 rounded-full bg-[var(--s2)] border border-[var(--line)] text-[10.5px] font-semibold text-[var(--m)]">
                     {formatDay(m.ts)}
                   </span>
                 </div>
               )}
               <div className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[82%] rounded-2xl px-3.5 py-2.5 shadow-sm animate-in zoom-in-95 fade-in duration-200 sm:max-w-[72%] ${
-                  m.role === 'user'
-                    ? 'rounded-br-md bg-[var(--y)] text-[#171717]'
-                    : 'rounded-bl-md border border-[var(--line)] bg-[var(--s)] text-[var(--t)]'
-                }`}>
-                  <p className="m-0 whitespace-pre-wrap text-[13px] leading-relaxed">{m.text}</p>
-                  <span className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${m.role === 'user' ? 'text-[#171717]/60' : 'text-[var(--m)]'}`}>
+                <div
+                  className={`max-w-[80%] sm:max-w-[70%] px-4 py-3 rounded-2xl shadow-sm animate-in zoom-in-95 fade-in duration-200 ${
+                    m.role === 'user'
+                      ? 'bg-[var(--y)] text-[#171717] rounded-br-md font-medium'
+                      : 'bg-[var(--s)] border border-[var(--line)] text-[var(--t)] rounded-bl-md'
+                  }`}
+                >
+                  <p className="text-[13px] leading-relaxed m-0 whitespace-pre-wrap">{m.text}</p>
+                  <span
+                    className={`flex items-center justify-end gap-1 mt-1 text-[10px] ${
+                      m.role === 'user' ? 'text-[#171717]/60' : 'text-[var(--m)]'
+                    }`}
+                  >
                     {formatTime(m.ts)}
-                    {m.role === 'user' && (isRead ? <CheckCheck className="h-3.5 w-3.5 text-sky-600" /> : <Check className="h-3.5 w-3.5" />)}
+                    {m.role === 'user' &&
+                      (isRead ? <CheckCheck className="w-3.5 h-3.5 text-sky-600" /> : <Check className="w-3.5 h-3.5" />)}
                   </span>
                 </div>
               </div>
@@ -165,36 +282,68 @@ export const ChatPage: React.FC = () => {
           );
         })}
 
-        {showRoadmapSuggestion && (
-          <div className="ml-1 max-w-sm rounded-2xl border border-[var(--line)] bg-[var(--s)] p-3.5 shadow-sm animate-in fade-in duration-200">
-            <p className="mb-2 text-[12px] leading-relaxed text-[var(--t)]">Want to shape this into a clear, practical plan?</p>
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={openRoadmap} className="rounded-full bg-[var(--y)] px-3 py-1.5 text-[11px] font-bold text-[#171717]">Create roadmap</button>
-              <button type="button" onClick={() => setShowRoadmapSuggestion(false)} className="rounded-full px-3 py-1.5 text-[11px] font-medium text-[var(--m)] hover:bg-[var(--s2)]">Not now</button>
-            </div>
-          </div>
-        )}
-
         {isBobTyping && (
-          <div className="flex animate-in fade-in justify-start duration-200">
-            <div className="flex items-center gap-1.5 rounded-2xl rounded-bl-md border border-[var(--line)] bg-[var(--s)] px-4 py-3">
+          <div className="flex justify-start animate-in fade-in duration-200">
+            <div className="px-4 py-3 rounded-2xl rounded-bl-md bg-[var(--s)] border border-[var(--line)] flex items-center gap-1.5">
               {[0, 150, 300].map((d) => (
-                <span key={d} className="h-2 w-2 animate-bounce rounded-full bg-[var(--m)]" style={{ animationDelay: `${d}ms` }} />
+                <span
+                  key={d}
+                  className="w-2 h-2 rounded-full bg-amber-400 animate-bounce"
+                  style={{ animationDelay: `${d}ms` }}
+                />
               ))}
             </div>
           </div>
         )}
       </div>
 
-      <form onSubmit={handleSend} className="flex items-center gap-2 border-t border-[var(--line)] bg-[var(--s)]/80 px-4 py-3 backdrop-blur-md sm:px-6">
+      {/* Relaxing quick conversation chips */}
+      <div className="px-4 sm:px-6 py-2 bg-[var(--s)]/50 border-t border-[var(--line)] flex items-center gap-2 overflow-x-auto text-xs">
+        <span className="text-[11px] text-[var(--m)] font-semibold shrink-0">Quick chats:</span>
+        <button
+          type="button"
+          onClick={() => handleSend("Taking a quick breather to clear my head.")}
+          className="px-2.5 py-1 rounded-full bg-[var(--s2)] hover:bg-[var(--y)] hover:text-[#171717] text-[11px] font-medium text-[var(--m)] hover:text-[var(--t)] transition-colors shrink-0"
+        >
+          ☕ Taking a breather
+        </button>
+        <button
+          type="button"
+          onClick={() => handleSend("Hey Bob, how did that step I worked on sound to you?")}
+          className="px-2.5 py-1 rounded-full bg-[var(--s2)] hover:bg-[var(--y)] hover:text-[#171717] text-[11px] font-medium text-[var(--m)] hover:text-[var(--t)] transition-colors shrink-0"
+        >
+          ✨ Ask about my step
+        </button>
+        <button
+          type="button"
+          onClick={() => handleSend("What do you think is a good way to unwind right now?")}
+          className="px-2.5 py-1 rounded-full bg-[var(--s2)] hover:bg-[var(--y)] hover:text-[#171717] text-[11px] font-medium text-[var(--m)] hover:text-[var(--t)] transition-colors shrink-0"
+        >
+          🌿 Ways to unwind
+        </button>
+      </div>
+
+      {/* Composer */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleSend();
+        }}
+        className="px-4 sm:px-6 py-3 border-t border-[var(--line)] bg-[var(--s)]/80 backdrop-blur-md flex items-center gap-2"
+      >
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Message Bob…"
-          className="h-11 flex-1 rounded-full border border-[var(--line)] bg-[var(--s2)] px-4 text-[13px] text-[var(--t)] placeholder:text-[var(--m)] outline-none transition-all focus:border-[var(--y)] focus:ring-2 focus:ring-[var(--y)]/25"
+          placeholder="Chat casually with Bob…"
+          className="flex-1 h-11 px-4 rounded-full bg-[var(--s2)] border border-[var(--line)] text-[13px] text-[var(--t)] placeholder:text-[var(--m)] outline-none focus:border-[var(--y)] focus:ring-2 focus:ring-[var(--y)]/25 transition-all"
         />
-        <button type="submit" disabled={!draft.trim() || isBobTyping} title="Send message" className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[var(--y)] text-[#171717] transition-all hover:bg-[#ebd200] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40">
-          <Send className="h-4 w-4" />
+        <button
+          type="submit"
+          disabled={!draft.trim() || isBobTyping}
+          title="Send message"
+          className="w-11 h-11 rounded-full bg-[var(--y)] hover:bg-[#ebd200] text-[#171717] grid place-items-center transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0"
+        >
+          <Send className="w-4 h-4" />
         </button>
       </form>
     </div>

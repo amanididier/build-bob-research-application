@@ -1,12 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Sparkles, 
   MessageSquare, 
-  Search, 
   PanelRight, 
   Clock, 
   Volume2, 
-  VolumeX, 
   X, 
   Send, 
   ArrowRight, 
@@ -16,33 +14,20 @@ import {
   Sun, 
   BookOpen, 
   Utensils, 
-  Music, 
   Headphones,
-  Sliders,
-  RotateCcw,
-  Mic,
-  PhoneCall
+  RotateCcw
 } from 'lucide-react';
-import { bobRoutines, BobRoutineId, RoutineDetail, ROUTINE_DEFINITIONS } from '../../lib/companion/bobRoutines';
-import { BobAudioHelper } from '../../lib/companion/bobAudio';
+import { bobRoutines, RoutineDetail } from '../../lib/companion/bobRoutines';
 import { useApp } from '../../context/AppContext';
-import { useVoiceStore } from '../../store/useVoiceStore';
-import { resolveGeminiApiKey } from '../../lib/ai/keyManager';
-import { voiceController } from '../../lib/voice/voiceController';
 import { UserInterestsModal } from './UserInterestsModal';
 
 export const BobOverlayBubble: React.FC = () => {
   const { 
     currentPage, 
     navigateTo, 
-    activeResearchId, 
-    projects, 
     userName,
-    openChromeBridge,
-    triggerThinking
+    openChromeBridge
   } = useApp();
-
-  const activeProject = projects.find((p) => p.id === activeResearchId) || projects[0];
 
   // Routine state
   const [currentRoutine, setCurrentRoutine] = useState<RoutineDetail>(() => bobRoutines.getCurrentRoutine());
@@ -50,27 +35,17 @@ export const BobOverlayBubble: React.FC = () => {
   const [showTimeScrubber, setShowTimeScrubber] = useState<boolean>(false);
   const [isInterestsModalOpen, setIsInterestsModalOpen] = useState<boolean>(false);
 
-  // Proactive speech ring state
-  const [isProactiveSpeaking, setIsProactiveSpeaking] = useState<boolean>(false);
-  const [proactiveCountdown, setProactiveCountdown] = useState<number>(45);
-  const [proactiveMessage, setProactiveMessage] = useState<string>('');
-  const proactiveTimerRef = useRef<any>(null);
-
-  // Bubble modes: 'idle' | 'chat' | 'research'
-  const [bubbleMode, setBubbleMode] = useState<'idle' | 'chat' | 'research'>('idle');
-  const [isHovered, setIsHovered] = useState<boolean>(false);
+  // Bubble open/close state
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
+  const [isHovered, setIsHovered] = useState<boolean>(false);
+  const [hasUnreadMessage, setHasUnreadMessage] = useState<boolean>(false);
 
-  // Pacing tracker: 3 messages -> reminder; 10 messages -> reminder
-  const [chatTurnCount, setChatTurnCount] = useState<number>(0);
-  const [showFocusReminder, setShowFocusReminder] = useState<boolean>(false);
-
-  // Mini chat messages in bubble
+  // Mini chat messages in bubble (chat only)
   const [chatInput, setChatInput] = useState<string>('');
-  const [bubbleMessages, setBubbleMessages] = useState<Array<{ role: 'assistant' | 'user'; text: string }>>([
+  const [bubbleMessages, setBubbleMessages] = useState<Array<{ role: 'assistant' | 'user'; text: string; actionType?: 'research_redirect' }>>([
     {
       role: 'assistant',
-      text: `Hey ${userName || 'buddy'}! I'm here beside you. You can speak or chat with me about anything.`,
+      text: `Hey ${userName || 'buddy'}! I'm here beside you while you browse. We can chat casually about anything!`,
     },
   ]);
 
@@ -83,63 +58,33 @@ export const BobOverlayBubble: React.FC = () => {
     return unsub;
   }, []);
 
-  // Proactive trigger loop (Simulate 5m social drift & 15m focus lock-in)
+  // Proactive check-in: sends a friendly casual chat message with yellow circle indicator
   useEffect(() => {
-    // Proactive chime test trigger after 12s on initial mount
     const initialTimer = setTimeout(() => {
-      triggerProactiveProposal(
-        `Hey ${userName || 'buddy'}! Seems like you've locked in today. What's that worth your full attention?`
-      );
-    }, 12000);
-
-    return () => clearTimeout(initialTimer);
-  }, []);
-
-  // Proactive countdown handler
-  useEffect(() => {
-    if (isProactiveSpeaking) {
-      proactiveTimerRef.current = setInterval(() => {
-        setProactiveCountdown((prev) => {
-          if (prev <= 1) {
-            // Revert arc to white after 45 seconds if user didn't click
-            clearInterval(proactiveTimerRef.current);
-            setIsProactiveSpeaking(false);
-            return 45;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else {
-      if (proactiveTimerRef.current) clearInterval(proactiveTimerRef.current);
-      setProactiveCountdown(45);
-    }
-
-    return () => {
-      if (proactiveTimerRef.current) clearInterval(proactiveTimerRef.current);
-    };
-  }, [isProactiveSpeaking]);
-
-  const triggerProactiveProposal = (text: string) => {
-    setProactiveMessage(text);
-    setIsProactiveSpeaking(true);
-    setProactiveCountdown(45);
-    BobAudioHelper.playProactiveChime();
-  };
-
-  const handleBubbleClick = () => {
-    if (isProactiveSpeaking) {
-      // User clicked on proactive green ring!
-      setIsProactiveSpeaking(false);
-      setIsExpanded(true);
-      setBubbleMode('chat');
+      const pingText = `Hey ${userName || 'buddy'}! Found anything interesting while browsing? Let me know if you want to chat.`;
       setBubbleMessages((prev) => [
         ...prev,
-        { role: 'assistant', text: proactiveMessage || currentRoutine.thoughtSnippet },
+        { role: 'assistant', text: pingText }
       ]);
-      BobAudioHelper.speakText(proactiveMessage || currentRoutine.thoughtSnippet);
-    } else {
-      setIsExpanded((prev) => !prev);
-    }
+      setHasUnreadMessage(true);
+    }, 14000);
+
+    return () => clearTimeout(initialTimer);
+  }, [userName]);
+
+  // If user is not inside chrome view, Bob overlay does not render (new messages show in Desktop Chat page)
+  if (currentPage !== 'chrome') {
+    return null;
+  }
+
+  const handleBubbleClick = () => {
+    setIsExpanded((prev) => {
+      const next = !prev;
+      if (next) {
+        setHasUnreadMessage(false);
+      }
+      return next;
+    });
   };
 
   const handleSendBubbleChat = (e?: React.FormEvent) => {
@@ -148,51 +93,48 @@ export const BobOverlayBubble: React.FC = () => {
 
     const query = chatInput.trim();
     setChatInput('');
-    const newCount = chatTurnCount + 1;
-    setChatTurnCount(newCount);
-
     setBubbleMessages((prev) => [...prev, { role: 'user', text: query }]);
 
-    // Check Pacing rules:
-    // 3 messages: prompt redirect back to focus/research
-    // 10 messages: reminder again
-    if (newCount === 3 || newCount === 10) {
-      setTimeout(() => {
-        setShowFocusReminder(true);
+    setTimeout(() => {
+      const lower = query.toLowerCase();
+      // If user asks about research/projects/roadmap/tasks, suggest Chrome side panel or Desktop
+      if (
+        lower.includes('research') ||
+        lower.includes('project') ||
+        lower.includes('task') ||
+        lower.includes('roadmap') ||
+        lower.includes('source') ||
+        lower.includes('study')
+      ) {
         setBubbleMessages((prev) => [
           ...prev,
           {
             role: 'assistant',
-            text:
-              newCount === 3
-                ? `We've shared 3 quick chats! Want to jump back into "${activeProject.title}" or keep chatting freely?`
-                : `We've exchanged 10 chats now. Ready to tackle our next research task or stay in chat mode?`,
+            text: `For research, roadmaps, and project tasks, I recommend using the Chrome Side Panel or opening the Desktop view where we have full deep-dive tools!`,
+            actionType: 'research_redirect'
           },
         ]);
-      }, 600);
-      return;
-    }
+        if (!isExpanded) setHasUnreadMessage(true);
+        return;
+      }
 
-    // Assistant response
-    setTimeout(() => {
+      // Casual conversational replies
       let reply = '';
-      if (bubbleMode === 'research') {
-        reply = `Looking at "${activeProject.title}": We have ${activeProject.openTasks || 2} open tasks connected to ${activeProject.sourceCount || 6} sources. Would you like me to outline step 1?`;
+      if (lower.includes('sport') || lower.includes('team') || lower.includes('football') || lower.includes('arsenal')) {
+        reply = `Arsenal looked sharp in their recent European fixture! High press structure was crisp. Taking a quick break to check match scores?`;
+      } else if (lower.includes('news') || lower.includes('tech') || lower.includes('ai')) {
+        reply = `Tech moves fast today! There's some exciting work in lightweight on-device models. How's your browsing going so far?`;
+      } else if (lower.includes('how are you') || lower.includes('what are you doing')) {
+        reply = `I'm just chilling right here beside you while you browse! Ready for a quick chat whenever you need a breather.`;
       } else {
-        // Casual buddy chat
-        const lower = query.toLowerCase();
-        if (lower.includes('sport') || lower.includes('team') || lower.includes('football') || lower.includes('arsenal')) {
-          reply = `Arsenal looked sharp in their recent European fixture! High press structure was crisp. Do you want today's tactical stats?`;
-        } else if (lower.includes('news') || lower.includes('tech') || lower.includes('ai')) {
-          reply = `In AI research today, sparse KV-cache compression and low-latency audio pipelines are making waves. Exactly what we're tuning!`;
-        } else {
-          reply = `That sounds great. I'm right here with you while you work. Let me know whenever you need a quick fact-check.`;
-        }
+        reply = `I hear you! It's always nice to pause and share a quick thought. What's on your mind?`;
       }
 
       setBubbleMessages((prev) => [...prev, { role: 'assistant', text: reply }]);
-      BobAudioHelper.speakText(reply);
-    }, 500);
+      if (!isExpanded) {
+        setHasUnreadMessage(true);
+      }
+    }, 450);
   };
 
   // Convert minutes to HH:MM format
@@ -204,52 +146,31 @@ export const BobOverlayBubble: React.FC = () => {
     return `${hh}:${mm}`;
   };
 
-  const { startVoiceMode, voiceState } = useVoiceStore();
-  const hasGeminiKey = Boolean(resolveGeminiApiKey());
-  const activeAgent = voiceController.getActiveCallAgent();
-
   return (
     <>
-      {/* Floating Container in bottom-right */}
+      {/* Floating Container in bottom-right (Chrome overlay only) */}
       <div 
         className="fixed bottom-6 right-6 z-40 flex flex-col items-end select-none pointer-events-auto"
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
-        {/* 1. Hover Quick-Pill (Talk | Chat | Research | Side Panel) */}
-        {(isHovered || isExpanded) && !isProactiveSpeaking && (
+        {/* 1. Hover Quick-Pill: Chat only & Chrome Side Panel */}
+        {(isHovered || isExpanded) && (
           <div className="mb-3 px-1.5 py-1 rounded-full bg-[var(--s)]/90 backdrop-blur-md border border-[var(--line)] shadow-xl flex items-center gap-1 animate-in fade-in slide-in-from-bottom-2 duration-150">
             <button
-
               type="button"
               onClick={() => {
-                setBubbleMode('chat');
                 setIsExpanded(true);
+                setHasUnreadMessage(false);
               }}
               className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 ${
-                bubbleMode === 'chat' && isExpanded
+                isExpanded
                   ? 'bg-[var(--y)] text-[#171717] shadow-sm'
                   : 'text-[var(--t)] hover:bg-[var(--s2)]'
               }`}
             >
               <MessageSquare className="w-3.5 h-3.5" />
               <span>Chat</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setBubbleMode('research');
-                setIsExpanded(true);
-              }}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 ${
-                bubbleMode === 'research' && isExpanded
-                  ? 'bg-[var(--y)] text-[#171717] shadow-sm'
-                  : 'text-[var(--t)] hover:bg-[var(--s2)]'
-              }`}
-            >
-              <Search className="w-3.5 h-3.5" />
-              <span>Research</span>
             </button>
 
             <button
@@ -282,7 +203,7 @@ export const BobOverlayBubble: React.FC = () => {
                     <span className="text-[10px] text-[var(--m)] font-normal">· {currentRoutine.label}</span>
                   </div>
                   <div className="text-[10px] text-[var(--m)] truncate max-w-[190px]">
-                    {bubbleMode === 'research' ? `Project: ${activeProject.title}` : 'Friendly companion mode'}
+                    Casual chat & browsing buddy
                   </div>
                 </div>
               </div>
@@ -314,7 +235,7 @@ export const BobOverlayBubble: React.FC = () => {
               </div>
             </div>
 
-            {/* Time Scrubber (Dev tool / testing feature as requested) */}
+            {/* Time Scrubber (Dev tool / testing feature) */}
             {showTimeScrubber && (
               <div className="p-2.5 my-2 bg-[var(--s2)] border border-[var(--line)] rounded-xl text-xs space-y-1.5 animate-in fade-in">
                 <div className="flex items-center justify-between font-bold text-[11px] text-[var(--t)]">
@@ -351,45 +272,12 @@ export const BobOverlayBubble: React.FC = () => {
               </div>
             )}
 
-            {/* Pacing Focus Reminder Card (3-message and 10-message rule) */}
-            {showFocusReminder && (
-              <div className="p-3 my-2 rounded-xl bg-[var(--y)]/10 border border-[var(--y)]/40 text-xs text-[var(--t)] space-y-2 animate-in fade-in">
-                <div className="font-bold flex items-center gap-1.5 text-[var(--y)]">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Focus Check-In</span>
-                </div>
-                <p className="text-[11px] text-[var(--m)] leading-relaxed">
-                  Would you like to return to your research roadmap, or continue chatting?
-                </p>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowFocusReminder(false);
-                      setBubbleMode('research');
-                      navigateTo('research', 'tasks');
-                    }}
-                    className="px-3 py-1 rounded-lg bg-[var(--y)] text-[#171717] font-bold text-[11px] shadow-sm hover:bg-[#e0ac15]"
-                  >
-                    Back to Research
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowFocusReminder(false)}
-                    className="px-3 py-1 rounded-lg bg-[var(--s)] border border-[var(--line)] text-[var(--t)] text-[11px] font-semibold"
-                  >
-                    Keep Chatting
-                  </button>
-                </div>
-              </div>
-            )}
-
             {/* Message Feed */}
             <div className="flex-1 overflow-y-auto space-y-2.5 py-3 pr-1 text-xs">
               {bubbleMessages.map((msg, i) => (
                 <div
                   key={i}
-                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                  className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
                 >
                   <div
                     className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl leading-relaxed ${
@@ -398,10 +286,36 @@ export const BobOverlayBubble: React.FC = () => {
                         : 'bg-[var(--s2)] text-[var(--t)] border border-[var(--line)]'
                     }`}
                   >
-                    <p className="m-0 line-clamp-2 overflow-hidden text-ellipsis">
+                    <p className="m-0 text-xs">
                       {msg.text}
                     </p>
                   </div>
+                  {/* Research redirect suggestion buttons if user asked about research */}
+                  {msg.actionType === 'research_redirect' && (
+                    <div className="flex items-center gap-2 mt-2 ml-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigateTo('chrome');
+                          openChromeBridge();
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-[var(--y)] text-[#171717] font-bold text-[11px] shadow-sm flex items-center gap-1 hover:bg-[#e0ac15]"
+                      >
+                        <PanelRight className="w-3 h-3" />
+                        <span>Chrome Side Panel</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigateTo('research');
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-[var(--s)] border border-[var(--line)] text-[var(--t)] font-semibold text-[11px] flex items-center gap-1 hover:bg-[var(--s2)]"
+                      >
+                        <ArrowRight className="w-3 h-3" />
+                        <span>Desktop Workspace</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -412,7 +326,7 @@ export const BobOverlayBubble: React.FC = () => {
                 type="text"
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
-                placeholder={bubbleMode === 'research' ? `Ask about ${activeProject.title}...` : "Speak or chat with Bob..."}
+                placeholder="Chat casually with Bob..."
                 className="flex-1 px-3.5 py-2 rounded-xl bg-[var(--s2)] border border-[var(--line)] text-xs text-[var(--t)] placeholder:text-[var(--m)] focus:outline-none focus:border-[var(--y)]"
               />
               <button
@@ -425,16 +339,20 @@ export const BobOverlayBubble: React.FC = () => {
           </div>
         )}
 
-        {/* 3. The Central Overlay Bubble Circle & Ring */}
+        {/* 3. The Central Overlay Bubble Circle */}
         <div className="relative group cursor-pointer" onClick={handleBubbleClick}>
-          {/* Proactive Emerald Pulsing Arc (45s Timer) OR Idle White Arc */}
-          <div
-            className={`absolute -inset-1.5 rounded-full transition-all duration-500 pointer-events-none ${
-              isProactiveSpeaking
-                ? 'ring-4 ring-emerald-500 ring-offset-2 ring-offset-black/50 animate-pulse'
-                : 'ring-2 ring-white/80 ring-offset-1 ring-offset-black/30'
-            }`}
-          />
+          {/* Subtle glow ring */}
+          <div className="absolute -inset-1 rounded-full ring-2 ring-white/60 ring-offset-1 ring-offset-black/30 pointer-events-none transition-all group-hover:ring-white/90" />
+
+          {/* New message small yellow circle indicator */}
+          {hasUnreadMessage && !isExpanded && (
+            <span 
+              title="New message from Bob"
+              className="absolute -top-1 -right-1 z-30 w-4 h-4 rounded-full bg-amber-400 border-2 border-[#121212] shadow-lg flex items-center justify-center animate-bounce"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-950" />
+            </span>
+          )}
 
           {/* Bob Avatar Circle */}
           <div
@@ -484,28 +402,9 @@ export const BobOverlayBubble: React.FC = () => {
             {/* Micro status badge on the bottom-right */}
             <span
               className="absolute bottom-1 right-1 w-3 h-3 rounded-full border-2 border-black"
-              style={{ backgroundColor: isProactiveSpeaking ? '#22c55e' : currentRoutine.bubbleColor }}
+              style={{ backgroundColor: currentRoutine.bubbleColor }}
             />
           </div>
-
-          {/* Proactive Speech Floating Banner (when arc is green) */}
-          {isProactiveSpeaking && !isExpanded && (
-            <div className="absolute right-20 top-1/2 -translate-y-1/2 w-64 bg-[var(--s)]/95 backdrop-blur-md border-2 border-emerald-500 rounded-2xl p-3 shadow-2xl text-xs space-y-1.5 animate-in fade-in slide-in-from-right-4 duration-200">
-              <div className="flex items-center justify-between text-[10px] font-extrabold uppercase text-emerald-500">
-                <span className="flex items-center gap-1">
-                  <Sparkles className="w-3 h-3" />
-                  <span>Bob wants to speak</span>
-                </span>
-                <span className="font-mono">{proactiveCountdown}s</span>
-              </div>
-              <p className="text-xs text-[var(--t)] font-semibold leading-relaxed line-clamp-2">
-                {proactiveMessage}
-              </p>
-              <div className="text-[10px] text-[var(--m)] pt-0.5">
-                Click bubble to listen & reply · Saved to memory in {proactiveCountdown}s
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
