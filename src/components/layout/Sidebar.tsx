@@ -86,9 +86,9 @@ export const Sidebar: React.FC = () => {
 
           {/* Dashboard */}
           <button
-            onClick={() => navigateTo('home')}
+            onClick={() => navigateTo('dashboard')}
             className={`h-10 w-full text-left px-3 rounded-lg text-[13.5px] flex items-center gap-3 transition-colors duration-150 cursor-pointer ${
-              currentPage === 'home'
+              currentPage === 'dashboard'
                 ? 'bg-[var(--s2)] text-[var(--t)] font-semibold'
                 : 'text-[var(--t)] hover:bg-[var(--s2)]/70 font-medium'
             }`}
