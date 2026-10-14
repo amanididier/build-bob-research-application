@@ -161,7 +161,7 @@ export const DashboardPage: React.FC = () => {
           <div className="flex items-center gap-2">
             <button
               onClick={() => {
-                window.dispatchEvent(new CustomEvent('bob-open-roadmap', { detail: { title: 'Project Roadmap' } }));
+                window.dispatchEvent(new CustomEvent('bob-open-roadmap', { detail: { title: focusProject ? `${focusProject.title}: ${focusProject.summary}` : '' } }));
               }}
               className="px-3.5 py-1.5 rounded-full bg-[var(--y)] hover:bg-[#e0ac15] text-[#171717] text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm active:scale-95 cursor-pointer"
             >
