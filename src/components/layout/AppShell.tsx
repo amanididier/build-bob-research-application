@@ -18,6 +18,7 @@ import { BobOverlayBubble } from '../companion/BobOverlayBubble';
 import { DailySplash } from '../companion/DailySplash';
 import { RoadmapSheet } from '../roadmap/RoadmapSheet';
 import { HomePage } from '../../pages/Home/HomePage';
+import { DashboardPage } from '../../pages/Home/DashboardPage';
 import { ResearchPage } from '../../pages/Research/ResearchPage';
 import { ChatPage } from '../../pages/Chat/ChatPage';
 import { NotesPage } from '../../pages/Notes/NotesPage';
@@ -34,6 +35,7 @@ export const AppShell: React.FC = () => {
   const renderCurrentPage = () => {
     switch (currentPage) {
       case 'home': return <HomePage />;
+      case 'dashboard': return <DashboardPage />;
       case 'research': return <ResearchPage />;
       case 'chat': return <ChatPage />;
       case 'notes': return <NotesPage />;
