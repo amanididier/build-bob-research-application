@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Sparkles, 
-  MessageSquare, 
   PanelRight, 
   Clock, 
   Volume2, 
@@ -38,6 +37,7 @@ export const BobOverlayBubble: React.FC = () => {
   // Bubble open/close state
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [hasUnreadMessage, setHasUnreadMessage] = useState<boolean>(false);
+  const [videoFailed, setVideoFailed] = useState(false);
 
   // Mini chat messages in bubble (chat only)
   const [chatInput, setChatInput] = useState<string>('');
@@ -47,6 +47,18 @@ export const BobOverlayBubble: React.FC = () => {
       text: `Hey ${userName || 'buddy'}! I'm here beside you while you browse. We can chat casually about anything!`,
     },
   ]);
+
+  const routineVideoPath = currentRoutine.id === 'speaking'
+    ? '/assets/companion-loops/bob-speaking.webm'
+    : currentRoutine.id === 'listening'
+      ? '/assets/companion-loops/bob-listening.webm'
+      : currentRoutine.id === 'thinking'
+        ? '/assets/companion-loops/bob-thinking.webm'
+        : '/assets/companion-loops/bob-idle.webm';
+
+  useEffect(() => {
+    setVideoFailed(false);
+  }, [routineVideoPath]);
 
   // Subscribe to routine manager
   useEffect(() => {
@@ -323,8 +335,21 @@ export const BobOverlayBubble: React.FC = () => {
               background: `radial-gradient(circle at 35% 35%, #2a2a2a, #121212)`,
             }}
           >
-            {/* Visual Routine Animation Graphics */}
-            <div className="relative flex flex-col items-center justify-center text-center">
+            {/* Use registered Bob loops when supplied; fall back to accessible routine icons. */}
+            {!videoFailed && (
+              <video
+                key={routineVideoPath}
+                src={routineVideoPath}
+                autoPlay
+                loop
+                muted
+                playsInline
+                aria-label="Bob companion animation"
+                onError={() => setVideoFailed(true)}
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+            )}
+            {videoFailed && <div className="relative flex flex-col items-center justify-center text-center">
               {currentRoutine.id === 'waking_up' && (
                 <Sun className="w-6 h-6 text-amber-400 animate-spin duration-3000" />
               )}
@@ -359,7 +384,7 @@ export const BobOverlayBubble: React.FC = () => {
               {currentRoutine.id === 'speaking' && (
                 <Volume2 className="w-6 h-6 text-green-400 animate-pulse" />
               )}
-            </div>
+            </div>}
 
             {/* Micro status badge on the bottom-right */}
             <span
