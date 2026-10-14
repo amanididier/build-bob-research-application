@@ -150,7 +150,7 @@ interface AppContextType {
   tasks: ResearchTaskItem[];
   notes: ResearchNoteItem[];
   toggleTask: (id: string) => void;
-  addTask: (title: string, dueDate?: string, projectId?: string) => void;
+  addTask: (title: string, dueDate?: string, projectId?: string, options?: { sourceConnection?: string; isAiGenerated?: boolean }) => void;
   extractAiTasks: () => Promise<number>;
   addNote: (noteData: Omit<ResearchNoteItem, 'id' | 'createdAt'>) => void;
   updateNote: (id: string, updates: Partial<Pick<ResearchNoteItem, 'title' | 'selectedText' | 'sourceTitle' | 'sourceUrl' | 'color'>>) => void;
@@ -876,16 +876,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  const addTask = (title: string, dueDate: string = 'Today', projectId: string = activeResearchId) => {
+  const addTask = (title: string, dueDate: string = 'Today', projectId: string = activeResearchId, options: { sourceConnection?: string; isAiGenerated?: boolean } = {}) => {
     if (!title.trim()) return;
     const newTask: ResearchTaskItem = {
       id: `t-${Date.now()}`,
       title: title.trim(),
       dueDate,
-      sourceConnection: 'Created by user',
+      sourceConnection: options.sourceConnection || 'Created by user',
       completed: false,
       projectId,
-      isAiGenerated: false,
+      isAiGenerated: Boolean(options.isAiGenerated),
     };
     setTasks((prev) => [newTask, ...prev]);
   };
