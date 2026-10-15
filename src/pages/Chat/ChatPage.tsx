@@ -96,20 +96,6 @@ export const ChatPage: React.FC = () => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, isBobTyping, isRoadmapActive]);
 
-  // Listen to roadmap completion events to post a friendly confirmation in chat
-  useEffect(() => {
-    const onFinished = (e: any) => {
-      const goal = e?.detail?.goal || activeProject?.title || 'Project';
-      const count = e?.detail?.count || 5;
-      pushBobMessage(
-        `I've locked in your roadmap for "${goal}" with ${count} actionable steps! They're all set up in your Tasks page so you can tackle them whenever you're ready.`
-      );
-    };
-
-    window.addEventListener('bob:roadmap-finished', onFinished);
-    return () => window.removeEventListener('bob:roadmap-finished', onFinished);
-  }, [activeProject]);
-
   const pushBobMessage = (text: string) => {
     setMessages((prev) => [
       ...prev,
@@ -236,8 +222,9 @@ Do not make the conversation about yourself. Do not bring up projects, tasks, re
         onClose={() => setIsRoadmapActive(false)}
         onFinish={(steps) => {
           setIsRoadmapActive(false);
+          const phasePreview = steps.slice(0, 3).map((step, index) => (index + 1) + '. ' + step.title).join('  •  ');
           pushBobMessage(
-            `I've implemented your roadmap for "${roadmapGoal}" with ${steps.length} sequential steps! They're all populated into your Tasks page.`
+            `Your roadmap for "${roadmapGoal}" is saved to the project Tasks page with ${steps.length} milestones. Here are the first steps: ${phasePreview}. Which one would you like to discuss or start with?`
           );
         }}
       />
