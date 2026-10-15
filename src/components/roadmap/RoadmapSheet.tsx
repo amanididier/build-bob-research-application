@@ -236,6 +236,13 @@ export const RoadmapSheet: React.FC<RoadmapSheetProps> = ({
     };
     const situationText = situationMap[selectedSituation] || 'Not specified; infer the right starting point from the goal and answers';
     const dueDateLabel = selectedCadence === 'sprint' ? '3 to 5 Days' : selectedCadence === 'month' ? 'Within 1 Month' : 'Flexible; infer realistic timing from the scope';
+    const profileContext = (() => {
+      try {
+        const profile = JSON.parse(localStorage.getItem('bob_profile_preferences_v1') || '{}');
+        const interests = JSON.parse(localStorage.getItem('bob_companion_memory_v1') || '[]');
+        return JSON.stringify({ profile, explicitlySharedPreferences: Array.isArray(interests) ? interests.slice(-12) : [] });
+      } catch { return 'No saved profile context'; }
+    })();
 
     if (key) {
       try {
@@ -245,6 +252,7 @@ User situation: "${situationText}".
 Selected tools: "${toolLabels}".
 Target cadence: "${dueDateLabel}".
 Weekly commitment: "${selectedTimeOption}".
+Saved user profile and explicitly shared interests (use only when relevant): ${profileContext}.
 Additional answers collected from the user's previous roadmap pages: ${JSON.stringify(extraAnswers)}.
 Use these answers to customize milestone names, order, scope, and tools. Do not add unrelated generic software tasks unless the goal actually requires them.
 
@@ -337,7 +345,14 @@ No markdown codeblocks or prose, only valid JSON array.`;
     }
     try {
       const ai = new GoogleGenAI({ apiKey: key });
-      const prompt = `You are Bob's adaptive project discovery assistant. The user's goal is: "${goalQuery || 'not fully defined yet'}". Previous answers: ${JSON.stringify(answers)}. Generate the next of exactly THREE adaptive discovery questions (question ${questionNumber} of 3). Ask only about an important unknown that the goal and previous answers have not resolved. Make every option specific and useful for this particular goal, not generic boilerplate. The user must be able to answer by selecting a card; do not require typing. Choose the most useful UI layout for this question from cards, pills, or timeline; vary the layout when it improves clarity. Return strict JSON only: {"question":"...","helperText":"...","layout":"cards|pills|timeline","options":[{"label":"short choice","description":"brief explanation","value":"meaningful value"}]}. Include 3–5 distinct options.`;
+      const profileContext = (() => {
+        try {
+          const profile = JSON.parse(localStorage.getItem('bob_profile_preferences_v1') || '{}');
+          const interests = JSON.parse(localStorage.getItem('bob_companion_memory_v1') || '[]');
+          return JSON.stringify({ profile, explicitlySharedPreferences: Array.isArray(interests) ? interests.slice(-12) : [] });
+        } catch { return 'No saved profile context'; }
+      })();
+      const prompt = `You are Bob's adaptive project discovery assistant. The user's goal is: "${goalQuery || 'not fully defined yet'}". Saved user profile and explicitly shared interests: ${profileContext}. Previous answers: ${JSON.stringify(answers)}. Generate the next of exactly THREE adaptive discovery questions (question ${questionNumber} of 3). Ask only about an important unknown that the goal and previous answers have not resolved. Make every option specific and useful for this particular goal, not generic boilerplate. The user must be able to answer by selecting a card; do not require typing. Choose the most useful UI layout for this question from cards, pills, or timeline; vary the layout when it improves clarity. Return strict JSON only: {"question":"...","helperText":"...","layout":"cards|pills|timeline","options":[{"label":"short choice","description":"brief explanation","value":"meaningful value"}]}. Include 3–5 distinct options.`;
       const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
       const cleaned = (response.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
       const parsed = JSON.parse(cleaned);
