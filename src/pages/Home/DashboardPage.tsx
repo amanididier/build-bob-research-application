@@ -101,7 +101,7 @@ export const DashboardPage: React.FC = () => {
   return (
     <div className="w-full pb-36 animate-in fade-in duration-300">
       {/* 1. Full-Width 100% Sunflower Garden Hero Banner (Spans whole screen, not in a card) */}
-      <div className="relative w-full min-h-[360px] md:min-h-[420px] flex items-center justify-center overflow-hidden text-white group">
+      <div className="relative w-[calc(100%-2.5rem)] md:w-[calc(100%-4rem)] max-w-[1140px] mx-auto mt-5 min-h-[180px] md:min-h-[210px] rounded-[28px] flex items-center justify-center overflow-hidden text-white group shadow-md">
         {/* Background Image spanning 100% */}
         <div 
           className="absolute inset-0 bg-cover bg-center transition-all duration-700 transform scale-100 group-hover:scale-[1.01]"
@@ -117,11 +117,11 @@ export const DashboardPage: React.FC = () => {
         />
 
         {/* Center of the Hero: ONLY Greetings in the center */}
-        <div className="relative z-10 max-w-3xl mx-auto px-6 py-16 sm:py-24 text-center animate-in fade-in zoom-in-95 duration-500">
-          <h1 className="text-3xl sm:text-5xl md:text-6xl font-black tracking-tight drop-shadow-md text-white mb-4">
+        <div className="relative z-10 max-w-3xl mx-auto px-6 py-8 sm:py-10 text-center animate-in fade-in zoom-in-95 duration-500">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-black tracking-tight drop-shadow-md text-white mb-2">
             {isMorning ? `Good morning, ${userName}.` : `Good evening, ${userName}.`}
           </h1>
-          <p className="text-base sm:text-lg md:text-xl text-white/90 max-w-2xl mx-auto font-normal leading-relaxed drop-shadow-sm">
+          <p className="text-sm sm:text-base text-white/90 max-w-2xl mx-auto font-normal leading-relaxed drop-shadow-sm">
             {isMorning
               ? 'The garden is bright and clear. What would you like to investigate, synthesize, or finish today?'
               : 'The stars are out over the sunflowers. Let’s distill today’s reading into clear, actionable outcomes.'}
