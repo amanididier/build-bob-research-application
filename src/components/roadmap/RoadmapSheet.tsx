@@ -339,6 +339,27 @@ No markdown codeblocks or prose, only valid JSON array.`;
           { label: 'It depends on the task', description: 'Keep timing flexible and adjust as I learn', value: 'flexible cadence; adapt timing to each milestone' },
         ],
       },
+      {
+        question: 'What would make this plan easiest to follow?',
+        helperText: 'Choose the kind of support that would help you keep moving.',
+        layout: 'pills',
+        options: [
+          { label: 'Small steps', description: 'Short actions with clear finishes', value: 'small manageable steps' },
+          { label: 'Examples and templates', description: 'Start from something concrete', value: 'examples and templates' },
+          { label: 'Checkpoints', description: 'Know when to review progress', value: 'regular checkpoints' },
+          { label: 'Room to adapt', description: 'Keep the plan flexible as I learn', value: 'flexible plan that adapts' },
+        ],
+      },
+      {
+        question: 'Is there anything important the plan must work around?',
+        helperText: 'This last check is only useful if a constraint has not been covered yet.',
+        options: [
+          { label: 'School or work commitments', description: 'Fit around my existing schedule', value: 'school or work commitments' },
+          { label: 'Limited tools or budget', description: 'Use accessible tools and resources', value: 'limited tools or budget' },
+          { label: 'I am still exploring', description: 'Leave room to change direction', value: 'still exploring the best direction' },
+          { label: 'Nothing else for now', description: 'The plan has enough context to start', value: 'no other constraints' },
+        ],
+      },
     ];
     if (!key) {
       setAdaptiveQuestion(fallbackQuestions[Math.min(questionNumber - 1, fallbackQuestions.length - 1)]);
