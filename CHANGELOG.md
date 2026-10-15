@@ -1,5 +1,16 @@
 # Changelog
 
+## Bob v1.0.74 — 2026-10-15
+
+### Adaptive companion workflow
+- Carry recent research conversation context into optional focus-plan discovery; never force a roadmap on every session.
+- Ask three goal-specific multiple-choice questions by default, use answers to shape the next question, and ask up to two more only when Gemini judges that an important unknown remains.
+- Let Gemini choose between card, pill, and timeline choice layouts; use saved profile preferences and explicitly shared interests when they are relevant.
+- Apply saved profile tone and evidence/action preferences to research answers.
+- Replace stale update messaging with the installed version, real latest-release check, honest error states, and a visible checking/downloading progress bar.
+- Persist profile identity and personalization controls; make Profile accessible directly inside Settings.
+
+
 ## Bob v1.0.73 — 2026-10-15
 
 ### Experience fixes
