@@ -145,7 +145,7 @@ export const ChatPage: React.FC = () => {
     const lower = userInput.toLowerCase();
     if (/\b(create|make|build|generate|start|plan)\b.{0,35}\broadmap\b/i.test(userInput) || /\broadmap\b.{0,25}\b(for my project|please create|please build)\b/i.test(userInput)) {
       setTimeout(() => {
-        setRoadmapGoal(activeProject?.title || 'Project Roadmap');
+        setRoadmapGoal(userInput.trim() || activeProject?.title || 'Project Roadmap');
         setIsRoadmapActive(true);
       }, 500);
       return `Sure thing! Let's build your step-by-step roadmap right now. Launching the full roadmap view for you...`;
