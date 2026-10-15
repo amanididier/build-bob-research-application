@@ -161,15 +161,6 @@ export const DashboardPage: React.FC = () => {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => {
-                window.dispatchEvent(new CustomEvent('bob-open-roadmap', { detail: { title: focusProject ? `${focusProject.title}: ${focusProject.summary}` : '' } }));
-              }}
-              className="px-3.5 py-1.5 rounded-full bg-[var(--y)] hover:bg-[#e0ac15] text-[#171717] text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm active:scale-95 cursor-pointer"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Project Roadmap</span>
-            </button>
-            <button
               onClick={() => setTimeMode((m) => (m === 'morning' ? 'night' : 'morning'))}
               title={`Switch to ${isMorning ? 'Night' : 'Morning'} view`}
               className="p-1.5 rounded-full bg-[var(--s2)] hover:bg-[var(--line)] border border-[var(--line)] text-[var(--m)] hover:text-[var(--t)] transition-colors cursor-pointer"
