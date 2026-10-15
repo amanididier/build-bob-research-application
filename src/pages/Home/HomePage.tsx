@@ -32,10 +32,10 @@ export const HomePage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-full bg-[var(--bg)] pb-14">
-      <section className="relative min-h-[450px] md:min-h-[490px] flex items-center justify-center overflow-hidden">
-        <img src={sunflowerMorning} alt="" className="absolute inset-0 w-full h-full object-cover object-center" />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/25 to-black/45" />
+    <div className="relative isolate min-h-full pb-14 overflow-hidden">
+      <img src={sunflowerMorning} alt="" aria-hidden="true" className="pointer-events-none absolute inset-0 -z-20 h-full min-h-[1000px] w-full object-cover object-center" />
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b from-black/35 via-black/30 to-white/95 dark:to-[#111722]/95" />
+      <section className="relative min-h-[58vh] md:min-h-[64vh] flex items-center justify-center overflow-hidden">
         <div className="relative z-10 w-full max-w-3xl mx-auto px-5 py-12 text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 border border-white/20 text-white/90 text-[10px] font-bold tracking-[0.16em] uppercase mb-5 backdrop-blur-md"><Sparkles className="w-3.5 h-3.5 text-[#f5c842]" />Your research companion</div>
           <h1 className="text-3xl sm:text-5xl font-black tracking-tight text-white drop-shadow-md leading-tight">What would you like to explore{userName ? `, ${userName}` : ''}?</h1>
@@ -51,8 +51,8 @@ export const HomePage: React.FC = () => {
       <section className="max-w-[1120px] mx-auto px-5 md:px-8 pt-9">
         <div className="flex items-end justify-between gap-4 mb-4">
           <div>
-            <p className="text-[10px] uppercase tracking-[0.15em] font-extrabold text-[var(--m)]">A GOOD PLACE TO BEGIN</p>
-            <h2 className="mt-1 text-[20px] sm:text-[23px] font-extrabold tracking-tight text-[var(--t)]">What are you working on today?</h2>
+            <p className="text-[10px] uppercase tracking-[0.15em] font-extrabold text-[#f5c842] drop-shadow-sm">A GOOD PLACE TO BEGIN</p>
+            <h2 className="mt-1 text-[20px] sm:text-[23px] font-extrabold tracking-tight text-neutral-950 dark:text-white drop-shadow-sm">What are you working on today?</h2>
           </div>
           <span className="hidden sm:block text-[11px] text-[var(--m)]">Choose a starting point</span>
         </div>
@@ -60,7 +60,7 @@ export const HomePage: React.FC = () => {
           {SUGGESTIONS.map((item) => {
             const Icon = item.icon;
             return (
-              <button key={item.title} type="button" onClick={() => { setDraft(item.prompt); composerRef.current?.focus(); }} className="group text-left rounded-[22px] overflow-hidden border border-[var(--line)] bg-[var(--s)] hover:-translate-y-0.5 hover:shadow-lg transition-all">
+              <button key={item.title} type="button" onClick={() => { setDraft(item.prompt); composerRef.current?.focus(); }} className="group text-left rounded-[22px] overflow-hidden border border-white/70 dark:border-white/10 bg-white/95 dark:bg-[#171b25]/95 shadow-lg shadow-black/10 hover:-translate-y-0.5 hover:shadow-xl transition-all backdrop-blur-md">
                 <div className={`relative h-[112px] overflow-hidden ${item.tint}`}>
                   <img src={item.image} alt="" className="w-full h-full object-cover opacity-90 group-hover:scale-[1.04] transition-transform duration-500" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/25 to-transparent" />
