@@ -28,8 +28,20 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install dependencies
-        run: npm install --legacy-peer-deps
+      - name: Install dependencies (retry transient native binary downloads)
+        env:
+          npm_config_fetch_retries: 5
+          npm_config_fetch_retry_mintimeout: 20000
+          npm_config_fetch_retry_maxtimeout: 120000
+        run: |
+          for attempt in 1 2 3; do
+            npm install --legacy-peer-deps && exit 0
+            if [ "$attempt" -lt 3 ]; then
+              echo "Dependency installation failed on attempt $attempt; retrying after a short delay..."
+              sleep $((attempt * 20))
+            fi
+          done
+          exit 1
 
       - name: TypeScript validation
         run: npm run lint
@@ -79,8 +91,18 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install root dependencies
-        run: npm install --legacy-peer-deps
+      - name: Install root dependencies (retry transient native binary downloads)
+        env:
+          npm_config_fetch_retries: 5
+          npm_config_fetch_retry_mintimeout: 20000
+          npm_config_fetch_retry_maxtimeout: 120000
+        run: |
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            npm install --legacy-peer-deps
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            if ($attempt -lt 3) { Start-Sleep -Seconds (20 * $attempt) }
+          }
+          exit 1
 
       - name: TypeScript validation
         run: npm run lint
@@ -101,9 +123,19 @@ jobs:
           node --check apps/desktop/main.cjs
           node --check apps/desktop/preload.cjs
 
-      - name: Install desktop dependencies
+      - name: Install desktop dependencies (retry transient native binary downloads)
         working-directory: apps/desktop
-        run: npm install --no-audit --no-fund
+        env:
+          npm_config_fetch_retries: 5
+          npm_config_fetch_retry_mintimeout: 20000
+          npm_config_fetch_retry_maxtimeout: 120000
+        run: |
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            npm install --no-audit --no-fund
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            if ($attempt -lt 3) { Start-Sleep -Seconds (20 * $attempt) }
+          }
+          exit 1
 
       - name: Build and publish Windows installer
         working-directory: apps/desktop
