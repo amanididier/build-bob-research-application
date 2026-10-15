@@ -504,6 +504,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setIsAiGenerating(true);
 
+    let effectiveProfileContext = bobTastePreference;
+    try {
+      const savedProfile = JSON.parse(localStorage.getItem('bob_profile_preferences_v1') || '{}');
+      const styleLabel = savedProfile.style === 'detailed' ? 'detailed explanations' : savedProfile.style === 'explain' ? 'explain concepts before conclusions' : 'concise answers';
+      const priorityLabels = [
+        savedProfile.priorities?.evidence && 'strong evidence',
+        savedProfile.priorities?.steps && 'actionable steps',
+        savedProfile.priorities?.contradictions && 'surface contradictions',
+        savedProfile.priorities?.links && 'useful source links',
+      ].filter(Boolean);
+      effectiveProfileContext = [
+        bobTastePreference,
+        'Saved profile preferences: ' + styleLabel + (priorityLabels.length ? '; prioritize ' + priorityLabels.join(', ') : '') + '.',
+      ].filter(Boolean).join('\\n');
+    } catch {}
+
     try {
       const response: AiSynthesisResponse = await bobAi.generateResearchAnswer(
         promptText,
@@ -512,7 +528,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // Stream sentences to voice system in real-time as they are produced!
           voiceController.feedAIStreamChunk(chunkText);
         },
-        bobTastePreference
+        effectiveProfileContext
       );
 
       // Finalize audio stream buffer
