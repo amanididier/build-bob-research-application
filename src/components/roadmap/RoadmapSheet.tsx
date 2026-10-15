@@ -472,7 +472,7 @@ Due Date: ${s.dueDate}
 
   const handleBack = () => {
     if (stepIndex === 5) {
-      setStepIndex(3);
+      setStepIndex(4);
     } else if (stepIndex > 0) {
       setStepIndex(prev => prev - 1);
     } else {
@@ -696,7 +696,7 @@ Due Date: ${s.dueDate}
       {/* Segmented Wizard Progress across top when on question steps */}
       {stepIndex > 0 && stepIndex <= 4 && (
         <div className="w-full flex gap-1 px-6 sm:px-12 pt-2 shrink-0">
-          {[1, 2, 3, 4, 5].map((s) => (
+          {[1, 2, 3, 4].map((s) => (
             <span
               key={s}
               className={`h-1 flex-1 rounded-full transition-colors duration-300 ${
@@ -852,13 +852,13 @@ Due Date: ${s.dueDate}
                 ))}
               </div>
 
-              <p className={`text-xs ${isDark ? 'text-[#8A8175]' : 'text-[#6B6358]'}`}>Choose a starting point or add a little detail below. You can continue without writing a long description.</p>
+              <p className={`text-xs ${isDark ? 'text-[#8A8175]' : 'text-[#6B6358]'}`}>Choose a starting point. Typing extra context is optional.</p>
 
               <textarea
-                rows={3}
+                rows={2}
                 value={goalQuery}
                 onChange={(e) => setGoalQuery(e.target.value)}
-                placeholder="I want to build and launch a responsive application that solves..."
+                placeholder="Optional: add context to personalize your choices…"
                 className={`w-full p-4 rounded-2xl border text-sm outline-none focus:border-[var(--y)] focus:ring-2 focus:ring-[var(--y)]/20 resize-none ${
                   isDark ? 'bg-[#14120D] border-[#2A2620] text-white placeholder-[#686154]' : 'bg-white border-[#E7E0D3] text-neutral-900 placeholder-[#9C9385]'
                 }`}
