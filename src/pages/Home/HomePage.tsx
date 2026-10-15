@@ -21,10 +21,6 @@ export const HomePage: React.FC = () => {
   const startResearch = (prompt: string) => {
     const clean = prompt.trim();
     if (!clean) return;
-    if (/\b(roadmap|project plan|make a plan|create a plan)\b/i.test(clean)) {
-      window.dispatchEvent(new CustomEvent('bob-open-roadmap', { detail: { title: clean } }));
-      return;
-    }
     try { localStorage.setItem('bob_pending_research_prompt', clean); } catch {}
     const id = createNewResearchSession();
     navigateTo('research', 'chat', id);
