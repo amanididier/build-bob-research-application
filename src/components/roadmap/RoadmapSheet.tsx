@@ -734,9 +734,31 @@ Due Date: ${s.dueDate}
                 </p>
               </div>
 
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                {[
+                  { title: 'Build an app', goal: 'Build an app or website', tone: 'bg-[#eaf4ff] border-[#cfe4ff] dark:bg-[#18283b] dark:border-[#29425c]' },
+                  { title: 'Grow a business', goal: 'Grow a business or startup', tone: 'bg-[#fff4d5] border-[#f1dfaa] dark:bg-[#332b18] dark:border-[#5b4b27]' },
+                  { title: 'Learn a skill', goal: 'Learn a new skill and reach a practical level', tone: 'bg-[#e9f8ef] border-[#ccebd8] dark:bg-[#172d23] dark:border-[#2d5941]' },
+                  { title: 'Launch a product', goal: 'Design, validate, and launch a product', tone: 'bg-[#f0ebff] border-[#ddd2ff] dark:bg-[#251f39] dark:border-[#45356d]' },
+                  { title: 'Create something', goal: 'Create and share something meaningful', tone: 'bg-[#ffece5] border-[#f7d2c3] dark:bg-[#38231e] dark:border-[#694032]' },
+                  { title: 'Something else', goal: '', tone: 'bg-white border-[#e7e0d3] dark:bg-[#14120d] dark:border-[#2a2620]' },
+                ].map((option) => (
+                  <button
+                    key={option.title}
+                    type="button"
+                    onClick={() => setGoalQuery(option.goal)}
+                    className={`rounded-2xl border px-3 py-3 text-left text-xs font-bold transition-all hover:-translate-y-0.5 ${option.tone} ${goalQuery === option.goal ? 'ring-2 ring-[var(--y)] border-[var(--y)]' : ''}`}
+                  >
+                    {option.title}
+                    <span className="block text-[10px] font-normal opacity-70 mt-1">{option.goal || 'Describe your own goal below'}</span>
+                  </button>
+                ))}
+              </div>
+
+              <p className={`text-xs ${isDark ? 'text-[#8A8175]' : 'text-[#6B6358]'}`}>Choose a starting point or add a little detail below. You can continue without writing a long description.</p>
+
               <textarea
-                autoFocus
-                rows={4}
+                rows={3}
                 value={goalQuery}
                 onChange={(e) => setGoalQuery(e.target.value)}
                 placeholder="I want to build and launch a responsive application that solves..."
