@@ -79,7 +79,7 @@ jobs:
 
   publish_desktop_release:
     needs: validate
-    if: startsWith(github.event.head_commit.message, 'release-bob-v1.0.71') || startsWith(github.event.head_commit.message, 'release-bob-v')
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, 'release-bob-v1.0.71') || startsWith(github.event.head_commit.message, 'release-bob-v')
     runs-on: windows-latest
     permissions:
       contents: write
