@@ -83,6 +83,7 @@ export const RoadmapSheet: React.FC<RoadmapSheetProps> = ({
   const { userName, triggerThinking, addTask, navigateTo, activeResearchId, projects, currentPage } = useApp();
   const [internalOpen, setInternalOpen] = useState(false);
   const [goalQuery, setGoalQuery] = useState(initialGoal || '');
+  const [conversationContext, setConversationContext] = useState('');
   const [stepIndex, setStepIndex] = useState(0); // Intro, goal, 3 adaptive questions, arranger, result
   const [originSource, setOriginSource] = useState<'chat' | 'desktop' | 'tasks'>('chat');
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
@@ -138,6 +139,7 @@ export const RoadmapSheet: React.FC<RoadmapSheetProps> = ({
       setStepIndex(0);
       const query = e?.detail?.title || initialGoal || '';
       setGoalQuery(query);
+      setConversationContext(typeof e?.detail?.context === 'string' ? e.detail.context : '');
       if (e?.detail?.origin) {
         setOriginSource(e.detail.origin);
       } else if (currentPage === 'chat') {
@@ -247,7 +249,7 @@ export const RoadmapSheet: React.FC<RoadmapSheetProps> = ({
     if (key) {
       try {
         const ai = new GoogleGenAI({ apiKey: key });
-        const prompt = `You are Bob's adaptive project-planning engine. Create a roadmap specific to the user's actual goal, not a generic template. Project: "${goalQuery || 'User project'}". Create the first three essential milestones first, then add only the further milestones required for confident completion. Return 3–12 milestones based on complexity: 3–4 for a small clear goal, 5–8 for medium work, 9–12 for complex work. Never force a fixed count or include irrelevant engineering/deployment tasks. Make each phase project-specific, ordered, actionable, and outcome-based. If the goal is unclear, use early milestones to clarify it.
+        const prompt = `You are Bob's adaptive project-planning engine. Create a roadmap specific to the user's actual goal, not a generic template. Project goal: "${goalQuery || 'User project'}". Recent conversation context: "${conversationContext}". Create the first three essential milestones first, then add only the further milestones required for confident completion. Return 3–12 milestones based on complexity: 3–4 for a small clear goal, 5–8 for medium work, 9–12 for complex work. Never force a fixed count or include irrelevant engineering/deployment tasks. Make each phase project-specific, ordered, actionable, and outcome-based. If the goal is unclear, use early milestones to clarify it.
 User situation: "${situationText}".
 Selected tools: "${toolLabels}".
 Target cadence: "${dueDateLabel}".
@@ -352,7 +354,7 @@ No markdown codeblocks or prose, only valid JSON array.`;
           return JSON.stringify({ profile, explicitlySharedPreferences: Array.isArray(interests) ? interests.slice(-12) : [] });
         } catch { return 'No saved profile context'; }
       })();
-      const prompt = `You are Bob's adaptive project discovery assistant. The user's goal is: "${goalQuery || 'not fully defined yet'}". Saved user profile and explicitly shared interests: ${profileContext}. Previous answers: ${JSON.stringify(answers)}. Generate the next of exactly THREE adaptive discovery questions (question ${questionNumber} of 3). Ask only about an important unknown that the goal and previous answers have not resolved. Make every option specific and useful for this particular goal, not generic boilerplate. The user must be able to answer by selecting a card; do not require typing. Choose the most useful UI layout for this question from cards, pills, or timeline; vary the layout when it improves clarity. Return strict JSON only: {"question":"...","helperText":"...","layout":"cards|pills|timeline","options":[{"label":"short choice","description":"brief explanation","value":"meaningful value"}]}. Include 3–5 distinct options.`;
+      const prompt = `You are Bob's adaptive project discovery assistant. The user's goal is: "${goalQuery || 'not fully defined yet'}". Recent conversation context: "${conversationContext}". Saved user profile and explicitly shared interests: ${profileContext}. Previous answers: ${JSON.stringify(answers)}. Generate the next of exactly THREE adaptive discovery questions (question ${questionNumber} of 3). Ask only about an important unknown that the goal and previous answers have not resolved. Make every option specific and useful for this particular goal, not generic boilerplate. The user must be able to answer by selecting a card; do not require typing. Choose the most useful UI layout for this question from cards, pills, or timeline; vary the layout when it improves clarity. Return strict JSON only: {"question":"...","helperText":"...","layout":"cards|pills|timeline","options":[{"label":"short choice","description":"brief explanation","value":"meaningful value"}]}. Include 3–5 distinct options.`;
       const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
       const cleaned = (response.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
       const parsed = JSON.parse(cleaned);
