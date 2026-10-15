@@ -1,5 +1,25 @@
 # Changelog
 
+## Bob v1.0.74 — 2026-10-15
+
+### Adaptive companion workflow
+- Carry recent research conversation context into optional focus-plan discovery; never force a roadmap on every session.
+- Ask three goal-specific multiple-choice questions by default, use answers to shape the next question, and ask up to two more only when Gemini judges that an important unknown remains.
+- Let Gemini choose between card, pill, and timeline choice layouts; use saved profile preferences and explicitly shared interests when they are relevant.
+- Apply saved profile tone and evidence/action preferences to research answers.
+- Replace stale update messaging with the installed version, real latest-release check, honest error states, and a visible checking/downloading progress bar.
+- Persist profile identity and personalization controls; make Profile accessible directly inside Settings.
+
+
+## Bob v1.0.73 — 2026-10-15
+
+### Experience fixes
+- Extend the sunflower garden backdrop across the homepage, with centered greeting/composer, legible suggestion cards, and a visible navigation toggle while the sidebar starts closed.
+- Restore the dashboard as a separate white workspace with distinct recent, focus, and discovery cards that adapt to dark mode.
+- Keep casual chat focused on the user, remember explicitly shared preference statements locally, and avoid scripted fallback answers when Gemini is unavailable.
+- Keep Bob's replies visually concise and preserve the two adaptive multiple-choice roadmap questions before goal-specific milestone synthesis.
+
+
 ## Bob v1.0.72 — 2026-10-15
 
 ### Navigation and daily start

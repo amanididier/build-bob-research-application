@@ -17,7 +17,8 @@ import {
   Mic,
   Volume2,
   Download,
-  Check
+  Check,
+  User
 } from 'lucide-react';
 import { detectSystemHardware, MODEL_CATALOG } from '../../lib/hardware';
 import { bobAi } from '../../lib/aiEngine';
@@ -25,6 +26,7 @@ import { VoiceSelectorCards } from '../../components/voice/VoiceSelectorCards';
 import { localVoiceManager } from '../../lib/voice/localVoiceManager';
 import { micManager } from '../../lib/voice/microphoneManager';
 import { useVoiceStore } from '../../store/useVoiceStore';
+import { ProfilePage } from '../Profile/ProfilePage';
 
 export const SettingsPage: React.FC = () => {
   const { 
@@ -40,7 +42,7 @@ export const SettingsPage: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, []);
 
-  const [activeTab, setActiveTab] = useState<'ai' | 'voice' | 'updates' | 'memory' | 'browser' | 'privacy' | 'personalization'>('ai');
+  const [activeTab, setActiveTab] = useState<'ai' | 'voice' | 'updates' | 'memory' | 'browser' | 'privacy' | 'personalization' | 'profile'>('ai');
   const [tasteDraft, setTasteDraft] = useState<string>(bobTastePreference);
   const [openChromeByDefault, setOpenChromeByDefault] = useState(true);
   const [localOnlyMode, setLocalOnlyMode] = useState(true);
@@ -53,7 +55,7 @@ export const SettingsPage: React.FC = () => {
   const [isTestingKey, setIsTestingKey] = useState(false);
   const [keyTestFeedback, setKeyTestFeedback] = useState<{ ok: boolean; message: string } | null>(null);
 
-  const [installedVersion, setInstalledVersion] = useState<string>('1.0.59');
+  const [installedVersion, setInstalledVersion] = useState<string>('1.0.74');
 
   const [updaterState, setUpdaterState] = useState<{
     status: 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'latest' | 'error';
@@ -62,8 +64,8 @@ export const SettingsPage: React.FC = () => {
     message?: string;
   }>({
     status: 'idle',
-    version: '1.0.59',
-    message: 'Up to date (v1.0.59)'
+    version: '1.0.74',
+    message: 'Ready to check for updates'
   });
 
   const [hardware] = useState(() => detectSystemHardware());
@@ -191,18 +193,57 @@ export const SettingsPage: React.FC = () => {
     if (typeof window !== 'undefined' && (window as any).bob?.checkForUpdates) {
       try {
         const res = await (window as any).bob.checkForUpdates();
-        setUpdaterState(res || { status: 'latest', message: 'You are on the latest version (v1.0.59)' });
+        setUpdaterState(res || { status: 'error', version: installedVersion, message: 'The desktop updater returned no status. Please try again.' });
       } catch (err: any) {
         setUpdaterState({ status: 'error', message: err?.message || 'Update check failed.' });
       }
     } else {
-      setTimeout(() => {
-        setUpdaterState({
-          status: 'latest',
-          version: '1.0.59',
-          message: 'Running latest production build (v1.0.59)'
+      try {
+        const response = await fetch('https://api.github.com/repos/amanididier/build-bob-research-application/releases/latest', {
+          headers: { Accept: 'application/vnd.github+json' },
         });
-      }, 700);
+        if (!response.ok) throw new Error('GitHub release check returned HTTP ' + response.status);
+        const release = await response.json();
+        const latestVersion = String(release.tag_name || '').replace(/^v/, '');
+        if (!latestVersion) throw new Error('Latest release did not include a version tag.');
+        const compare = (a: string, b: string) => {
+          const aa = a.split('.').map(Number), bb = b.split('.').map(Number);
+          for (let i = 0; i < Math.max(aa.length, bb.length); i++) {
+            const diff = (aa[i] || 0) - (bb[i] || 0);
+            if (diff !== 0) return diff;
+          }
+          return 0;
+        };
+        const isNewer = compare(latestVersion, installedVersion) > 0;
+        setUpdaterState({
+          status: isNewer ? 'available' : 'latest',
+          version: latestVersion,
+          message: isNewer
+            ? 'Bob v' + latestVersion + ' is available. Download the installer from GitHub Releases.'
+            : 'You are running the latest published release (v' + installedVersion + ').',
+        });
+      } catch (err: any) {
+        setUpdaterState({ status: 'error', version: installedVersion, message: err?.message || 'Could not verify the latest release.' });
+      }
+    }
+  };
+
+  const handleDownloadUpdate = async () => {
+    const bob = typeof window !== 'undefined' ? (window as any).bob : null;
+    if (!bob?.downloadUpdate) {
+      window.open('https://github.com/amanididier/build-bob-research-application/releases/latest', '_blank', 'noopener,noreferrer');
+      return;
+    }
+    setUpdaterState((prev) => ({ ...prev, status: 'downloading', percent: 0, message: 'Downloading the update securely…' }));
+    try {
+      const result = await bob.downloadUpdate();
+      if (result?.status === 'error') {
+        setUpdaterState({ status: 'error', version: updaterState.version, message: result.message || 'The update download failed.' });
+      } else if (result?.status) {
+        setUpdaterState((prev) => ({ ...prev, ...result, status: result.status === 'downloading' ? 'downloading' : result.status }));
+      }
+    } catch (err: any) {
+      setUpdaterState({ status: 'error', version: updaterState.version, message: err?.message || 'The update download failed.' });
     }
   };
 
@@ -275,6 +316,7 @@ export const SettingsPage: React.FC = () => {
         <div className="space-y-1.5">
           {([
             ['ai', Cpu, 'AI Models & Keys', 'text-[var(--y)]'],
+            ['profile', User, 'Profile', 'text-[#3474db]'],
             ['personalization', Sparkles, 'Personalization', 'text-[#ec4899]'],
             ['voice', Mic, 'Voice Models', 'text-amber-500'],
             ['updates', RefreshCw, 'App Updates', 'text-emerald-500'],
@@ -298,88 +340,81 @@ export const SettingsPage: React.FC = () => {
 
         <div className="md:col-span-3">
           {activeTab === 'updates' && (
-            <div className="space-y-6">
-              <div className="bg-[var(--s)] border border-[var(--line)] rounded-[24px] p-6 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="text-[16px] font-bold text-[var(--t)] m-0">App Release & Updates</h3>
-                    <p className="text-[12px] text-[var(--m)] mt-1 mb-0">Current Version: v{installedVersion}</p>
+            <div className="space-y-5">
+              <section className="rounded-[26px] border border-[var(--line)] bg-[var(--s)] p-6 md:p-7 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-5">
+                  <div className="flex items-start gap-4">
+                    <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#eaf2ff] dark:bg-[#1a2b43] text-[#3474db]">
+                      <RefreshCw className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="m-0 text-[10px] uppercase tracking-[0.16em] font-extrabold text-[var(--m)]">BOB DESKTOP</p>
+                      <h3 className="mt-1 mb-0 text-xl font-extrabold text-[var(--t)]">App updates</h3>
+                      <p className="mt-1 mb-0 text-sm text-[var(--m)]">Check the published release before installing anything.</p>
+                    </div>
                   </div>
-                  <span className="text-[11px] font-mono px-2 py-1 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-semibold">
-                    v{installedVersion} Build Ready
-                  </span>
+                  <div className="rounded-2xl border border-[var(--line)] bg-[var(--s2)] px-4 py-3 min-w-[150px]">
+                    <p className="m-0 text-[10px] uppercase tracking-wider text-[var(--m)] font-bold">Current version</p>
+                    <p className="m-0 mt-1 text-2xl font-extrabold text-[var(--t)]">v{installedVersion}</p>
+                  </div>
                 </div>
-                <p className="text-[12.5px] text-[var(--m)] leading-relaxed mb-4">
-                  The previous release attempt (v1.0.57) encountered a Vite build error (unicode escape issue in SettingsPage). This has now been completely fixed, validated with zero TypeScript and build errors, and pre-packaged for v1.0.58.
-                </p>
-                <div className="flex flex-wrap items-center gap-3">
+
+                <div className="mt-6 rounded-2xl border border-[var(--line)] bg-[var(--s2)] p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 text-[13px] font-bold text-[var(--t)]">
+                      {updaterState.status === 'error' ? <AlertCircle className="h-4 w-4 text-red-500" /> :
+                       updaterState.status === 'latest' ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> :
+                       updaterState.status === 'available' || updaterState.status === 'ready' ? <Download className="h-4 w-4 text-[#3474db]" /> :
+                       <RefreshCw className={`h-4 w-4 ${updaterState.status === 'checking' || updaterState.status === 'downloading' ? 'animate-spin' : ''}`} />}
+                      <span>{updaterState.status === 'idle' ? 'Ready to check' : updaterState.status === 'checking' ? 'Checking for updates…' : updaterState.status === 'downloading' ? 'Downloading update…' : updaterState.status === 'ready' ? 'Update ready to install' : updaterState.status === 'available' ? 'New version available' : updaterState.status === 'latest' ? 'You’re up to date' : updaterState.status === 'error' ? 'Could not check updates' : updaterState.message || 'Update status'}</span>
+                    </div>
+                    {updaterState.version && <span className="text-[11px] font-mono text-[var(--m)]">Latest: v{updaterState.version}</span>}
+                  </div>
+                  <p className="mt-2 mb-0 text-[12px] leading-relaxed text-[var(--m)]">{updaterState.message || 'Check for the latest published Bob release.'}</p>
+                  {(updaterState.status === 'checking' || updaterState.status === 'downloading') && (
+                    <div className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--line)]">
+                      <div className="h-full rounded-full bg-[#3474db] transition-all duration-300" style={{ width: updaterState.status === 'checking' ? '35%' : Math.max(4, Math.min(100, updaterState.percent || 0)) + '%' }} />
+                    </div>
+                  )}
+                  {updaterState.status === 'downloading' && typeof updaterState.percent === 'number' && (
+                    <p className="mt-2 mb-0 text-right text-[11px] font-semibold text-[var(--m)]">{Math.round(updaterState.percent)}%</p>
+                  )}
+                </div>
+
+                <div className="mt-5 flex flex-wrap items-center gap-3">
                   <button
                     onClick={handleCheckForUpdates}
-                    className="px-4 py-2 rounded-xl bg-[var(--y)] hover:bg-[#ebd200] text-[#171717] text-[12px] font-bold transition-all active:scale-95 cursor-pointer"
+                    disabled={updaterState.status === 'checking' || updaterState.status === 'downloading'}
+                    className="inline-flex items-center gap-2 rounded-xl bg-[var(--y)] px-5 py-3 text-[12px] font-extrabold text-[#171717] hover:bg-[#ebd200] disabled:opacity-50 transition-all"
                   >
-                    Check for updates
+                    <RefreshCw className={`h-4 w-4 ${updaterState.status === 'checking' ? 'animate-spin' : ''}`} />
+                    {updaterState.status === 'checking' ? 'Checking…' : 'Check for updates'}
                   </button>
-                  <a
-                    href="/bob-chrome-extension.zip"
-                    download="bob-chrome-extension.zip"
-                    className="px-4 py-2 rounded-xl bg-[var(--s2)] hover:bg-[var(--s3)] border border-[var(--line)] text-[var(--t)] text-[12px] font-semibold flex items-center gap-2 transition-all"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    Chrome Extension (.zip)
-                  </a>
-                  <a
-                    href="/bob-complete-codebase.zip"
-                    download="bob-complete-codebase.zip"
-                    className="px-4 py-2 rounded-xl bg-[var(--s2)] hover:bg-[var(--s3)] border border-[var(--line)] text-[var(--t)] text-[12px] font-semibold flex items-center gap-2 transition-all"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    Full Codebase (.zip)
-                  </a>
-                  <a
-                    href="/release-v1.0.58.patch"
-                    download="release-v1.0.58.patch"
-                    className="px-4 py-2 rounded-xl bg-[var(--s2)] hover:bg-[var(--s3)] border border-[var(--line)] text-[var(--t)] text-[12px] font-semibold flex items-center gap-2 transition-all"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    Git Patch (.patch)
+                  {updaterState.status === 'available' && (
+                    typeof window !== 'undefined' && (window as any).bob?.downloadUpdate
+                      ? <button onClick={handleDownloadUpdate} className="inline-flex items-center gap-2 rounded-xl bg-[#3474db] px-5 py-3 text-[12px] font-bold text-white hover:bg-[#245fc0]"><Download className="h-4 w-4" /> Download v{updaterState.version}</button>
+                      : <a href="https://github.com/amanididier/build-bob-research-application/releases/latest" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-[#3474db] px-5 py-3 text-[12px] font-bold text-white hover:bg-[#245fc0]"><Download className="h-4 w-4" /> Get v{updaterState.version}</a>
+                  )}
+                  {updaterState.status === 'ready' && (
+                    <button onClick={handleInstallUpdate} className="rounded-xl border border-[var(--line)] px-4 py-3 text-[12px] font-bold text-[var(--t)]">Restart to update</button>
+                  )}
+                  <a href="https://github.com/amanididier/build-bob-research-application/releases" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-[var(--line)] px-4 py-3 text-[12px] font-semibold text-[var(--t)] hover:bg-[var(--s2)]">
+                    View release history <ExternalLink className="h-3.5 w-3.5" />
                   </a>
                 </div>
-              </div>
+              </section>
 
-              <div className="bg-[var(--s)] border border-[var(--line)] rounded-[24px] p-6 shadow-sm">
-                <h4 className="text-[14px] font-bold text-[var(--t)] mb-2 flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                  Release Commit Log (v1.0.55 → v1.0.59)
-                </h4>
-                <ul className="text-[12px] text-[var(--m)] space-y-2 list-none p-0 mt-3 font-mono">
-                  <li className="flex items-start gap-2">
-                    <span className="text-[var(--y)] font-semibold">v1.0.59:</span>
-                    <span>GeminiLiveService raw WebSocket transport, bidirectional audio streaming, Kokoro/DualEngine fallback safeguards, honest dynamic agent reporting & 2-line clamped speech cards.</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-[var(--m)] font-semibold">v1.0.58:</span>
-                    <span>Bob Experience overlay routines, Sunflower garden, Gemini Live primary priority agent with seamless fallback.</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-[var(--m)] font-semibold">v1.0.57:</span>
-                    <span>Settings fallbacks alignment & startupWarmup integration (failed on CI build syntax).</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-[var(--m)] font-semibold">v1.0.56:</span>
-                    <span>Restored voice startupWarmup and SettingsPage fallbacks.</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-[var(--m)] font-semibold">v1.0.55:</span>
-                    <span>Qoder UI refinements, mascot assets, and codebase packaging.</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-emerald-500 font-semibold">v1.0.54:</span>
-                    <span>Last successful GitHub release with Windows installer binary.</span>
-                  </li>
-                </ul>
-              </div>
+              <section className="rounded-[22px] border border-[var(--line)] bg-[var(--s)] p-5">
+                <h4 className="m-0 text-sm font-bold text-[var(--t)]">Chrome extension</h4>
+                <p className="mt-1 mb-4 text-[12px] text-[var(--m)]">Download the extension package separately and load it in Chrome’s Extensions page.</p>
+                <a href="https://github.com/amanididier/build-bob-research-application/releases/latest" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--s2)] px-4 py-2.5 text-[12px] font-semibold text-[var(--t)]">
+                  <Download className="h-4 w-4" /> Open latest downloads <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              </section>
             </div>
           )}
+
+          {activeTab === 'profile' && <ProfilePage />}
 
           {activeTab === 'personalization' && (
             <div className="space-y-6">

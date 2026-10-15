@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { ChatView } from './ChatView';
 import { SummaryView } from './SummaryView';
@@ -18,6 +18,7 @@ export const ResearchPage: React.FC = () => {
     closeSubtopic,
     navigateTo,
     triggerThinking,
+    messages,
   } = useApp();
 
   const [subtopicPrompt, setSubtopicPrompt] = React.useState('');
@@ -29,6 +30,12 @@ export const ResearchPage: React.FC = () => {
   ]);
 
   const project = projects.find((p) => p.id === activeResearchId) || projects[0];
+  const [dismissedPlanFor, setDismissedPlanFor] = useState<string | null>(null);
+  useEffect(() => setDismissedPlanFor(null), [activeResearchId]);
+  const recentConversation = messages.slice(-8);
+  const recentUserText = recentConversation.filter((message) => message.role === 'user').map((message) => message.text).join(' ');
+  const planSignal = /\b(build|create|prepare|exam|deadline|study plan|launch|project|goal|practice|organize|learn|essay|assignment|business|app|website|finish|improve|deliver|research plan)\b/i.test(recentUserText);
+  const showPlanSuggestion = recentConversation.length >= 4 && planSignal && dismissedPlanFor !== activeResearchId;
 
   const handleSubtopicSend = () => {
     if (!subtopicPrompt.trim()) return;
@@ -85,6 +92,27 @@ export const ResearchPage: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {showPlanSuggestion && (
+        <div className="mb-6 rounded-[22px] border border-[#d4e2ff] dark:border-[#2e466b] bg-gradient-to-r from-[#edf4ff] via-white to-[#fff8dc] dark:from-[#17283d] dark:via-[#151b25] dark:to-[#2b2618] p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="h-10 w-10 shrink-0 rounded-2xl bg-[#dbe8ff] dark:bg-[#243a5c] text-[#3474db] grid place-items-center"><Sparkles className="h-5 w-5" /></div>
+            <div>
+              <p className="m-0 text-[10px] uppercase tracking-[0.14em] font-extrabold text-[#3474db] dark:text-[#a9c8ff]">A LITTLE STRUCTURE, IF YOU WANT IT</p>
+              <h3 className="mt-1 mb-1 text-sm font-extrabold text-[var(--t)]">Would a focus plan help with this?</h3>
+              <p className="m-0 text-[12px] leading-relaxed text-[var(--m)]">Bob can use this conversation to shape a few next steps. You can keep chatting without making a plan.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button type="button" onClick={() => setDismissedPlanFor(activeResearchId)} className="rounded-xl px-3 py-2 text-xs font-semibold text-[var(--m)] hover:bg-white/70 dark:hover:bg-black/20">Not now</button>
+            <button type="button" onClick={() => {
+              const context = recentConversation.map((message) => (message.role === 'user' ? 'User: ' : 'Bob: ') + message.text).join('\n').slice(-4500);
+              window.dispatchEvent(new CustomEvent('bob-open-roadmap', { detail: { title: '', origin: 'chat', context, projectId: activeResearchId } }));
+              setDismissedPlanFor(activeResearchId);
+            }} className="rounded-xl bg-[#3474db] px-4 py-2.5 text-xs font-extrabold text-white hover:bg-[#245fc0] shadow-sm">Build a focus plan</button>
+          </div>
+        </div>
+      )}
 
       {/* Subtopic Dedicated Focused View Modal / Rail */}
       {activeSubtopic && (
