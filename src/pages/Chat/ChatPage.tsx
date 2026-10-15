@@ -34,6 +34,22 @@ const STORE_KEY = 'bob_messenger_messages_v2';
 const NUDGE_KEY = 'bob_messenger_last_nudge';
 const IDLE_MS = 8 * 60 * 1000;
 const NUDGE_COOLDOWN_MS = 25 * 60 * 1000;
+const COMPANION_MEMORY_KEY = 'bob_companion_memory_v1';
+
+function loadCompanionMemory(): string[] {
+  try {
+    const value = JSON.parse(localStorage.getItem(COMPANION_MEMORY_KEY) || '[]');
+    return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string').slice(-12) : [];
+  } catch { return []; }
+}
+
+function rememberPreference(message: string) {
+  if (!/\b(i (?:really )?(?:like|love|enjoy|prefer|usually listen to|usually watch|am into)|my favorite|i'm a fan of|im a fan of)\b/i.test(message)) return;
+  const facts = loadCompanionMemory();
+  if (!facts.some((fact) => fact.toLowerCase() === message.toLowerCase())) {
+    try { localStorage.setItem(COMPANION_MEMORY_KEY, JSON.stringify([...facts, message.slice(0, 240)].slice(-12))); } catch {}
+  }
+}
 
 function loadMessages(): MessengerMsg[] {
   try {
@@ -154,10 +170,12 @@ export const ChatPage: React.FC = () => {
     if (key) {
       try {
         const ai = new GoogleGenAI({ apiKey: key });
-        const systemPrompt = `You are Bob, a warm, capable conversational AI companion speaking directly with ${userName || 'the user'}.
-Help with whatever the user wants to discuss: everyday life, ideas, learning, creativity, decisions, emotions, technology, or practical questions.
-Be natural, user-focused, concise by default (usually 1–3 short sentences), and expand when the user asks for depth.
-Do not make the conversation about yourself. Do not bring up projects, tasks, research sessions, or roadmaps unless the user explicitly asks or the current message clearly concerns them. Ask at most one useful follow-up question when needed. If the user is clearly describing a multi-step project or meaningful goal, you may gently offer to make a roadmap, but never open the roadmap automatically unless they explicitly ask. Never insert scheduled project reminders.`;
+        const rememberedFacts = loadCompanionMemory();
+        const systemPrompt = `You are Bob, a warm, emotionally intelligent conversational AI companion speaking directly with ${userName || 'the user'}.
+Treat this like a real ongoing conversation, not a search box: respond to what the person actually said, acknowledge feelings or details, and sometimes ask one natural follow-up question rather than ending every turn with a generic line.
+You can discuss everyday life, interests, music, celebrities, films, hobbies, friendships, culture, learning, creativity, decisions, emotions, technology, and practical questions.
+Keep replies concise and warm, usually one or two short sentences. Do not make the conversation about yourself. Do not bring up projects, tasks, research sessions, or roadmaps unless the user explicitly asks or the current message clearly concerns them. If a meaningful multi-step goal comes up, ask whether they want help planning before opening any roadmap. Never insert scheduled project reminders.
+Known preferences the user has explicitly shared (use naturally, never assume more than these): ${rememberedFacts.join(' | ') || 'No saved preferences yet.'}`);
 
         const response = await ai.models.generateContent({
           model: 'gemini-2.5-flash',
@@ -178,8 +196,13 @@ Do not make the conversation about yourself. Do not bring up projects, tasks, re
           return response.text.trim();
         }
       } catch (err) {
-        console.warn('Gemini casual chat fallback:', err);
+        console.warn('Gemini casual chat failed:', err);
+        return "I couldn't reach Gemini just now. Your message is still here—please check your Gemini API key or connection, then try again.";
       }
+    }
+
+    if (!key) {
+      return "I'm here with you, but Gemini isn't connected in this session yet. Add your Gemini API key in Settings so I can give you real, context-aware replies.";
     }
 
     // Organic offline casual fallback responses
@@ -204,6 +227,7 @@ Do not make the conversation about yourself. Do not bring up projects, tasks, re
   const handleSend = async (textToSend?: string) => {
     const text = (textToSend || draft).trim();
     if (!text || sendingRef.current) return;
+    rememberPreference(text);
     sendingRef.current = true;
     setDraft('');
 
@@ -276,7 +300,7 @@ Do not make the conversation about yourself. Do not bring up projects, tasks, re
               <h2 className="text-sm font-bold text-[#172033] dark:text-[#f2f6ff] truncate m-0">
                 Bob
               </h2>
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-[#b88b00] dark:text-[#f5c842]">
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#e6f0ff] dark:bg-[#1d3154] text-[#2764d8] dark:text-[#9fc2ff]">
                 Companion
               </span>
             </div>
@@ -354,7 +378,7 @@ Do not make the conversation about yourself. Do not bring up projects, tasks, re
                       : 'bg-white dark:bg-[#1b202b] text-[#172033] dark:text-[#f2f6ff] rounded-tl-sm border border-[#e7edf5] dark:border-white/5 shadow-sm'
                   }`}
                 >
-                  <p className="text-[13.5px] leading-relaxed m-0 whitespace-pre-wrap select-text">
+                  <p className={`text-[13.5px] leading-relaxed m-0 whitespace-pre-wrap select-text ${isUser ? '' : 'line-clamp-2'}`}>
                     {m.text}
                   </p>
 
