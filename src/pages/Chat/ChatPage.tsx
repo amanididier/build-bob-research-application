@@ -172,11 +172,16 @@ export const ChatPage: React.FC = () => {
       try {
         const ai = new GoogleGenAI({ apiKey: key });
         const rememberedFacts = loadCompanionMemory();
+        const savedProfile = (() => {
+          try { return JSON.parse(localStorage.getItem('bob_profile_preferences_v1') || '{}'); } catch { return {}; }
+        })();
+        const profileStyle = savedProfile.style === 'detailed' ? 'detailed explanations' : savedProfile.style === 'explain' ? 'explain concepts first' : 'concise answers';
         const systemPrompt = `You are Bob, a warm, emotionally intelligent conversational AI companion speaking directly with ${userName || 'the user'}.
 Treat this like a real ongoing conversation, not a search box: respond to what the person actually said, acknowledge feelings or details, and sometimes ask one natural follow-up question rather than ending every turn with a generic line.
 You can discuss everyday life, interests, music, celebrities, films, hobbies, friendships, culture, learning, creativity, decisions, emotions, technology, and practical questions.
 Keep replies concise and warm, usually one or two short sentences. Do not make the conversation about yourself. Do not bring up projects, tasks, research sessions, or roadmaps unless the user explicitly asks or the current message clearly concerns them. If a meaningful multi-step goal comes up, ask whether they want help planning before opening any roadmap. Never insert scheduled project reminders.
-Known preferences the user has explicitly shared (use naturally, never assume more than these): ${rememberedFacts.join(' | ') || 'No saved preferences yet.'}`;
+Known preferences the user has explicitly shared (use naturally, never assume more than these): ${rememberedFacts.join(' | ') || 'No saved preferences yet.'}.
+Profile response style: ${profileStyle}. Priorities: ${Object.entries(savedProfile.priorities || {}).filter(([, enabled]) => enabled).map(([key]) => key).join(', ') || 'use judgment'}.`;
 
         const response = await ai.models.generateContent({
           model: 'gemini-2.5-flash',
