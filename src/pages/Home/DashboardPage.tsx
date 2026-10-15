@@ -101,7 +101,7 @@ export const DashboardPage: React.FC = () => {
   return (
     <div className="w-full pb-36 animate-in fade-in duration-300">
       {/* 1. Full-Width 100% Sunflower Garden Hero Banner (Spans whole screen, not in a card) */}
-      <div className="relative w-full min-h-[360px] md:min-h-[420px] flex items-center justify-center overflow-hidden text-white group">
+      <div className="relative w-[calc(100%-2.5rem)] md:w-[calc(100%-4rem)] max-w-[1140px] mx-auto mt-5 min-h-[180px] md:min-h-[210px] rounded-[28px] flex items-center justify-center overflow-hidden text-white group shadow-md">
         {/* Background Image spanning 100% */}
         <div 
           className="absolute inset-0 bg-cover bg-center transition-all duration-700 transform scale-100 group-hover:scale-[1.01]"
@@ -117,11 +117,11 @@ export const DashboardPage: React.FC = () => {
         />
 
         {/* Center of the Hero: ONLY Greetings in the center */}
-        <div className="relative z-10 max-w-3xl mx-auto px-6 py-16 sm:py-24 text-center animate-in fade-in zoom-in-95 duration-500">
-          <h1 className="text-3xl sm:text-5xl md:text-6xl font-black tracking-tight drop-shadow-md text-white mb-4">
+        <div className="relative z-10 max-w-3xl mx-auto px-6 py-8 sm:py-10 text-center animate-in fade-in zoom-in-95 duration-500">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-black tracking-tight drop-shadow-md text-white mb-2">
             {isMorning ? `Good morning, ${userName}.` : `Good evening, ${userName}.`}
           </h1>
-          <p className="text-base sm:text-lg md:text-xl text-white/90 max-w-2xl mx-auto font-normal leading-relaxed drop-shadow-sm">
+          <p className="text-sm sm:text-base text-white/90 max-w-2xl mx-auto font-normal leading-relaxed drop-shadow-sm">
             {isMorning
               ? 'The garden is bright and clear. What would you like to investigate, synthesize, or finish today?'
               : 'The stars are out over the sunflowers. Let’s distill today’s reading into clear, actionable outcomes.'}
@@ -161,15 +161,6 @@ export const DashboardPage: React.FC = () => {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => {
-                window.dispatchEvent(new CustomEvent('bob-open-roadmap', { detail: { title: focusProject ? `${focusProject.title}: ${focusProject.summary}` : '' } }));
-              }}
-              className="px-3.5 py-1.5 rounded-full bg-[var(--y)] hover:bg-[#e0ac15] text-[#171717] text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm active:scale-95 cursor-pointer"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Project Roadmap</span>
-            </button>
-            <button
               onClick={() => setTimeMode((m) => (m === 'morning' ? 'night' : 'morning'))}
               title={`Switch to ${isMorning ? 'Night' : 'Morning'} view`}
               className="p-1.5 rounded-full bg-[var(--s2)] hover:bg-[var(--line)] border border-[var(--line)] text-[var(--m)] hover:text-[var(--t)] transition-colors cursor-pointer"
@@ -183,7 +174,7 @@ export const DashboardPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         {/* CARD 1: Recents */}
-        <div className="bg-[var(--s)] border border-[var(--line)] rounded-[24px] p-6 shadow-[0_5px_25px_rgba(0,0,0,0.03)] flex flex-col justify-between animate-in fade-in slide-in-from-bottom-3 duration-500">
+        <div className="bg-gradient-to-br from-[#eef7ff] to-white dark:from-[#18283b] dark:to-[var(--s)] border border-[#d7eaff] dark:border-[#29425c] rounded-[24px] p-6 shadow-[0_5px_25px_rgba(0,0,0,0.03)] flex flex-col justify-between animate-in fade-in slide-in-from-bottom-3 duration-500">
           <div>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
@@ -258,7 +249,7 @@ export const DashboardPage: React.FC = () => {
 
         {/* CARD 2: Today's Focus */}
         <div
-          className="bg-[var(--s)] border border-[var(--line)] rounded-[24px] p-6 shadow-[0_5px_25px_rgba(0,0,0,0.03)] flex flex-col justify-between animate-in fade-in slide-in-from-bottom-3 duration-500"
+          className="bg-gradient-to-br from-[#fff8df] to-white dark:from-[#332b18] dark:to-[var(--s)] border border-[#f5e7b4] dark:border-[#5b4b27] rounded-[24px] p-6 shadow-[0_5px_25px_rgba(0,0,0,0.03)] flex flex-col justify-between animate-in fade-in slide-in-from-bottom-3 duration-500"
           style={{ animationDelay: '120ms' }}
         >
           <div>
