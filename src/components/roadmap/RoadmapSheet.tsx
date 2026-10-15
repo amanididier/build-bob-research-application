@@ -249,7 +249,7 @@ export const RoadmapSheet: React.FC<RoadmapSheetProps> = ({
     if (key) {
       try {
         const ai = new GoogleGenAI({ apiKey: key });
-        const prompt = `You are Bob's adaptive project-planning engine. Create a roadmap specific to the user's actual goal, not a generic template. Project goal: "${goalQuery || 'User project'}". Recent conversation context: "${conversationContext}". Create the first three essential milestones first, then add only the further milestones required for confident completion. Return 3–12 milestones based on complexity: 3–4 for a small clear goal, 5–8 for medium work, 9–12 for complex work. Never force a fixed count or include irrelevant engineering/deployment tasks. Make each phase project-specific, ordered, actionable, and outcome-based. If the goal is unclear, use early milestones to clarify it.
+        const prompt = `You are Bob's adaptive project-planning engine. Create a roadmap specific to the user's actual goal, not a generic template. Project goal: "${goalQuery || 'infer from recent conversation context and selected answers'}". Recent conversation context: "${conversationContext}". Create the first three essential milestones first, then add only the further milestones required for confident completion. Return 3–12 milestones based on complexity: 3–4 for a small clear goal, 5–8 for medium work, 9–12 for complex work. Never force a fixed count or include irrelevant engineering/deployment tasks. Make each phase project-specific, ordered, actionable, and outcome-based. If the goal is unclear, use early milestones to clarify it.
 User situation: "${situationText}".
 Selected tools: "${toolLabels}".
 Target cadence: "${dueDateLabel}".
