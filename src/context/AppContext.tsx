@@ -181,7 +181,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
   const [researchSubView, setResearchSubView] = useState<ResearchSubView>('chat');
   const [activeResearchId, setActiveResearchId] = useState<string>('urugendo');
-  const [isSidebarClosed, setIsSidebarClosed] = useState<boolean>(false);
+  const [isSidebarClosed, setIsSidebarClosed] = useState<boolean>(() => currentPage === 'home');
 
   // Modals
   const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
