@@ -94,10 +94,10 @@ export const RoadmapSheet: React.FC<RoadmapSheetProps> = ({
   });
 
   // Dynamic user answers shaping subsequent turns
-  const [selectedSituation, setSelectedSituation] = useState<string>('scratch');
-  const [selectedTools, setSelectedTools] = useState<string[]>(['claude_code', 'react_vite', 'chatgpt']);
-  const [selectedTimeOption, setSelectedTimeOption] = useState<string>('5–10 hours');
-  const [selectedCadence, setSelectedCadence] = useState<string>('2weeks');
+  const [selectedSituation, setSelectedSituation] = useState<string>('unspecified');
+  const [selectedTools, setSelectedTools] = useState<string[]>([]);
+  const [selectedTimeOption, setSelectedTimeOption] = useState<string>('Flexible');
+  const [selectedCadence, setSelectedCadence] = useState<string>('flexible');
   const [customToolInput, setCustomToolInput] = useState<string>('');
   const [customStepInput, setCustomStepInput] = useState<string>('');
   const [editingStepId, setEditingStepId] = useState<string | null>(null);
@@ -146,7 +146,7 @@ export const RoadmapSheet: React.FC<RoadmapSheetProps> = ({
       }
 
       // Initialize base steps for arranging
-      generateInitialSteps(query, 'scratch', ['claude_code', 'react_vite', 'chatgpt'], '2weeks');
+      generateInitialSteps(query, 'unspecified', [], 'flexible');
     };
 
     window.addEventListener('bob-open-roadmap', onOpen);
@@ -171,61 +171,53 @@ export const RoadmapSheet: React.FC<RoadmapSheetProps> = ({
 
   // Generate customized steps based on user's exact inputs
   const generateInitialSteps = (goal: string, situation: string, tools: string[], cadence: string) => {
-    const dueDateLabel = cadence === 'sprint' ? '3 Days' : cadence === 'month' ? 'Next Month' : '2 Weeks';
-    const toolNames = tools.map(t => TOOL_PILLS.find(p => p.id === t)?.label || t);
-    
-    let baseSteps: RoadmapStepItem[] = [
-      {
-        id: `s-1-${Date.now()}`,
-        phase: 'PHASE 1: FOUNDATION',
-        title: situation === 'prototype'
-          ? `Audit prototype and refactor architecture for "${goal || 'Project'}"`
-          : situation === 'unblock'
-          ? `Pinpoint core blockage and diagnose system constraints for "${goal || 'Project'}"`
-          : `Define system architecture & domain models for "${goal || 'Project'}"`,
-        why: `Establish clean boundaries and verify ${toolNames.slice(0, 2).join(' & ')} setup.`,
-        tools: tools.slice(0, 2),
-        dueDate: 'Day 1',
-        enabled: true,
-      },
-      {
-        id: `s-2-${Date.now()}`,
-        phase: 'PHASE 2: WORKBENCH PIPELINE',
-        title: `Assemble responsive UI components and interactive workflows`,
-        why: `Build fast iterations using ${toolNames.slice(0, 3).join(', ')} with instant validation.`,
-        tools: tools.slice(0, 3),
-        dueDate: dueDateLabel,
-        enabled: true,
-      },
-      {
-        id: `s-3-${Date.now()}`,
-        phase: 'PHASE 3: INTEGRATION & STORAGE',
-        title: `Connect local memory bank and persistence layer`,
-        why: 'Guarantees reliable state caching without losing user context.',
-        tools: tools,
-        dueDate: dueDateLabel,
-        enabled: true,
-      },
-      {
-        id: `s-4-${Date.now()}`,
-        phase: 'PHASE 4: VERIFICATION & AUDIT',
-        title: 'Run end-to-end user flows and verify zero errors',
-        why: 'Validates that edge cases and responsive viewports work cleanly.',
-        tools: ['Claude Code', 'Terminal'],
-        dueDate: dueDateLabel,
-        enabled: true,
-      },
-      {
-        id: `s-5-${Date.now()}`,
-        phase: 'PHASE 5: RELEASE & EXECUTION',
-        title: 'Deploy verified milestone and lock in next steps',
-        why: 'Ships the production-ready build and populates execution tasks.',
-        tools: ['Git', 'Tasks Page'],
-        dueDate: dueDateLabel,
-        enabled: true,
-      }
+    const normalizedGoal = goal.toLowerCase();
+    const dueDateLabel = cadence === 'sprint' ? '3–5 days' : cadence === 'month' ? 'Within a month' : 'When ready';
+    const isBusiness = /business|startup|customer|sell|revenue|market|company/.test(normalizedGoal);
+    const isLearning = /learn|study|skill|course|master|practice/.test(normalizedGoal);
+    const isEvent = /event|workshop|conference|trip|community|campaign/.test(normalizedGoal);
+    const isProduct = /product|launch|brand|content|service/.test(normalizedGoal);
+    const isSoftware = /app|website|software|platform|code|ai|application|tool/.test(normalizedGoal);
+    const plan = isBusiness ? [
+      ['Clarify the customer and problem', 'Describe who this is for and the problem they would pay or act to solve.'],
+      ['Test demand with a small experiment', 'Talk to potential customers and gather evidence before investing heavily.'],
+      ['Build and launch a simple offer', 'Deliver the smallest useful version and learn from real responses.'],
+      ['Review results and choose the next move', 'Use feedback and basic numbers to decide what to improve or expand.'],
+    ] : isLearning ? [
+      ['Choose a clear skill target', 'Define what you want to be able to do in practice.'],
+      ['Practice the essential foundations', 'Learn the smallest set of concepts needed to make progress.'],
+      ['Complete a real-world practice project', 'Apply the skill in a concrete piece of work.'],
+      ['Get feedback and improve', 'Review what worked, address gaps, and choose the next challenge.'],
+    ] : isEvent ? [
+      ['Define the purpose and audience', 'Decide who the event serves and what a successful outcome looks like.'],
+      ['Set the format, budget, and logistics', 'Choose a realistic size, location, timeline, and responsibilities.'],
+      ['Invite people and prepare materials', 'Promote the event and make sure participants know what to expect.'],
+      ['Run the event and capture feedback', 'Deliver the experience and record what should change next time.'],
+    ] : isProduct ? [
+      ['Define the audience and value', 'Clarify who the product serves and why they would choose it.'],
+      ['Create the smallest useful version', 'Turn the idea into something people can experience or review.'],
+      ['Test with real people and refine', 'Use feedback to improve the most important parts.'],
+      ['Launch to a focused audience', 'Release the product in a manageable way and learn from results.'],
+    ] : isSoftware ? [
+      ['Define the core user problem and first version', 'Choose the essential outcome and keep the first scope small.'],
+      ['Design and build the core experience', 'Implement only the essential flow needed to test the idea.'],
+      ['Test the experience with real scenarios', 'Fix the highest-impact issues and verify the main user journey.'],
+      ['Release a small version and learn', 'Share it with a focused group and use feedback to decide what comes next.'],
+    ] : [
+      ['Define the outcome and who it helps', 'Make the intended result concrete and easy to recognize.'],
+      ['Break the goal into the smallest useful actions', 'Choose the first actions that create evidence or visible progress.'],
+      ['Complete a first version and review it', 'Try the plan in practice and notice what needs adjustment.'],
+      ['Improve the result using feedback', 'Keep what works and adjust the next steps based on what you learn.'],
     ];
-
+    const baseSteps: RoadmapStepItem[] = plan.map(([title, why], index) => ({
+      id: `fallback-${Date.now()}-${index}`,
+      phase: `MILESTONE ${index + 1}`,
+      title,
+      why,
+      tools: tools.length ? tools.slice(0, 2) : [],
+      dueDate: index === 0 ? 'First' : dueDateLabel,
+      enabled: true,
+    }));
     setArrangedSteps(baseSteps);
   };
 
@@ -233,7 +225,7 @@ export const RoadmapSheet: React.FC<RoadmapSheetProps> = ({
   const synthesizeStepsWithAi = async (extraAnswers: string[] = adaptiveAnswers) => {
     setIsAiSynthesizing(true);
     const key = resolveGeminiApiKey();
-    const toolLabels = selectedTools.map(t => TOOL_PILLS.find(p => p.id === t)?.label || t).join(', ');
+    const toolLabels = selectedTools.map(t => TOOL_PILLS.find(p => p.id === t)?.label || t).join(', ') || 'Not specified; infer only tools that genuinely fit the goal';
     const situationMap: Record<string, string> = {
       scratch: 'Starting from scratch (blank canvas)',
       prototype: 'Refactoring existing prototype into production schema',
@@ -241,8 +233,8 @@ export const RoadmapSheet: React.FC<RoadmapSheetProps> = ({
       release: 'Finalizing, verifying test suite, and releasing',
       switch: 'Refactoring to alternative modern stack'
     };
-    const situationText = situationMap[selectedSituation] || selectedSituation;
-    const dueDateLabel = selectedCadence === 'sprint' ? '3 to 5 Days' : selectedCadence === 'month' ? '1 Month' : '2 Weeks';
+    const situationText = situationMap[selectedSituation] || 'Not specified; infer the right starting point from the goal and answers';
+    const dueDateLabel = selectedCadence === 'sprint' ? '3 to 5 Days' : selectedCadence === 'month' ? 'Within 1 Month' : 'Flexible; infer realistic timing from the scope';
 
     if (key) {
       try {
