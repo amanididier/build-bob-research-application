@@ -105,6 +105,18 @@ export const RoadmapSheet: React.FC<RoadmapSheetProps> = ({
   const [isAiSynthesizing, setIsAiSynthesizing] = useState<boolean>(false);
   const [completedMilestoneIds, setCompletedMilestoneIds] = useState<Record<string, boolean>>({});
 
+  type AdaptiveQuestion = { question: string; helperText: string; options: Array<{ label: string; description?: string; value: string }> };
+  const [adaptiveQuestion, setAdaptiveQuestion] = useState<AdaptiveQuestion>({
+    question: 'What matters most for this goal?',
+    helperText: 'Choose the closest fit. Bob will use your answer to tailor the next question.',
+    options: [
+      { label: 'Get a working first version', description: 'Focus on the essentials first', value: 'working first version' },
+      { label: 'Validate the idea', description: 'Learn what is worth building', value: 'validate the idea' },
+      { label: 'Improve something existing', description: 'Build on what already exists', value: 'improve an existing solution' },
+    ],
+  });
+  const [adaptiveAnswers, setAdaptiveAnswers] = useState<string[]>([]);
+
   // Dynamically generated steps that the user can arrange
   const [arrangedSteps, setArrangedSteps] = useState<RoadmapStepItem[]>([]);
 
@@ -218,7 +230,7 @@ export const RoadmapSheet: React.FC<RoadmapSheetProps> = ({
   };
 
   // AI-powered step synthesis using Gemini (or fallback heuristic)
-  const synthesizeStepsWithAi = async () => {
+  const synthesizeStepsWithAi = async (extraAnswers: string[] = adaptiveAnswers) => {
     setIsAiSynthesizing(true);
     const key = resolveGeminiApiKey();
     const toolLabels = selectedTools.map(t => TOOL_PILLS.find(p => p.id === t)?.label || t).join(', ');
@@ -240,6 +252,8 @@ User situation: "${situationText}".
 Selected tools: "${toolLabels}".
 Target cadence: "${dueDateLabel}".
 Weekly commitment: "${selectedTimeOption}".
+Additional answers collected from the user's previous roadmap pages: ${JSON.stringify(extraAnswers)}.
+Use these answers to customize milestone names, order, scope, and tools. Do not add unrelated generic software tasks unless the goal actually requires them.
 
 Output strict JSON array with this exact structure:
 [
@@ -287,6 +301,71 @@ No markdown codeblocks or prose, only valid JSON array.`;
   };
 
   // Reordering steps (Arrange steps up / down)
+  const generateAdaptiveQuestion = async (questionNumber: number, answers: string[]) => {
+    const key = resolveGeminiApiKey();
+    const fallbackQuestions: AdaptiveQuestion[] = [
+      {
+        question: 'What matters most for this goal?',
+        helperText: 'Pick the outcome that best matches what you want to achieve first.',
+        options: [
+          { label: 'Get a working first version', description: 'Focus on the essentials first', value: 'working first version' },
+          { label: 'Validate the idea', description: 'Learn what is worth building', value: 'validate the idea' },
+          { label: 'Improve something existing', description: 'Build on what already exists', value: 'improve an existing solution' },
+          { label: 'Prepare to launch', description: 'Polish and release confidently', value: 'prepare to launch' },
+        ],
+      },
+      {
+        question: 'What is the biggest constraint right now?',
+        helperText: 'This helps Bob keep the plan realistic for your situation.',
+        options: [
+          { label: 'Time', description: 'I need a focused, achievable plan', value: 'limited time' },
+          { label: 'Budget or resources', description: 'Use what is available to me', value: 'limited budget or resources' },
+          { label: 'Knowing what to do', description: 'I need clarity and direction', value: 'unclear next steps' },
+          { label: 'Technical or practical blockers', description: 'I know the goal but need help executing', value: 'execution blockers' },
+        ],
+      },
+    ];
+    if (!key) {
+      setAdaptiveQuestion(fallbackQuestions[Math.min(questionNumber - 1, fallbackQuestions.length - 1)]);
+      return;
+    }
+    try {
+      const ai = new GoogleGenAI({ apiKey: key });
+      const prompt = `You are Bob's adaptive project discovery assistant. The goal is: "${goalQuery || 'the user has not specified a detailed goal'}". Previous answers: ${JSON.stringify(answers)}. Generate the next concise multiple-choice question for roadmap discovery (question ${questionNumber + 1} of 3). Ask only about a meaningful unknown not already answered, and make the options specific to this goal and prior answers. Do not ask the user to type. Return strict JSON only: {"question":"...","helperText":"...","options":[{"label":"short choice","description":"brief explanation","value":"meaningful value"}]}. Include 3–5 distinct options.`;
+      const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+      const cleaned = (response.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(cleaned);
+      if (typeof parsed.question === 'string' && Array.isArray(parsed.options) && parsed.options.length >= 3) {
+        setAdaptiveQuestion({
+          question: parsed.question,
+          helperText: typeof parsed.helperText === 'string' ? parsed.helperText : 'Choose the option that best fits your situation.',
+          options: parsed.options.slice(0, 5).map((option: any) => ({
+            label: String(option.label || option.value || 'Option'),
+            description: typeof option.description === 'string' ? option.description : '',
+            value: String(option.value || option.label || 'Option'),
+          })),
+        });
+        return;
+      }
+    } catch (error) {
+      console.warn('Adaptive roadmap question fallback:', error);
+    }
+    setAdaptiveQuestion(fallbackQuestions[Math.min(questionNumber - 1, fallbackQuestions.length - 1)]);
+  };
+
+  const handleAdaptiveChoice = (option: AdaptiveQuestion['options'][number]) => {
+    const answer = `${adaptiveQuestion.question}: ${option.value}`;
+    const nextAnswers = [...adaptiveAnswers, answer];
+    setAdaptiveAnswers(nextAnswers);
+    if (stepIndex === 2) {
+      void generateAdaptiveQuestion(2, nextAnswers);
+      setStepIndex(3);
+      return;
+    }
+    void synthesizeStepsWithAi(nextAnswers);
+    setStepIndex(5);
+  };
+
   const moveStep = (index: number, direction: 'up' | 'down') => {
     const target = direction === 'up' ? index - 1 : index + 1;
     if (target < 0 || target >= arrangedSteps.length) return;
@@ -361,12 +440,14 @@ Due Date: ${s.dueDate}
 
   if (!open) return null;
 
-  const totalQuestionSteps = 5; // Steps 1 to 5
+  const totalQuestionSteps = 3; // Goal plus two Gemini-adaptive multiple-choice pages
 
   const handleNext = () => {
-    if (stepIndex === 4) {
-      // Transitioning to Step 5 (Arrange Steps): synthesize tailored steps based on previous answers
-      void synthesizeStepsWithAi();
+    if (stepIndex === 1) {
+      setAdaptiveAnswers([]);
+      void generateAdaptiveQuestion(1, []);
+      setStepIndex(2);
+      return;
     }
     if (stepIndex < 6) {
       setStepIndex(prev => prev + 1);
@@ -376,7 +457,9 @@ Due Date: ${s.dueDate}
   };
 
   const handleBack = () => {
-    if (stepIndex > 0) {
+    if (stepIndex === 5) {
+      setStepIndex(3);
+    } else if (stepIndex > 0) {
       setStepIndex(prev => prev - 1);
     } else {
       handleClose();
@@ -597,7 +680,7 @@ Due Date: ${s.dueDate}
       </header>
 
       {/* Segmented Wizard Progress across top when on question steps */}
-      {stepIndex > 0 && stepIndex <= 5 && (
+      {stepIndex > 0 && stepIndex <= 3 && (
         <div className="w-full flex gap-1 px-6 sm:px-12 pt-2 shrink-0">
           {[1, 2, 3, 4, 5].map((s) => (
             <span
@@ -781,147 +864,40 @@ Due Date: ${s.dueDate}
             </div>
           )}
 
-          {/* STEP 2: Question 2 - Starting Point / Situation (Cards with Peach, Mint, Lilac blocks) */}
-          {stepIndex === 2 && (
-            <div className="space-y-6">
-              <div className="space-y-1.5">
-                <span className="text-xs font-mono tracking-[0.16em] uppercase font-bold text-[var(--peach)]">
-                  YOUR STARTING POINT
-                </span>
-                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-                  Where are you right now?
-                </h1>
-                <p className={`text-sm ${isDark ? 'text-[#8A8175]' : 'text-[#6B6358]'}`}>
-                  There’s no right place to start. Just your place.
-                </p>
-              </div>
-
-              <div className="space-y-3">
-                {[
-                  { id: 'scratch', title: 'Just a spark of an idea (Starting from blank canvas)', color: 'peach' },
-                  { id: 'prototype', title: 'I’m shaping the concept (Have an initial prototype)', color: 'mint' },
-                  { id: 'unblock', title: 'Mid-flight: need to unblock bottlenecks and clarify steps', color: 'lilac' },
-                  { id: 'release', title: 'Ready to finalize, verify test suites, and launch', color: 'peach' }
-                ].map((item, i) => {
-                  const isSelected = selectedSituation === item.id;
-                  const colorClass = item.color === 'peach' ? 'bg-[var(--peach-bg)] text-[var(--peach)]' : item.color === 'mint' ? 'bg-[var(--mint-bg)] text-[var(--mint)]' : 'bg-[var(--lilac-bg)] text-[var(--lilac)]';
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => handleSelectSituation(item.id)}
-                      className={`w-full p-4 rounded-2xl border text-left transition-all flex items-center justify-between cursor-pointer ${
-                        isSelected
-                          ? 'border-[var(--y)] ring-2 ring-[var(--y)]/25 ' + (isDark ? 'bg-[#1C1A14]' : 'bg-[#FFFDF7]')
-                          : (isDark ? 'bg-[#14120D] hover:bg-[#1A1813] border-[#2A2620]' : 'bg-white hover:bg-[#FAF6EC] border-[#E7E0D3]')
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className={`w-9 h-9 rounded-xl grid place-items-center text-xs font-mono font-bold shrink-0 ${colorClass}`}>
-                          {String(i + 1).padStart(2, '0')}
-                        </span>
-                        <span className={`text-sm font-bold ${
-                          isSelected ? (isDark ? 'text-white' : 'text-neutral-900') : (isDark ? 'text-[#D0C8B8]' : 'text-[#2D2820]')
-                        }`}>
-                          {item.title}
-                        </span>
-                      </div>
-                      <div className={`w-5 h-5 rounded-full border grid place-items-center shrink-0 ml-3 ${
-                        isSelected ? 'bg-[var(--y)] border-[var(--y)] text-[#171717]' : (isDark ? 'border-[#3D372E]' : 'border-[#D5CDBD]')
-                      }`}>
-                        {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="flex items-center justify-between pt-4 border-t border-[var(--line)]">
-                <span className="text-xs text-[#8A8175]">Choose your starting stage.</span>
-                <button
-                  type="button"
-                  onClick={handleNext}
-                  className="px-6 py-2.5 rounded-xl bg-[var(--y)] hover:bg-[#e0ac15] text-[#171717] font-bold text-xs flex items-center gap-2 cursor-pointer transition-all active:scale-95"
-                >
-                  <span>Continue</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 3: Question 3 - Workbench & Tools (Multi-Select Pills + Custom Input) */}
-          {stepIndex === 3 && (
+          {/* GEMINI-ADAPTIVE QUESTION PAGES: each answer determines the next question. */}
+          {(stepIndex === 2 || stepIndex === 3) && (
             <div className="space-y-6">
               <div className="space-y-1.5">
                 <span className="text-xs font-mono tracking-[0.16em] uppercase font-bold text-[var(--mint)]">
-                  YOUR WORKBENCH & INTERESTS
+                  {stepIndex === 2 ? 'DISCOVERING YOUR PRIORITIES' : 'TAILORING YOUR PLAN'}
                 </span>
-                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-                  What will you use to build it?
-                </h1>
-                <p className={`text-sm ${isDark ? 'text-[#8A8175]' : 'text-[#6B6358]'}`}>
-                  Choose whatever you want in your stack. Each adds specialized prompts and actions to your steps.
-                </p>
+                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">{adaptiveQuestion.question}</h1>
+                <p className={`text-sm ${isDark ? 'text-[#8A8175]' : 'text-[#6B6358]'}`}>{adaptiveQuestion.helperText}</p>
               </div>
-
-              {/* Multi-Select Option Pills */}
-              <div className="flex flex-wrap gap-2.5">
-                {TOOL_PILLS.map((tool) => {
-                  const isSelected = selectedTools.includes(tool.id);
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {adaptiveQuestion.options.map((option, index) => {
+                  const colors = [
+                    'bg-[#eaf4ff] border-[#cfe4ff] dark:bg-[#18283b] dark:border-[#29425c]',
+                    'bg-[#fff4d5] border-[#f1dfaa] dark:bg-[#332b18] dark:border-[#5b4b27]',
+                    'bg-[#e9f8ef] border-[#ccebd8] dark:bg-[#172d23] dark:border-[#2d5941]',
+                    'bg-[#f0ebff] border-[#ddd2ff] dark:bg-[#251f39] dark:border-[#45356d]',
+                    'bg-[#ffece5] border-[#f7d2c3] dark:bg-[#38231e] dark:border-[#694032]',
+                  ];
                   return (
-                    <button
-                      key={tool.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedTools(prev => 
-                          prev.includes(tool.id) 
-                            ? prev.filter(t => t !== tool.id) 
-                            : [...prev, tool.id]
-                        );
-                      }}
-                      className={`px-4 py-2 rounded-full border text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
-                        isSelected
-                          ? 'border-[var(--y)] bg-[var(--y)]/15 text-[var(--y)] font-bold'
-                          : isDark ? 'bg-[#14120D] border-[#2A2620] text-[#C5BCAC] hover:bg-[#1C1A14]' : 'bg-white border-[#E7E0D3] text-[#3E382F] hover:bg-[#FAF6EC]'
-                      }`}
-                    >
-                      <span>{tool.label}</span>
-                      {isSelected ? <Check className="w-3.5 h-3.5" /> : <span className="text-neutral-400 font-bold">+</span>}
+                    <button key={option.value} type="button" onClick={() => handleAdaptiveChoice(option)}
+                      className={`rounded-2xl border p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-md ${colors[index % colors.length]}`}>
+                      <span className="flex items-center justify-between gap-2 text-sm font-bold text-[var(--t)]">
+                        {option.label}<ArrowRight className="w-4 h-4 shrink-0" />
+                      </span>
+                      {option.description && <span className="block mt-1.5 text-xs leading-relaxed text-[var(--m)]">{option.description}</span>}
                     </button>
                   );
                 })}
               </div>
-
-              {/* Add Custom Tool Input from roadmap-refined */}
-              <div className="pt-2">
-                <input
-                  type="text"
-                  value={customToolInput}
-                  onChange={(e) => setCustomToolInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && customToolInput.trim()) {
-                      e.preventDefault();
-                      setSelectedTools(prev => [...new Set([...prev, customToolInput.trim()])]);
-                      setCustomToolInput('');
-                    }
-                  }}
-                  placeholder="+ Something else in mind? Add it here (press enter)"
-                  className={`w-full px-4 py-3 rounded-xl border text-xs outline-none focus:border-[var(--y)] ${
-                    isDark ? 'bg-[#14120D] border-[#2A2620] text-white placeholder-[#686154]' : 'bg-white border-[#E7E0D3] text-neutral-900 placeholder-[#9C9385]'
-                  }`}
-                />
-              </div>
-
               <div className="flex items-center justify-between pt-4 border-t border-[var(--line)]">
-                <span className="text-xs text-[#8A8175]">Choose as many as you like.</span>
-                <button
-                  type="button"
-                  onClick={handleNext}
-                  className="px-6 py-2.5 rounded-xl bg-[var(--y)] hover:bg-[#e0ac15] text-[#171717] font-bold text-xs flex items-center gap-2 cursor-pointer transition-all active:scale-95"
-                >
-                  <span>Continue</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
+                <span className="text-xs text-[#8A8175]">Question {stepIndex} of 3 · Your answers shape the next page</span>
+                <button type="button" onClick={handleBack} className={`px-4 py-2.5 rounded-xl border text-xs font-semibold ${isDark ? 'border-[#2A2620] text-[#8A8175]' : 'border-[#E7E0D3] text-[#6B6358]'}`}>
+                  Back
                 </button>
               </div>
             </div>
