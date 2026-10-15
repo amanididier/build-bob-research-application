@@ -228,6 +228,25 @@ export const SettingsPage: React.FC = () => {
     }
   };
 
+  const handleDownloadUpdate = async () => {
+    const bob = typeof window !== 'undefined' ? (window as any).bob : null;
+    if (!bob?.downloadUpdate) {
+      window.open('https://github.com/amanididier/build-bob-research-application/releases/latest', '_blank', 'noopener,noreferrer');
+      return;
+    }
+    setUpdaterState((prev) => ({ ...prev, status: 'downloading', percent: 0, message: 'Downloading the update securely…' }));
+    try {
+      const result = await bob.downloadUpdate();
+      if (result?.status === 'error') {
+        setUpdaterState({ status: 'error', version: updaterState.version, message: result.message || 'The update download failed.' });
+      } else if (result?.status) {
+        setUpdaterState((prev) => ({ ...prev, ...result, status: result.status === 'downloading' ? 'downloading' : result.status }));
+      }
+    } catch (err: any) {
+      setUpdaterState({ status: 'error', version: updaterState.version, message: err?.message || 'The update download failed.' });
+    }
+  };
+
   const handleInstallUpdate = async () => {
     setUpdaterState((prev) => ({ ...prev, message: 'Restarting Bob to finish update…' }));
     if (typeof window !== 'undefined' && (window as any).bob?.installUpdate) {
@@ -371,10 +390,10 @@ export const SettingsPage: React.FC = () => {
                     <RefreshCw className={`h-4 w-4 ${updaterState.status === 'checking' ? 'animate-spin' : ''}`} />
                     {updaterState.status === 'checking' ? 'Checking…' : 'Check for updates'}
                   </button>
-                  {(updaterState.status === 'available' || updaterState.status === 'ready') && (
-                    <a href="https://github.com/amanididier/build-bob-research-application/releases/latest" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-[#3474db] px-5 py-3 text-[12px] font-bold text-white hover:bg-[#245fc0]">
-                      <Download className="h-4 w-4" /> Get v{updaterState.version}
-                    </a>
+                  {updaterState.status === 'available' && (
+                    typeof window !== 'undefined' && (window as any).bob?.downloadUpdate
+                      ? <button onClick={handleDownloadUpdate} className="inline-flex items-center gap-2 rounded-xl bg-[#3474db] px-5 py-3 text-[12px] font-bold text-white hover:bg-[#245fc0]"><Download className="h-4 w-4" /> Download v{updaterState.version}</button>
+                      : <a href="https://github.com/amanididier/build-bob-research-application/releases/latest" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-[#3474db] px-5 py-3 text-[12px] font-bold text-white hover:bg-[#245fc0]"><Download className="h-4 w-4" /> Get v{updaterState.version}</a>
                   )}
                   {updaterState.status === 'ready' && (
                     <button onClick={handleInstallUpdate} className="rounded-xl border border-[var(--line)] px-4 py-3 text-[12px] font-bold text-[var(--t)]">Restart to update</button>
