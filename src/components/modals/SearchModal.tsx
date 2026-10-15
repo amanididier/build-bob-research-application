@@ -3,51 +3,28 @@ import { useApp } from '../../context/AppContext';
 import { Search, Sparkles, BookOpen, CheckSquare, Target, X } from 'lucide-react';
 
 export const SearchModal: React.FC = () => {
-  const { isSearchOpen, setIsSearchOpen, navigateTo } = useApp();
+  const { isSearchOpen, setIsSearchOpen, navigateTo, projects, tasks } = useApp();
   const [query, setQuery] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Search real workspace data instead of placeholder roadmap/project entries.
   const searchItems = [
-    {
-      title: 'AI research companion',
-      sub: '12 tabs · 3 AI conversations',
+    ...projects.map((project) => ({
+      title: project.title,
+      sub: `${project.sourceCount} sources · `${project.openTasks} open tasks`,
       icon: '✦',
       page: 'research' as const,
       subView: 'chat' as const,
-      projId: 'ai-companion',
-    },
-    {
-      title: 'Urugendo transport study',
-      sub: '9 sources · summary ready',
-      icon: '↗',
-      page: 'research' as const,
-      subView: 'summary' as const,
-      projId: 'urugendo',
-    },
-    {
-      title: 'Validate the core problem',
-      sub: 'Task · due today',
-      icon: '✓',
+      projId: project.id,
+    })),
+    ...tasks.map((task) => ({
+      title: task.title,
+      sub: `Task · `${task.completed ? 'completed' : (task.dueDate || 'no due date')}`,
+      icon: task.completed ? '✓' : '○',
       page: 'tasks' as const,
       subView: undefined,
-      projId: undefined,
-    },
-    {
-      title: 'Bob AI startup study',
-      sub: '7 sources · 2 open tasks',
-      icon: '◌',
-      page: 'research' as const,
-      subView: 'chat' as const,
-      projId: 'bob-startup',
-    },
-    {
-      title: 'Competitive research & market signals',
-      sub: 'Goal · 42% complete',
-      icon: '◎',
-      page: 'home' as const,
-      subView: undefined,
-      projId: undefined,
-    },
+      projId: task.projectId,
+    })),
   ];
 
   useEffect(() => {
