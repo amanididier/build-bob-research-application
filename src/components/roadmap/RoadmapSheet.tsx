@@ -354,7 +354,7 @@ No markdown codeblocks or prose, only valid JSON array.`;
           return JSON.stringify({ profile, explicitlySharedPreferences: Array.isArray(interests) ? interests.slice(-12) : [] });
         } catch { return 'No saved profile context'; }
       })();
-      const prompt = `You are Bob's adaptive project discovery assistant. The user's goal is: "${goalQuery || 'not fully defined yet'}". Recent conversation context: "${conversationContext}". Saved user profile and explicitly shared interests: ${profileContext}. Previous answers: ${JSON.stringify(answers)}. Generate the next of exactly THREE adaptive discovery questions (question ${questionNumber} of 3). Ask only about an important unknown that the goal and previous answers have not resolved. Make every option specific and useful for this particular goal, not generic boilerplate. The user must be able to answer by selecting a card; do not require typing. Choose the most useful UI layout for this question from cards, pills, or timeline; vary the layout when it improves clarity. Return strict JSON only: {"question":"...","helperText":"...","layout":"cards|pills|timeline","options":[{"label":"short choice","description":"brief explanation","value":"meaningful value"}]}. Include 3–5 distinct options.`;
+      const prompt = `You are Bob's adaptive project discovery assistant. The user's goal is: "${goalQuery || 'not fully defined yet'}". Recent conversation context: "${conversationContext}". Saved user profile and explicitly shared interests: ${profileContext}. Previous answers: ${JSON.stringify(answers)}. Generate question ${questionNumber} of up to five adaptive questions. The default path should finish after three answers; ask a fourth or fifth only when important information remains missing. Ask one distinct question not already answered. Ask only about an important unknown that the goal and previous answers have not resolved. Make every option specific and useful for this particular goal, not generic boilerplate. The user must be able to answer by selecting a card; do not require typing. Choose the most useful UI layout for this question from cards, pills, or timeline; vary the layout when it improves clarity. Return strict JSON only: {"question":"...","helperText":"...","layout":"cards|pills|timeline","options":[{"label":"short choice","description":"brief explanation","value":"meaningful value"}]}. Include 3–5 distinct options.`;
       const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
       const cleaned = (response.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
       const parsed = JSON.parse(cleaned);
@@ -414,10 +414,10 @@ No markdown codeblocks or prose, only valid JSON array.`;
         if (askMore) {
           void generateAdaptiveQuestion(nextAnswers.length + 1, nextAnswers);
         } else {
+          setIsGeneratingAdaptiveQuestion(false);
           void synthesizeStepsWithAi(nextAnswers);
           setStepIndex(5);
         }
-        setIsGeneratingAdaptiveQuestion(false);
       });
       return;
     }
