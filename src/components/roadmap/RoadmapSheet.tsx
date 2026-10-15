@@ -136,7 +136,7 @@ export const RoadmapSheet: React.FC<RoadmapSheetProps> = ({
     const onOpen = (e: any) => {
       setInternalOpen(true);
       setStepIndex(0);
-      const query = e?.detail?.title || initialGoal || activeProject?.title || 'Project Roadmap';
+      const query = e?.detail?.title || initialGoal || '';
       setGoalQuery(query);
       if (e?.detail?.origin) {
         setOriginSource(e.detail.origin);
@@ -326,7 +326,7 @@ No markdown codeblocks or prose, only valid JSON array.`;
     }
     try {
       const ai = new GoogleGenAI({ apiKey: key });
-      const prompt = `You are Bob's adaptive project discovery assistant. The goal is: "${goalQuery || 'the user has not specified a detailed goal'}". Previous answers: ${JSON.stringify(answers)}. Generate the next concise multiple-choice question for roadmap discovery (question ${questionNumber + 1} of 3). Ask only about a meaningful unknown not already answered, and make the options specific to this goal and prior answers. Do not ask the user to type. Return strict JSON only: {"question":"...","helperText":"...","options":[{"label":"short choice","description":"brief explanation","value":"meaningful value"}]}. Include 3–5 distinct options.`;
+      const prompt = `You are Bob's adaptive project discovery assistant. The user's goal is: "${goalQuery || 'not fully defined yet'}". Previous answers: ${JSON.stringify(answers)}. Generate the next of exactly TWO adaptive multiple-choice discovery questions (question ${questionNumber} of 2). Ask only about an important unknown that the goal and previous answers have not resolved. Make every option specific and useful for this particular goal, not generic boilerplate. The user must be able to answer by selecting a card; do not require typing. Return strict JSON only: {"question":"...","helperText":"...","options":[{"label":"short choice","description":"brief explanation","value":"meaningful value"}]}. Include 3–5 distinct options.`;
       const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
       const cleaned = (response.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
       const parsed = JSON.parse(cleaned);
