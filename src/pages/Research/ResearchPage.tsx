@@ -34,7 +34,7 @@ export const ResearchPage: React.FC = () => {
   useEffect(() => setDismissedPlanFor(null), [activeResearchId]);
   const recentConversation = messages.slice(-8);
   const recentUserText = recentConversation.filter((message) => message.role === 'user').map((message) => message.text).join(' ');
-  const planSignal = /\\b(build|create|prepare|exam|deadline|study plan|launch|project|goal|practice|organize|learn|essay|assignment|business|app|website|finish|improve|deliver|research plan)\\b/i.test(recentUserText);
+  const planSignal = /\b(build|create|prepare|exam|deadline|study plan|launch|project|goal|practice|organize|learn|essay|assignment|business|app|website|finish|improve|deliver|research plan)\b/i.test(recentUserText);
   const showPlanSuggestion = recentConversation.length >= 4 && planSignal && dismissedPlanFor !== activeResearchId;
 
   const handleSubtopicSend = () => {
