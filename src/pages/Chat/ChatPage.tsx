@@ -160,7 +160,17 @@ Do not make the conversation about yourself. Do not bring up projects, tasks, re
 
         const response = await ai.models.generateContent({
           model: 'gemini-2.5-flash',
-          contents: `${systemPrompt}\n\nUser: "${userInput}"\nBob:`,
+          contents: [
+            ...messages.slice(-12).map((message) => ({
+              role: message.role === 'bob' ? 'model' : 'user',
+              parts: [{ text: message.text }],
+            })),
+            { role: 'user', parts: [{ text: userInput }] },
+          ],
+          config: {
+            systemInstruction: `${systemPrompt}\nKeep each reply to at most two short visual lines unless the user explicitly asks for a detailed explanation. Vary your replies naturally, remember details from this conversation, and ask occasional light questions about interests, music, films, hobbies, people they admire, or how their day is going when it feels relevant. Do not invent personal facts or claim to save long-term memory unless a memory feature actually stores them.`,
+            maxOutputTokens: 180,
+          },
         });
 
         if (response.text && response.text.trim()) {
@@ -187,7 +197,7 @@ Do not make the conversation about yourself. Do not bring up projects, tasks, re
       return `That's awesome! Checking things off feels great. Ready to kick back for a bit or letting new ideas simmer?`;
     }
 
-    return intervalReminder || `Always nice catching up casually! ${randomFollowup}`;
+    return `I’m here for a chat 🙂 ${randomFollowup}`;
   };
 
   const handleSend = async (textToSend?: string) => {
