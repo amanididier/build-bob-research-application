@@ -164,22 +164,13 @@ export const ChatPage: React.FC = () => {
       return `Sure thing! Let's build your step-by-step roadmap right now. Launching the full roadmap view for you...`;
     }
 
-    // Interval reminder: only gently mention research / steps after ~10 casual turns
-    let intervalReminder = '';
-    if (nextTurn > 0 && nextTurn % 10 === 0) {
-      intervalReminder = `By the way, whenever you're ready to pick up where you left off on ${activeProject?.title || 'your project'}, we have your tasks organized. No rush at all though!`;
-    }
-
     if (key) {
       try {
         const ai = new GoogleGenAI({ apiKey: key });
-        const systemPrompt = `You are Bob, a warm, relaxed, and thoughtful friend chatting with ${userName || 'your buddy'} on WhatsApp.
-CRITICAL RULES:
-1. Speak casually, warmly, concisely (1 to 2 short sentences max, as if typing on WhatsApp or Instagram).
-2. DO NOT give research essays, bullet points, corporate frameworks, or formal lectures.
-3. Chat about casual life, coffee, music, relaxing, or how their day is going.
-4. Sometimes ask a gentle follow-up question (e.g. how a recent step went, if they took a break, or how they feel).
-5. Only if asked about project roadmaps, suggest building one.`;
+        const systemPrompt = `You are Bob, a warm, capable conversational AI companion speaking directly with ${userName || 'the user'}.
+Help with whatever the user wants to discuss: everyday life, ideas, learning, creativity, decisions, emotions, technology, or practical questions.
+Be natural, user-focused, concise by default (usually 1–3 short sentences), and expand when the user asks for depth.
+Do not make the conversation about yourself. Do not bring up projects, tasks, research sessions, or roadmaps unless the user explicitly asks or the current message clearly concerns them. Ask at most one useful follow-up question when needed. Never insert scheduled project reminders.`;
 
         const response = await ai.models.generateContent({
           model: 'gemini-2.5-flash',
@@ -187,8 +178,7 @@ CRITICAL RULES:
         });
 
         if (response.text && response.text.trim()) {
-          const reply = response.text.trim();
-          return intervalReminder ? `${reply} ${intervalReminder}` : reply;
+          return response.text.trim();
         }
       } catch (err) {
         console.warn('Gemini casual chat fallback:', err);
@@ -258,10 +248,10 @@ CRITICAL RULES:
 
   return (
     // Clean edge-to-edge WhatsApp Container with full 100% dot pattern background covering the entire page
-    <div className="w-full h-full flex flex-col relative select-text bg-[#efeae2] dark:bg-[#0b141a] [background-image:radial-gradient(circle_at_1px_1px,rgba(0,0,0,0.07)_1.5px,transparent_0)] dark:[background-image:radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.06)_1.5px,transparent_0)] [background-size:20px_20px] overflow-hidden">
+    <div className="w-full h-full flex flex-col relative select-text bg-[#f8faff] dark:bg-[#10131b] [background-image:radial-gradient(circle_at_1px_1px,rgba(59,130,246,0.07)_1px,transparent_0)] dark:[background-image:radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.045)_1px,transparent_0)] [background-size:22px_22px] overflow-hidden">
       
       {/* 1. Authentic WhatsApp Top Bar (Spans 100% width, no double borders) */}
-      <header className="w-full h-15 px-4 sm:px-6 bg-[#f0f2f5] dark:bg-[#202c33] border-b border-black/5 dark:border-white/5 flex items-center justify-between gap-3 shrink-0 z-10 shadow-xs">
+      <header className="w-full h-15 px-4 sm:px-6 bg-white dark:bg-[#171b25] border-b border-black/5 dark:border-white/5 flex items-center justify-between gap-3 shrink-0 z-10 shadow-xs">
         <div className="flex items-center gap-3 min-w-0">
           {/* Toggle sidebar button */}
           <button
@@ -280,15 +270,15 @@ CRITICAL RULES:
               alt="Bob" 
               className="w-10 h-10 rounded-full object-cover ring-1 ring-black/10 dark:ring-white/10 shadow-sm" 
             />
-            <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[#f0f2f5] dark:border-[#202c33]" />
+            <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-[#f5c842] border-2 border-white dark:border-[#171b25]" />
           </div>
 
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] truncate m-0">
+              <h2 className="text-sm font-bold text-[#172033] dark:text-[#f2f6ff] truncate m-0">
                 Bob
               </h2>
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-[#b88b00] dark:text-[#f5c842]">
                 Companion
               </span>
             </div>
@@ -350,8 +340,8 @@ CRITICAL RULES:
       >
         {/* Subtle WhatsApp-style Security & Casual Notice Pill */}
         <div className="flex justify-center my-3">
-          <div className="px-3.5 py-1.5 rounded-lg bg-[#ffeecd] dark:bg-[#182229] border border-amber-500/20 shadow-xs text-center max-w-md">
-            <span className="text-[11px] text-[#725e24] dark:text-[#ffd279] font-medium leading-relaxed block">
+          <div className="px-3.5 py-1.5 rounded-lg bg-[#fff7d8] dark:bg-[#292516] border border-[#f5c842]/30 shadow-xs text-center max-w-md">
+            <span className="text-[11px] text-[#765d08] dark:text-[#f5d56b] font-medium leading-relaxed block">
               ☕ Casual Chat Lounge · Bob is here to unwind and chat casually with you without technical project pressure.
             </span>
           </div>
@@ -376,8 +366,8 @@ CRITICAL RULES:
                 <div
                   className={`relative max-w-[85%] sm:max-w-[70%] px-3.5 py-2 rounded-2xl shadow-xs ${
                     isUser
-                      ? 'bg-[#d9fdd3] dark:bg-[#005c4b] text-[#111b21] dark:text-[#e9edef] rounded-tr-xs'
-                      : 'bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] rounded-tl-xs'
+                      ? 'bg-[#e8f1ff] dark:bg-[#243a5d] text-[#172033] dark:text-[#f2f6ff] rounded-tr-xs'
+                      : 'bg-white dark:bg-[#1b202b] text-[#172033] dark:text-[#f2f6ff] rounded-tl-xs border border-[#e7edf5] dark:border-white/5'
                   }`}
                 >
                   <p className="text-[13.5px] leading-relaxed m-0 whitespace-pre-wrap select-text">
@@ -405,11 +395,11 @@ CRITICAL RULES:
         {/* WhatsApp Typing Bubble */}
         {isBobTyping && (
           <div className="flex justify-start animate-in fade-in duration-150">
-            <div className="px-4 py-2.5 rounded-2xl rounded-tl-xs bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] shadow-xs flex items-center gap-1.5">
+            <div className="px-4 py-2.5 rounded-2xl rounded-tl-xs bg-white dark:bg-[#202c33] text-[#172033] dark:text-[#f2f6ff] shadow-xs flex items-center gap-1.5">
               {[0, 150, 300].map((d) => (
                 <span
                   key={d}
-                  className="w-2 h-2 rounded-full bg-emerald-500 animate-bounce"
+                  className="w-2 h-2 rounded-full bg-[#4f83e3] animate-bounce"
                   style={{ animationDelay: `${d}ms` }}
                 />
               ))}
@@ -424,14 +414,14 @@ CRITICAL RULES:
         <button
           type="button"
           onClick={() => handleSend("Taking a quick coffee break!")}
-          className="px-3 py-1 rounded-full bg-white/70 dark:bg-[#202c33]/70 hover:bg-amber-400 hover:text-black border border-black/5 dark:border-white/5 text-[11px] font-medium text-[#111b21] dark:text-[#e9edef] transition-colors shrink-0 shadow-2xs cursor-pointer"
+          className="px-3 py-1 rounded-full bg-white dark:bg-[#1b202b] hover:bg-[#f5c842] hover:text-[#171717] border border-black/5 dark:border-white/5 text-[11px] font-medium text-[#172033] dark:text-[#f2f6ff] transition-colors shrink-0 shadow-2xs cursor-pointer"
         >
           ☕ Coffee break
         </button>
         <button
           type="button"
           onClick={() => handleSend("Hey Bob, how did that step I worked on sound to you?")}
-          className="px-3 py-1 rounded-full bg-white/70 dark:bg-[#202c33]/70 hover:bg-amber-400 hover:text-black border border-black/5 dark:border-white/5 text-[11px] font-medium text-[#111b21] dark:text-[#e9edef] transition-colors shrink-0 shadow-2xs cursor-pointer"
+          className="px-3 py-1 rounded-full bg-white dark:bg-[#1b202b] hover:bg-[#f5c842] hover:text-[#171717] border border-black/5 dark:border-white/5 text-[11px] font-medium text-[#172033] dark:text-[#f2f6ff] transition-colors shrink-0 shadow-2xs cursor-pointer"
         >
           ✨ Ask about my step
         </button>
@@ -441,14 +431,14 @@ CRITICAL RULES:
             setRoadmapGoal(activeProject?.title || 'Project Roadmap');
             setIsRoadmapActive(true);
           }}
-          className="px-3 py-1 rounded-full bg-white/70 dark:bg-[#202c33]/70 hover:bg-[var(--y)] hover:text-black border border-black/5 dark:border-white/5 text-[11px] font-medium text-[#111b21] dark:text-[#e9edef] transition-colors shrink-0 shadow-2xs cursor-pointer"
+          className="px-3 py-1 rounded-full bg-white dark:bg-[#1b202b] hover:bg-[var(--y)] hover:text-black border border-black/5 dark:border-white/5 text-[11px] font-medium text-[#172033] dark:text-[#f2f6ff] transition-colors shrink-0 shadow-2xs cursor-pointer"
         >
           🧭 Launch Roadmap
         </button>
       </div>
 
       {/* 4. Authentic WhatsApp Bottom Composer */}
-      <footer className="w-full px-4 sm:px-12 md:px-24 py-3 bg-[#f0f2f5] dark:bg-[#202c33] border-t border-black/5 dark:border-white/5 flex items-center gap-2 shrink-0 z-10">
+      <footer className="w-full px-4 sm:px-12 md:px-24 py-3 bg-white dark:bg-[#171b25] border-t border-black/5 dark:border-white/5 flex items-center gap-2 shrink-0 z-10">
         <button
           type="button"
           onClick={() => handleSend("😊")}
@@ -478,7 +468,7 @@ CRITICAL RULES:
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder="Type a casual message…"
-            className="flex-1 h-10 px-4 rounded-lg bg-white dark:bg-[#2a3942] border-none text-[13.5px] text-[#111b21] dark:text-[#e9edef] placeholder:text-[#8696a0] outline-none shadow-2xs"
+            className="flex-1 h-10 px-4 rounded-lg bg-white dark:bg-[#2a3942] border-none text-[13.5px] text-[#172033] dark:text-[#f2f6ff] placeholder:text-[#8696a0] outline-none shadow-2xs"
           />
 
           {draft.trim() ? (
