@@ -1,4 +1,5 @@
 name: Bob Quality Checks
+# Release marker: v1.0.74 validated desktop and extension artifacts
 # v1.0.74 final validation after updater-download wiring
 
 on:
