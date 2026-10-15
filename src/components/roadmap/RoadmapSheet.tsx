@@ -116,6 +116,7 @@ export const RoadmapSheet: React.FC<RoadmapSheetProps> = ({
     ],
   });
   const [adaptiveAnswers, setAdaptiveAnswers] = useState<string[]>([]);
+  const [isGeneratingAdaptiveQuestion, setIsGeneratingAdaptiveQuestion] = useState(false);
 
   // Dynamically generated steps that the user can arrange
   const [arrangedSteps, setArrangedSteps] = useState<RoadmapStepItem[]>([]);
@@ -294,6 +295,7 @@ No markdown codeblocks or prose, only valid JSON array.`;
 
   // Reordering steps (Arrange steps up / down)
   const generateAdaptiveQuestion = async (questionNumber: number, answers: string[]) => {
+    setIsGeneratingAdaptiveQuestion(true);
     const key = resolveGeminiApiKey();
     const fallbackQuestions: AdaptiveQuestion[] = [
       {
@@ -319,6 +321,7 @@ No markdown codeblocks or prose, only valid JSON array.`;
     ];
     if (!key) {
       setAdaptiveQuestion(fallbackQuestions[Math.min(questionNumber - 1, fallbackQuestions.length - 1)]);
+      setIsGeneratingAdaptiveQuestion(false);
       return;
     }
     try {
@@ -337,12 +340,14 @@ No markdown codeblocks or prose, only valid JSON array.`;
             value: String(option.value || option.label || 'Option'),
           })),
         });
+        setIsGeneratingAdaptiveQuestion(false);
         return;
       }
     } catch (error) {
       console.warn('Adaptive roadmap question fallback:', error);
     }
     setAdaptiveQuestion(fallbackQuestions[Math.min(questionNumber - 1, fallbackQuestions.length - 1)]);
+    setIsGeneratingAdaptiveQuestion(false);
   };
 
   const handleAdaptiveChoice = (option: AdaptiveQuestion['options'][number]) => {
@@ -863,7 +868,7 @@ Due Date: ${s.dueDate}
                 <span className="text-xs font-mono tracking-[0.16em] uppercase font-bold text-[var(--mint)]">
                   {stepIndex === 2 ? 'DISCOVERING YOUR PRIORITIES' : 'TAILORING YOUR PLAN'}
                 </span>
-                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">{adaptiveQuestion.question}</h1>
+                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">{isGeneratingAdaptiveQuestion ? 'Thinking about your answers…' : adaptiveQuestion.question}</h1>
                 <p className={`text-sm ${isDark ? 'text-[#8A8175]' : 'text-[#6B6358]'}`}>{adaptiveQuestion.helperText}</p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -876,7 +881,7 @@ Due Date: ${s.dueDate}
                     'bg-[#ffece5] border-[#f7d2c3] dark:bg-[#38231e] dark:border-[#694032]',
                   ];
                   return (
-                    <button key={option.value} type="button" onClick={() => handleAdaptiveChoice(option)}
+                    <button key={option.value} type="button" disabled={isGeneratingAdaptiveQuestion} onClick={() => handleAdaptiveChoice(option)}
                       className={`rounded-2xl border p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-md ${colors[index % colors.length]}`}>
                       <span className="flex items-center justify-between gap-2 text-sm font-bold text-[var(--t)]">
                         {option.label}<ArrowRight className="w-4 h-4 shrink-0" />
