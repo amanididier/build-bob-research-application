@@ -18,7 +18,6 @@ import { BobOverlayBubble } from '../companion/BobOverlayBubble';
 import { DailySplash } from '../companion/DailySplash';
 import { RoadmapSheet } from '../roadmap/RoadmapSheet';
 import { HomePage } from '../../pages/Home/HomePage';
-import { DashboardPage } from '../../pages/Home/DashboardPage';
 import { ResearchPage } from '../../pages/Research/ResearchPage';
 import { ChatPage } from '../../pages/Chat/ChatPage';
 import { NotesPage } from '../../pages/Notes/NotesPage';
@@ -35,7 +34,6 @@ export const AppShell: React.FC = () => {
   const renderCurrentPage = () => {
     switch (currentPage) {
       case 'home': return <HomePage />;
-      case 'dashboard': return <DashboardPage />;
       case 'research': return <ResearchPage />;
       case 'chat': return <ChatPage />;
       case 'notes': return <NotesPage />;
@@ -55,13 +53,13 @@ export const AppShell: React.FC = () => {
       <div className="flex-1 min-h-0 flex overflow-hidden relative">
         <Sidebar />
         <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden relative">
-          <TopBar />
-          <main className="flex-1 overflow-y-auto relative">
+          {currentPage !== 'chat' && <TopBar />}
+          <main className={`flex-1 relative ${currentPage === 'chat' ? 'h-full overflow-hidden' : 'overflow-y-auto'}`}>
             <ErrorBoundary key={`${currentPage}-${activeResearchId}-${researchSubView}`}>
               {renderCurrentPage()}
             </ErrorBoundary>
           </main>
-          {currentPage !== 'chat' && currentPage !== 'home' && <BottomComposer />}
+          {currentPage !== 'chat' && <BottomComposer />}
         </div>
       </div>
       <ToolsMenu />

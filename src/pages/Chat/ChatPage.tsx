@@ -1,9 +1,27 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Send, CheckCheck, Check, Sparkles, Coffee, Smile, Compass, RefreshCw } from 'lucide-react';
+import { 
+  Send, 
+  CheckCheck, 
+  Check, 
+  Sparkles, 
+  Coffee, 
+  Smile, 
+  Compass, 
+  Phone, 
+  Video, 
+  MoreVertical, 
+  Search, 
+  Menu,
+  PanelLeft,
+  Paperclip,
+  Mic,
+  ArrowRight
+} from 'lucide-react';
 import bobOrb from '../../assets/images/bob_mascot_orb_1791540734514.jpg';
 import { resolveGeminiApiKey } from '../../lib/ai/keyManager';
 import { GoogleGenAI } from '@google/genai';
+import { RoadmapSheet } from '../../components/roadmap/RoadmapSheet';
 
 interface MessengerMsg {
   id: string;
@@ -12,9 +30,9 @@ interface MessengerMsg {
   ts: number;
 }
 
-const STORE_KEY = 'bob_messenger_messages_v1';
+const STORE_KEY = 'bob_messenger_messages_v2';
 const NUDGE_KEY = 'bob_messenger_last_nudge';
-const IDLE_MS = 6 * 60 * 1000;
+const IDLE_MS = 8 * 60 * 1000;
 const NUDGE_COOLDOWN_MS = 25 * 60 * 1000;
 
 function loadMessages(): MessengerMsg[] {
@@ -27,7 +45,14 @@ function loadMessages(): MessengerMsg[] {
       if (cleaned.length > 0) return cleaned;
     }
   } catch {}
-  return [];
+  return [
+    {
+      id: 'init-1',
+      role: 'bob',
+      text: "Hey! Ready for a quick breather. How's your day treating you so far?",
+      ts: Date.now() - 60000,
+    }
+  ];
 }
 
 const formatTime = (ts: number) =>
@@ -42,29 +67,48 @@ const formatDay = (ts: number) => {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 };
 
-// Casual fallback responses with caring follow-up questions
+// Casual friendly companion follow-ups (like chatting with a close friend)
 const CASUAL_FOLLOWUPS = [
-  "What has been the nicest part of your day so far?",
-  "Have you heard any good music or watched anything you enjoyed lately?",
-  "Is there something small you are looking forward to this week?",
-  "Have you had a chance to enjoy a good meal or take a little break today?",
-  "What kind of thing helps you feel relaxed when your mind is busy?"
+  "How did that step you were working on earlier go? Did it turn out alright?",
+  "Did you manage to take a quick breather away from the screen yet?",
+  "How's your energy holding up today? Feeling good about where things stand?",
+  "Did that last change you made feel smooth, or did you hit any weird snags?",
+  "Always remember to stay hydrated! How's the rest of your afternoon looking?"
 ];
 
 export const ChatPage: React.FC = () => {
-  const { userName } = useApp();
+  const { userName, tasks, toggleSidebar, navigateTo, activeResearchId, projects } = useApp();
   const [messages, setMessages] = useState<MessengerMsg[]>(loadMessages);
   const [draft, setDraft] = useState('');
   const [isBobTyping, setIsBobTyping] = useState(false);
+  const [messageTurnCount, setMessageTurnCount] = useState(0);
+  const [isRoadmapActive, setIsRoadmapActive] = useState(false);
+  const [roadmapGoal, setRoadmapGoal] = useState('Project Roadmap');
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const sendingRef = useRef(false);
+
+  const activeProject = projects.find(p => p.id === activeResearchId) || projects[0];
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       localStorage.setItem(STORE_KEY, JSON.stringify(messages.slice(-200)));
     }
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages, isBobTyping]);
+  }, [messages, isBobTyping, isRoadmapActive]);
+
+  // Listen to roadmap completion events to post a friendly confirmation in chat
+  useEffect(() => {
+    const onFinished = (e: any) => {
+      const goal = e?.detail?.goal || activeProject?.title || 'Project';
+      const count = e?.detail?.count || 5;
+      pushBobMessage(
+        `I've locked in your roadmap for "${goal}" with ${count} actionable steps! They're all set up in your Tasks page so you can tackle them whenever you're ready.`
+      );
+    };
+
+    window.addEventListener('bob:roadmap-finished', onFinished);
+    return () => window.removeEventListener('bob:roadmap-finished', onFinished);
+  }, [activeProject]);
 
   const pushBobMessage = (text: string) => {
     setMessages((prev) => [
@@ -73,7 +117,7 @@ export const ChatPage: React.FC = () => {
     ]);
   };
 
-  // Bob is proactive in the casual lounge: after an idle stretch he gently checks in on the user's wellbeing and recent steps
+  // Bob is proactive in the casual lounge: after an idle stretch he gently checks in
   useEffect(() => {
     let idle = 0;
     const tick = window.setInterval(() => {
@@ -86,7 +130,7 @@ export const ChatPage: React.FC = () => {
       
       const randomFollowup = CASUAL_FOLLOWUPS[Math.floor(Math.random() * CASUAL_FOLLOWUPS.length)];
       pushBobMessage(
-        `Hey ${userName || 'friend'}, just taking a quiet moment to check in. ${randomFollowup}`
+        `Hey ${userName || 'friend'}, just taking a quick moment to check in. ${randomFollowup}`
       );
     }, 15000);
 
@@ -104,49 +148,70 @@ export const ChatPage: React.FC = () => {
     };
   }, [userName]);
 
-  // Generate casual, relaxing companion response with occasional gentle follow-up question
+  // Generate casual, relaxing companion response
   const generateRelaxedResponse = async (userInput: string): Promise<string> => {
     const key = resolveGeminiApiKey();
+    const nextTurn = messageTurnCount + 1;
+    setMessageTurnCount(nextTurn);
+
+    // If user explicitly asks about roadmap, launch the full-page roadmap
+    const lower = userInput.toLowerCase();
+    if (lower.includes('roadmap') || lower.includes('create roadmap') || lower.includes('build roadmap') || lower.includes('make roadmap')) {
+      setTimeout(() => {
+        setRoadmapGoal(activeProject?.title || 'Project Roadmap');
+        setIsRoadmapActive(true);
+      }, 500);
+      return `Sure thing! Let's build your step-by-step roadmap right now. Launching the full roadmap view for you...`;
+    }
+
+    // Interval reminder: only gently mention research / steps after ~10 casual turns
+    let intervalReminder = '';
+    if (nextTurn > 0 && nextTurn % 10 === 0) {
+      intervalReminder = `By the way, whenever you're ready to pick up where you left off on ${activeProject?.title || 'your project'}, we have your tasks organized. No rush at all though!`;
+    }
 
     if (key) {
       try {
         const ai = new GoogleGenAI({ apiKey: key });
-        const systemPrompt = `You are Bob, a warm, relaxed, and thoughtful companion chatting casually with ${userName || 'your friend'} in their quiet lounge.
-This is NOT a technical project dashboard or research lecture. Keep this a relaxing haven.
-Rules:
-1. Speak casually, warmly, and concisely (1 to 3 natural sentences max).
-2. Avoid bullet lists, corporate jargon, or heavy essays.
-3. Do not bring up research, projects, tasks, deadlines, or work unless the user asks about them first.
-4. At natural moments, ask a friendly follow-up about their day, interests, music, food, entertainment, or how they are feeling.
-5. Keep this chat separate from the research workspace: no unsolicited work reminders or project advice.`;
+        const systemPrompt = `You are Bob, a warm, relaxed, and thoughtful friend chatting with ${userName || 'your buddy'} on WhatsApp.
+CRITICAL RULES:
+1. Speak casually, warmly, concisely (1 to 2 short sentences max, as if typing on WhatsApp or Instagram).
+2. DO NOT give research essays, bullet points, corporate frameworks, or formal lectures.
+3. Chat about casual life, coffee, music, relaxing, or how their day is going.
+4. Sometimes ask a gentle follow-up question (e.g. how a recent step went, if they took a break, or how they feel).
+5. Only if asked about project roadmaps, suggest building one.`;
 
         const response = await ai.models.generateContent({
-          model: 'gemini-3.1-flash-lite',
+          model: 'gemini-2.5-flash',
           contents: `${systemPrompt}\n\nUser: "${userInput}"\nBob:`,
         });
 
         if (response.text && response.text.trim()) {
-          return response.text.trim();
+          const reply = response.text.trim();
+          return intervalReminder ? `${reply} ${intervalReminder}` : reply;
         }
       } catch (err) {
         console.warn('Gemini casual chat fallback:', err);
       }
     }
 
-    // Organic offline / fallback casual conversational generator
-    const lower = userInput.toLowerCase();
+    // Organic offline casual fallback responses
     const randomFollowup = CASUAL_FOLLOWUPS[Math.floor(Math.random() * CASUAL_FOLLOWUPS.length)];
 
-    if (lower.includes('coffee') || lower.includes('tea') || lower.includes('drink') || lower.includes('eat') || lower.includes('break')) {
-      return `A good warm brew always resets the mind! I hope you're taking your time to enjoy it. ${randomFollowup}`;
+    if (lower.includes('coffee') || lower.includes('tea') || lower.includes('drink') || lower.includes('snack')) {
+      return `A warm cup definitely resets the mind! Take your time to enjoy it. ${randomFollowup}`;
     }
     if (lower.includes('tired') || lower.includes('exhausted') || lower.includes('sleep') || lower.includes('long day')) {
-      return `You've put in honest effort today. Don't hesitate to lean back and let the mind wander. Did that last step you tackled feel like a good spot to pause?`;
+      return `You've put in solid work today. Give yourself some grace and rest up. Did that last step feel like a good wrap-up point?`;
     }
-    if (lower.includes('how are you') || lower.includes('what are you doing') || lower.includes('hey bob') || lower.includes('hello')) {
-      return `I'm feeling calm and happy to hang out with you here! Just soaking in the peaceful atmosphere. ${randomFollowup}`;
+    if (lower.includes('how are you') || lower.includes('what are you doing') || lower.includes('hey bob') || lower.includes('hello') || lower.includes('hi')) {
+      return `I'm just chilling right here! Always happy to catch up with you. ${randomFollowup}`;
     }
-    return `It's really nice just chatting without all the hustle and bustle. ${randomFollowup}`;
+    if (lower.includes('step') || lower.includes('done') || lower.includes('finished') || lower.includes('progress')) {
+      return `That's awesome! Checking things off feels great. Ready to kick back for a bit or letting new ideas simmer?`;
+    }
+
+    return intervalReminder || `Always nice catching up casually! ${randomFollowup}`;
   };
 
   const handleSend = async (textToSend?: string) => {
@@ -165,108 +230,186 @@ Rules:
       const reply = await generateRelaxedResponse(text);
       pushBobMessage(reply);
     } catch {
-      pushBobMessage("I'm right here beside you. Take a nice breath and we can chat whenever you're ready.");
+      pushBobMessage("I'm right here with you! Take a nice breath and we can chat whenever you want.");
     } finally {
       setIsBobTyping(false);
       sendingRef.current = false;
     }
   };
 
+  // If Roadmap Mode is active, replace the entire Chat UI with the full-page ResumeX Roadmap
+  if (isRoadmapActive) {
+    return (
+      <RoadmapSheet
+        isOpen={true}
+        initialGoal={roadmapGoal}
+        onClose={() => setIsRoadmapActive(false)}
+        onFinish={(steps) => {
+          setIsRoadmapActive(false);
+          pushBobMessage(
+            `I've implemented your roadmap for "${roadmapGoal}" with ${steps.length} sequential steps! They're all populated into your Tasks page.`
+          );
+        }}
+      />
+    );
+  }
+
   const lastBobIndex = messages.reduce((acc, m, i) => (m.role === 'bob' ? i : acc), -1);
 
   return (
-    <div className="w-full h-full flex flex-col bg-[#efeae2] dark:bg-[#0b141a] [background-image:radial-gradient(circle_at_1px_1px,rgba(0,0,0,0.035)_1px,transparent_0)] dark:[background-image:radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.035)_1px,transparent_0)] [background-size:22px_22px] animate-in fade-in duration-300">
-      {/* Minimal WhatsApp-inspired chat header — no connection/status card. */}
-      <div className="w-full flex items-center justify-between px-5 sm:px-7 py-3 border-b border-black/5 dark:border-white/10 bg-[#f7f5f0]/90 dark:bg-[#111b21]/90 backdrop-blur-md shrink-0">
-        <div>
-          <b className="block text-[14px] text-[var(--t)] leading-tight">Chat</b>
-          <small className="block text-[11px] text-[var(--m)] mt-0.5">{isBobTyping ? 'Bob is typing…' : 'A quiet place to talk about anything'}</small>
-        </div>
-      </div>
+    // Clean edge-to-edge WhatsApp Container with full 100% dot pattern background covering the entire page
+    <div className="w-full h-full flex flex-col relative select-text bg-[#efeae2] dark:bg-[#0b141a] [background-image:radial-gradient(circle_at_1px_1px,rgba(0,0,0,0.07)_1.5px,transparent_0)] dark:[background-image:radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.06)_1.5px,transparent_0)] [background-size:20px_20px] overflow-hidden">
+      
+      {/* 1. Authentic WhatsApp Top Bar (Spans 100% width, no double borders) */}
+      <header className="w-full h-15 px-4 sm:px-6 bg-[#f0f2f5] dark:bg-[#202c33] border-b border-black/5 dark:border-white/5 flex items-center justify-between gap-3 shrink-0 z-10 shadow-xs">
+        <div className="flex items-center gap-3 min-w-0">
+          {/* Toggle sidebar button */}
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            title="Toggle sidebar"
+            className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-neutral-600 dark:text-neutral-300 transition-colors cursor-pointer"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
 
-      {/* Message thread: 100% full canvas */}
+          {/* Bob Avatar & Status */}
+          <div className="relative shrink-0">
+            <img 
+              src={bobOrb} 
+              alt="Bob" 
+              className="w-10 h-10 rounded-full object-cover ring-1 ring-black/10 dark:ring-white/10 shadow-sm" 
+            />
+            <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[#f0f2f5] dark:border-[#202c33]" />
+          </div>
+
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-bold text-[#111b21] dark:text-[#e9edef] truncate m-0">
+                Bob
+              </h2>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                Companion
+              </span>
+            </div>
+            <p className="text-[11px] text-[#667781] dark:text-[#8696a0] truncate m-0 font-normal">
+              {isBobTyping ? 'typing…' : 'online · casual lounge'}
+            </p>
+          </div>
+        </div>
+
+        {/* WhatsApp Top Right Action Icons */}
+        <div className="flex items-center gap-1 sm:gap-2 text-[#54656f] dark:text-[#aebac1]">
+          {/* Project Roadmap Trigger Button (Replaces Chat UI with Full Page Roadmap) */}
+          <button
+            type="button"
+            onClick={() => {
+              setRoadmapGoal(activeProject?.title || 'Project Roadmap');
+              setIsRoadmapActive(true);
+            }}
+            className="px-3 py-1.5 rounded-full bg-[var(--y)] hover:bg-[#e0ac15] text-[#171717] text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer mr-1"
+            title="Open Full Page Project Roadmap"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Project Roadmap</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleSend("Hey Bob! Just felt like saying hi.")}
+            className="p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+            title="Audio check-in"
+          >
+            <Phone className="w-4 h-4" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleSend("How's your evening going?")}
+            className="p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+            title="Video call check-in"
+          >
+            <Video className="w-4 h-4" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigateTo('tasks')}
+            className="p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+            title="Go to Tasks page"
+          >
+            <MoreVertical className="w-4 h-4" />
+          </button>
+        </div>
+      </header>
+
+      {/* 2. Message Thread (100% full screen canvas with authentic WhatsApp bubbles) */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto px-4 sm:px-10 py-6 space-y-3"
+        className="flex-1 overflow-y-auto px-4 sm:px-12 md:px-24 py-6 space-y-2.5"
       >
-        {messages.length === 0 && (
-          <div className="text-center mt-12 max-w-md mx-auto animate-in fade-in zoom-in-95 duration-500 p-6 rounded-2xl bg-[var(--s)] border border-[var(--line)] shadow-sm">
-            <img src={bobOrb} alt="" className="w-16 h-16 rounded-full mx-auto mb-3 opacity-95 border border-[var(--line)] shadow-md" />
-            <h3 className="text-base font-bold text-[var(--t)] mb-1">
-              Welcome to the Relaxing Lounge
-            </h3>
-            <p className="text-[13px] text-[var(--m)] leading-relaxed mb-4">
-              Hey {userName || 'friend'}! This is your quiet haven to talk with Bob casually about anything—ideas, your day, or just unwinding without the heavy project pressure.
-            </p>
-            <div className="flex flex-wrap justify-center gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => handleSend("Hey Bob, just taking a quick coffee break!")}
-                className="px-3 py-1.5 rounded-full bg-[var(--s2)] hover:bg-[var(--y)] hover:text-[#171717] border border-[var(--line)] text-xs font-semibold text-[var(--t)] transition-colors"
-              >
-                ☕ Coffee break
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSend("How's your day going, Bob?")}
-                className="px-3 py-1.5 rounded-full bg-[var(--s2)] hover:bg-[var(--y)] hover:text-[#171717] border border-[var(--line)] text-xs font-semibold text-[var(--t)] transition-colors"
-              >
-                🌿 Just unwinding
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSend("I have something on my mind and would like to talk casually.")}
-                className="px-3 py-1.5 rounded-full bg-[var(--s2)] hover:bg-[var(--y)] hover:text-[#171717] border border-[var(--line)] text-xs font-semibold text-[var(--t)] transition-colors"
-              >
-                ✨ Share a thought
-              </button>
-            </div>
+        {/* Subtle WhatsApp-style Security & Casual Notice Pill */}
+        <div className="flex justify-center my-3">
+          <div className="px-3.5 py-1.5 rounded-lg bg-[#ffeecd] dark:bg-[#182229] border border-amber-500/20 shadow-xs text-center max-w-md">
+            <span className="text-[11px] text-[#725e24] dark:text-[#ffd279] font-medium leading-relaxed block">
+              ☕ Casual Chat Lounge · Bob is here to unwind and chat casually with you without technical project pressure.
+            </span>
           </div>
-        )}
+        </div>
 
         {messages.map((m, i) => {
           const showDay = i === 0 || formatDay(messages[i - 1].ts) !== formatDay(m.ts);
-          const isRead = m.role === 'user' && lastBobIndex > i;
+          const isUser = m.role === 'user';
+          const isRead = isUser && lastBobIndex > i;
+
           return (
             <React.Fragment key={m.id}>
               {showDay && (
                 <div className="flex justify-center my-3">
-                  <span className="px-3 py-1 rounded-full bg-[var(--s2)] border border-[var(--line)] text-[10.5px] font-semibold text-[var(--m)]">
+                  <span className="px-3 py-1 rounded-md bg-white/80 dark:bg-[#182229]/80 backdrop-blur-xs border border-black/5 dark:border-white/5 text-[11px] font-semibold text-[#54656f] dark:text-[#8696a0] shadow-2xs">
                     {formatDay(m.ts)}
                   </span>
                 </div>
               )}
-              <div className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+
+              <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} animate-in fade-in duration-150`}>
                 <div
-                  className={`max-w-[80%] sm:max-w-[70%] px-4 py-3 rounded-2xl shadow-sm animate-in zoom-in-95 fade-in duration-200 ${
-                    m.role === 'user'
-                      ? 'bg-[var(--y)] text-[#171717] rounded-br-md font-medium'
-                      : 'bg-[var(--s)] border border-[var(--line)] text-[var(--t)] rounded-bl-md'
+                  className={`relative max-w-[85%] sm:max-w-[70%] px-3.5 py-2 rounded-2xl shadow-xs ${
+                    isUser
+                      ? 'bg-[#d9fdd3] dark:bg-[#005c4b] text-[#111b21] dark:text-[#e9edef] rounded-tr-xs'
+                      : 'bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] rounded-tl-xs'
                   }`}
                 >
-                  <p className="text-[13px] leading-relaxed m-0 whitespace-pre-wrap">{m.text}</p>
-                  <span
-                    className={`flex items-center justify-end gap-1 mt-1 text-[10px] ${
-                      m.role === 'user' ? 'text-[#171717]/60' : 'text-[var(--m)]'
-                    }`}
-                  >
-                    {formatTime(m.ts)}
-                    {m.role === 'user' &&
-                      (isRead ? <CheckCheck className="w-3.5 h-3.5 text-sky-600" /> : <Check className="w-3.5 h-3.5" />)}
-                  </span>
+                  <p className="text-[13.5px] leading-relaxed m-0 whitespace-pre-wrap select-text">
+                    {m.text}
+                  </p>
+
+                  <div className={`flex items-center justify-end gap-1 mt-0.5 text-[10px] ${
+                    isUser ? 'text-[#111b21]/60 dark:text-[#e9edef]/60' : 'text-[#667781] dark:text-[#8696a0]'
+                  }`}>
+                    <span>{formatTime(m.ts)}</span>
+                    {isUser && (
+                      isRead ? (
+                        <CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" />
+                      ) : (
+                        <Check className="w-3.5 h-3.5" />
+                      )
+                    )}
+                  </div>
                 </div>
               </div>
             </React.Fragment>
           );
         })}
 
+        {/* WhatsApp Typing Bubble */}
         {isBobTyping && (
-          <div className="flex justify-start animate-in fade-in duration-200">
-            <div className="px-4 py-3 rounded-2xl rounded-bl-md bg-[var(--s)] border border-[var(--line)] flex items-center gap-1.5">
+          <div className="flex justify-start animate-in fade-in duration-150">
+            <div className="px-4 py-2.5 rounded-2xl rounded-tl-xs bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] shadow-xs flex items-center gap-1.5">
               {[0, 150, 300].map((d) => (
                 <span
                   key={d}
-                  className="w-2 h-2 rounded-full bg-amber-400 animate-bounce"
+                  className="w-2 h-2 rounded-full bg-emerald-500 animate-bounce"
                   style={{ animationDelay: `${d}ms` }}
                 />
               ))}
@@ -275,58 +418,90 @@ Rules:
         )}
       </div>
 
-      {/* Relaxing quick conversation chips */}
-      <div className="px-4 sm:px-6 py-2 bg-[var(--s)]/50 border-t border-[var(--line)] flex items-center gap-2 overflow-x-auto text-xs">
-        <span className="text-[11px] text-[var(--m)] font-semibold shrink-0">Quick chats:</span>
+      {/* 3. Subtle Quick Chat Chips on bottom */}
+      <div className="w-full px-4 sm:px-12 md:px-24 py-1.5 flex items-center gap-2 overflow-x-auto text-xs shrink-0 select-none">
+        <span className="text-[10.5px] text-[#667781] dark:text-[#8696a0] font-semibold shrink-0">Quick chats:</span>
         <button
           type="button"
-          onClick={() => handleSend("Taking a quick breather to clear my head.")}
-          className="px-2.5 py-1 rounded-full bg-[var(--s2)] hover:bg-[var(--y)] hover:text-[#171717] text-[11px] font-medium text-[var(--m)] hover:text-[var(--t)] transition-colors shrink-0"
+          onClick={() => handleSend("Taking a quick coffee break!")}
+          className="px-3 py-1 rounded-full bg-white/70 dark:bg-[#202c33]/70 hover:bg-amber-400 hover:text-black border border-black/5 dark:border-white/5 text-[11px] font-medium text-[#111b21] dark:text-[#e9edef] transition-colors shrink-0 shadow-2xs cursor-pointer"
         >
-          ☕ Taking a breather
+          ☕ Coffee break
         </button>
         <button
           type="button"
-          onClick={() => handleSend("Hey Bob, can we talk about something fun or interesting?")}
-          className="px-2.5 py-1 rounded-full bg-[var(--s2)] hover:bg-[var(--y)] hover:text-[#171717] text-[11px] font-medium text-[var(--m)] hover:text-[var(--t)] transition-colors shrink-0"
+          onClick={() => handleSend("Hey Bob, how did that step I worked on sound to you?")}
+          className="px-3 py-1 rounded-full bg-white/70 dark:bg-[#202c33]/70 hover:bg-amber-400 hover:text-black border border-black/5 dark:border-white/5 text-[11px] font-medium text-[#111b21] dark:text-[#e9edef] transition-colors shrink-0 shadow-2xs cursor-pointer"
         >
-          ✨ Share a thought
+          ✨ Ask about my step
         </button>
         <button
           type="button"
-          onClick={() => handleSend("What do you think is a good way to unwind right now?")}
-          className="px-2.5 py-1 rounded-full bg-[var(--s2)] hover:bg-[var(--y)] hover:text-[#171717] text-[11px] font-medium text-[var(--m)] hover:text-[var(--t)] transition-colors shrink-0"
+          onClick={() => {
+            setRoadmapGoal(activeProject?.title || 'Project Roadmap');
+            setIsRoadmapActive(true);
+          }}
+          className="px-3 py-1 rounded-full bg-white/70 dark:bg-[#202c33]/70 hover:bg-[var(--y)] hover:text-black border border-black/5 dark:border-white/5 text-[11px] font-medium text-[#111b21] dark:text-[#e9edef] transition-colors shrink-0 shadow-2xs cursor-pointer"
         >
-          🌿 Ways to unwind
+          🧭 Launch Roadmap
         </button>
       </div>
 
-      {/* Composer */}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          handleSend();
-        }}
-        className="px-4 sm:px-6 py-3 border-t border-[var(--line)] bg-[var(--s)]/80 backdrop-blur-md flex items-center gap-2"
-      >
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="Chat casually with Bob…"
-          className="flex-1 h-11 px-4 rounded-full bg-[var(--s2)] border border-[var(--line)] text-[13px] text-[var(--t)] placeholder:text-[var(--m)] outline-none focus:border-[var(--y)] focus:ring-2 focus:ring-[var(--y)]/25 transition-all"
-        />
+      {/* 4. Authentic WhatsApp Bottom Composer */}
+      <footer className="w-full px-4 sm:px-12 md:px-24 py-3 bg-[#f0f2f5] dark:bg-[#202c33] border-t border-black/5 dark:border-white/5 flex items-center gap-2 shrink-0 z-10">
         <button
-          type="submit"
-          disabled={!draft.trim() || isBobTyping}
-          title="Send message"
-          className="w-11 h-11 rounded-full bg-[var(--y)] hover:bg-[#ebd200] text-[#171717] grid place-items-center transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0"
+          type="button"
+          onClick={() => handleSend("😊")}
+          className="p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-[#54656f] dark:text-[#aebac1] transition-colors cursor-pointer shrink-0"
+          title="Emoji"
         >
-          <Send className="w-4 h-4" />
+          <Smile className="w-5 h-5" />
         </button>
-      </form>
-      <p className="px-4 py-2 text-center text-[10.5px] text-[#6c756d] dark:text-[#869b91] bg-[#f7f5f0]/85 dark:bg-[#111b21]/85 border-t border-black/5 dark:border-white/10">
-        {userName || 'You'}, don’t worry — your chat is saved only on this device.
-      </p>
+
+        <button
+          type="button"
+          onClick={() => handleSend("Sharing a thought with you!")}
+          className="p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-[#54656f] dark:text-[#aebac1] transition-colors cursor-pointer shrink-0"
+          title="Attachment"
+        >
+          <Paperclip className="w-5 h-5" />
+        </button>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSend();
+          }}
+          className="flex-1 flex items-center gap-2"
+        >
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="Type a casual message…"
+            className="flex-1 h-10 px-4 rounded-lg bg-white dark:bg-[#2a3942] border-none text-[13.5px] text-[#111b21] dark:text-[#e9edef] placeholder:text-[#8696a0] outline-none shadow-2xs"
+          />
+
+          {draft.trim() ? (
+            <button
+              type="submit"
+              disabled={isBobTyping}
+              title="Send message"
+              className="w-10 h-10 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white grid place-items-center transition-all active:scale-95 disabled:opacity-40 cursor-pointer shrink-0 shadow-xs"
+            >
+              <Send className="w-4 h-4 ml-0.5" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => handleSend("Hey Bob! Just taking a quick break to chat.")}
+              title="Voice message"
+              className="w-10 h-10 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white grid place-items-center transition-all active:scale-95 cursor-pointer shrink-0 shadow-xs"
+            >
+              <Mic className="w-4 h-4" />
+            </button>
+          )}
+        </form>
+      </footer>
     </div>
   );
 };

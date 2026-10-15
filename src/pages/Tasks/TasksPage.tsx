@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
   CheckCircle2, 
@@ -9,8 +9,44 @@ import {
   ArrowRight,
   Bot,
   User,
-  ListTodo
+  ListTodo,
+  Layers,
+  Compass,
+  Check,
+  Clock,
+  Terminal
 } from 'lucide-react';
+
+interface PhasedRoadmapData {
+  goal: string;
+  situation?: string;
+  tools?: string[];
+  cadence?: string;
+  tasks?: Array<{
+    id: string;
+    phase: string;
+    title: string;
+    estimatedTime: string;
+    priority: number;
+    steps: Array<{
+      id: string;
+      stepNumber: number;
+      title: string;
+      instruction: string;
+      tool: string;
+    }>;
+  }>;
+  steps?: Array<{
+    id: string;
+    phase: string;
+    title: string;
+    why: string;
+    tools: string[];
+    dueDate: string;
+    enabled: boolean;
+  }>;
+  createdAt?: number;
+}
 
 export const TasksPage: React.FC = () => {
   const { 
@@ -27,6 +63,30 @@ export const TasksPage: React.FC = () => {
   const [newTitle, setNewTitle] = useState('');
   const [newDueDate, setNewDueDate] = useState('Tomorrow');
   const [isExtracting, setIsExtracting] = useState(false);
+  const [activeRoadmap, setActiveRoadmap] = useState<PhasedRoadmapData | null>(() => {
+    try {
+      const stored = localStorage.getItem('bob_phased_roadmap_v2');
+      if (stored) return JSON.parse(stored);
+    } catch {}
+    return null;
+  });
+
+  // Re-sync whenever a roadmap is finished or updated
+  useEffect(() => {
+    const handleUpdate = () => {
+      try {
+        const stored = localStorage.getItem('bob_phased_roadmap_v2');
+        if (stored) setActiveRoadmap(JSON.parse(stored));
+      } catch {}
+    };
+
+    window.addEventListener('bob:roadmap-updated', handleUpdate);
+    window.addEventListener('bob:roadmap-finished', handleUpdate);
+    return () => {
+      window.removeEventListener('bob:roadmap-updated', handleUpdate);
+      window.removeEventListener('bob:roadmap-finished', handleUpdate);
+    };
+  }, []);
 
   const activeProject = projects.find((p) => p.id === activeResearchId) || projects[0];
 
@@ -54,8 +114,14 @@ export const TasksPage: React.FC = () => {
     }
   };
 
+  const openFullRoadmap = () => {
+    window.dispatchEvent(new CustomEvent('bob-open-roadmap', {
+      detail: { title: activeProject?.title || 'Project Roadmap', origin: 'tasks' }
+    }));
+  };
+
   return (
-    <div className="max-w-[1130px] mx-auto px-6 md:px-10 py-7 pb-36">
+    <div className="max-w-[1130px] mx-auto px-6 md:px-10 py-7 pb-36 animate-in fade-in duration-300">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-3 pb-6 border-b border-[var(--line)] mb-6">
         <div>
@@ -66,36 +132,45 @@ export const TasksPage: React.FC = () => {
             Tasks & Next Steps
           </h1>
           <p className="text-[var(--m)] text-[13px] leading-relaxed max-w-[620px] m-0">
-            Combine your own manual to-dos with AI-extracted action items from your local research notes.
+            Combine your structured project roadmaps with manual to-dos and AI-extracted action items.
           </p>
         </div>
 
         {/* Action Controls */}
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Sequential Roadmap Steps */}
+          {/* Create / Open Full Roadmap Wizard */}
+          <button
+            onClick={openFullRoadmap}
+            className="h-9 px-4 rounded-xl bg-[var(--y)] hover:bg-[#e0ac15] text-[#171717] font-bold text-[12px] flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>{activeRoadmap ? 'Edit Roadmap' : 'Create Roadmap'}</span>
+          </button>
+
+          {/* Sequential Step Execution View */}
           <button
             onClick={() => navigateTo('research', 'tasks')}
-            className="h-9 px-4 rounded-xl border border-[var(--line)] bg-[var(--s)] hover:bg-[var(--s2)] text-[var(--t)] font-bold text-[12px] flex items-center gap-1.5 shadow-sm active:scale-95 transition-all"
+            className="h-9 px-4 rounded-xl border border-[var(--line)] bg-[var(--s)] hover:bg-[var(--s2)] text-[var(--t)] font-bold text-[12px] flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
           >
             <ListTodo className="w-3.5 h-3.5 text-[var(--y)]" />
-            <span>Sequential Roadmap Steps</span>
+            <span>Sequential Execution View</span>
           </button>
 
           {/* AI Auto-Extract Button */}
           <button
             onClick={handleAiExtract}
             disabled={isExtracting}
-            className="h-9 px-4 rounded-xl bg-[var(--y)] hover:bg-[#e0ac15] text-[#171717] font-bold text-[12px] flex items-center gap-1.5 shadow-sm active:scale-95 transition-all disabled:opacity-50"
+            className="h-9 px-4 rounded-xl border border-[var(--line)] bg-[var(--s)] hover:bg-[var(--s2)] text-[var(--t)] font-bold text-[12px] flex items-center gap-1.5 shadow-sm active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
           >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>{isExtracting ? 'Analyzing evidence...' : '✨ AI Extract Tasks'}</span>
+            <Bot className="w-3.5 h-3.5 text-blue-500" />
+            <span>{isExtracting ? 'Analyzing evidence...' : '✨ AI Extract'}</span>
           </button>
 
           {/* Filters */}
           <div className="flex items-center gap-1.5 bg-[var(--s2)] p-1 rounded-xl">
             <button
               onClick={() => setFilter('all')}
-              className={`px-3 py-1 text-[11px] font-medium rounded-lg transition-colors ${
+              className={`px-3 py-1 text-[11px] font-medium rounded-lg transition-colors cursor-pointer ${
                 filter === 'all'
                   ? 'bg-[var(--s)] text-[var(--t)] shadow-sm'
                   : 'text-[var(--m)] hover:text-[var(--t)]'
@@ -105,7 +180,7 @@ export const TasksPage: React.FC = () => {
             </button>
             <button
               onClick={() => setFilter('pending')}
-              className={`px-3 py-1 text-[11px] font-medium rounded-lg transition-colors ${
+              className={`px-3 py-1 text-[11px] font-medium rounded-lg transition-colors cursor-pointer ${
                 filter === 'pending'
                   ? 'bg-[var(--s)] text-[var(--t)] shadow-sm'
                   : 'text-[var(--m)] hover:text-[var(--t)]'
@@ -115,7 +190,7 @@ export const TasksPage: React.FC = () => {
             </button>
             <button
               onClick={() => setFilter('completed')}
-              className={`px-3 py-1 text-[11px] font-medium rounded-lg transition-colors ${
+              className={`px-3 py-1 text-[11px] font-medium rounded-lg transition-colors cursor-pointer ${
                 filter === 'completed'
                   ? 'bg-[var(--s)] text-[var(--t)] shadow-sm'
                   : 'text-[var(--m)] hover:text-[var(--t)]'
@@ -127,7 +202,73 @@ export const TasksPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Manual Task Creator Input Form (Software Operation) */}
+      {/* ACTIVE PHASED ROADMAP BANNER & SUMMARY */}
+      {activeRoadmap && (
+        <div className="mb-6 p-5 sm:p-6 rounded-[24px] bg-[var(--s)] border border-[var(--line)] shadow-sm space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[var(--line)]">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-[var(--y)]/15 text-[var(--y)] flex items-center justify-center shrink-0">
+                <Compass className="w-5 h-5 text-[var(--y)]" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[var(--y)]">
+                    ACTIVE PROJECT ROADMAP
+                  </span>
+                  <span className="text-[11px] text-[var(--m)] font-semibold">
+                    · {activeRoadmap.cadence === 'sprint' ? 'Hyper-Sprint (3-5 Days)' : activeRoadmap.cadence === 'month' ? '1 Month Milestone' : '2-Week Cadence'}
+                  </span>
+                </div>
+                <h3 className="text-base sm:text-lg font-bold text-[var(--t)] m-0">
+                  {activeRoadmap.goal || 'Engineering Roadmap'}
+                </h3>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={openFullRoadmap}
+                className="px-3 py-1.5 rounded-xl border border-[var(--line)] bg-[var(--s2)] hover:bg-[var(--line)] text-xs font-bold text-[var(--t)] flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <span>Edit Steps</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Phased Steps Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+            {activeRoadmap.steps && activeRoadmap.steps.length > 0 ? (
+              activeRoadmap.steps.map((step, idx) => (
+                <div
+                  key={step.id || idx}
+                  className="p-3.5 rounded-xl bg-[var(--s2)]/70 border border-[var(--line)] flex items-start gap-3"
+                >
+                  <div className="w-5 h-5 rounded-md bg-[var(--y)]/20 text-[var(--y)] text-[10px] font-mono font-bold flex items-center justify-center shrink-0 mt-0.5">
+                    {idx + 1}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <span className="text-[9.5px] font-mono uppercase text-[var(--y)] font-bold block">
+                      {step.phase}
+                    </span>
+                    <b className="text-xs text-[var(--t)] block font-bold truncate">
+                      {step.title}
+                    </b>
+                    <p className="text-[11px] text-[var(--m)] m-0 mt-0.5 line-clamp-1">
+                      {step.why}
+                    </p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-xs text-[var(--m)]">Roadmap generated with all phases active.</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Manual Task Creator Input Form */}
       <form onSubmit={handleManualAdd} className="mb-6 p-4 rounded-2xl bg-[var(--s)] border border-[var(--line)] shadow-sm flex flex-col sm:flex-row gap-3 items-center">
         <div className="flex-1 w-full flex items-center gap-2.5">
           <Plus className="w-4 h-4 text-[var(--m)] ml-1 flex-shrink-0" />
@@ -135,7 +276,7 @@ export const TasksPage: React.FC = () => {
             type="text"
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
-            placeholder={`Add a research task for ${activeProject.title}...`}
+            placeholder={`Add a task for ${activeProject.title}...`}
             className="w-full bg-transparent border-0 outline-none text-[13px] text-[var(--t)] placeholder-[var(--m)]"
           />
         </div>
@@ -150,7 +291,7 @@ export const TasksPage: React.FC = () => {
           <button
             type="submit"
             disabled={!newTitle.trim()}
-            className="h-8 px-4 rounded-lg bg-[#171717] dark:bg-[#f2eee7] text-white dark:text-[#171717] text-[11px] font-bold hover:opacity-90 disabled:opacity-40 transition-opacity flex-shrink-0"
+            className="h-8 px-4 rounded-lg bg-[#171717] dark:bg-[#f2eee7] text-white dark:text-[#171717] text-[11px] font-bold hover:opacity-90 disabled:opacity-40 transition-opacity flex-shrink-0 cursor-pointer"
           >
             Add Task
           </button>
@@ -163,7 +304,7 @@ export const TasksPage: React.FC = () => {
           <div className="text-center py-12">
             <ListTodo className="w-10 h-10 text-[var(--m)] mx-auto mb-2 opacity-40" />
             <h4 className="text-[14px] font-bold text-[var(--t)]">No tasks in this filter</h4>
-            <p className="text-[12px] text-[var(--m)]">Add a task above or click "✨ AI Extract Tasks" to generate them automatically.</p>
+            <p className="text-[12px] text-[var(--m)]">Add a task above or click "Create Roadmap" to generate and structure your execution steps.</p>
           </div>
         ) : (
           <div className="divide-y divide-[var(--line)]">
@@ -221,7 +362,7 @@ export const TasksPage: React.FC = () => {
                         e.stopPropagation();
                         navigateTo('research', 'chat', task.projectId);
                       }}
-                      className="text-[11px] text-[var(--m)] hover:text-[var(--t)] hover:underline inline-flex items-center gap-1 ml-auto"
+                      className="text-[11px] text-[var(--m)] hover:text-[var(--t)] hover:underline inline-flex items-center gap-1 ml-auto cursor-pointer"
                     >
                       <span>{task.projectId}</span>
                       <ArrowRight className="w-3 h-3" />

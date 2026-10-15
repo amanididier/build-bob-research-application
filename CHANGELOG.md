@@ -1,5 +1,19 @@
 # Changelog
 
+## Bob v1.0.71 — 2026-10-15
+
+### Roadmap refinement & dynamic multi-input flow
+- Integrated full-page interactive roadmap workspace with Bob Builder illustration, star accents, and customizable sample journeys.
+- Dynamic question sequencing: each user response shapes subsequent options, tooling pills, starting stage cards, and weekly rhythm selector.
+- Added interactive milestone arrangement: reorder steps up/down, toggle active milestones, edit titles inline, add custom milestones, or re-synthesize with Gemini AI.
+- Finished roadmap automatically populates the user's active Tasks board with proper phase tags, dates, and source metadata.
+- Added live Active Roadmap banner at the top of the Tasks page with real-time milestone sync.
+
+### WhatsApp-style edge-to-edge Chat Lounge
+- Full-page WhatsApp-style interface with dotted background pattern and streamlined single-header design.
+- Chat operates casually as a supportive companion rather than research dumps; smoothly transitions to the full-page roadmap upon request and seamlessly returns upon completion.
+- Chat conversations saved securely to local device storage.
+
 ## Bob v1.0.70 — 2026-10-14
 
 ### Research and roadmap
@@ -22,8 +36,6 @@
 - Added clearer error notifications when highlighting is blocked or cannot be saved.
 
 ### Versions and verification
-- Desktop/web app: 1.0.70
+- Desktop/web app: 1.0.71
 - Chrome extension: 1.3.0
 - Release automation runs TypeScript validation, web build, extension syntax checks, version checks, and artifact packaging before publishing.
-
-Note: PDF/DOCX roadmap attachments are selectable but automatic text extraction is not enabled in this build. Plain-text formats (TXT, MD, CSV, JSON) can be read into the roadmap context. Browser-level end-to-end QA is still recommended after installation.

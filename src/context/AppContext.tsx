@@ -150,7 +150,7 @@ interface AppContextType {
   tasks: ResearchTaskItem[];
   notes: ResearchNoteItem[];
   toggleTask: (id: string) => void;
-  addTask: (title: string, dueDate?: string, projectId?: string, options?: { sourceConnection?: string; isAiGenerated?: boolean }) => void;
+  addTask: (title: string, dueDate?: string, projectId?: string, optionsOrSource?: { sourceConnection?: string; isAiGenerated?: boolean } | string) => void;
   extractAiTasks: () => Promise<number>;
   addNote: (noteData: Omit<ResearchNoteItem, 'id' | 'createdAt'>) => void;
   updateNote: (id: string, updates: Partial<Pick<ResearchNoteItem, 'title' | 'selectedText' | 'sourceTitle' | 'sourceUrl' | 'color'>>) => void;
@@ -598,33 +598,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  // Seed Tasks
-  const [tasks, setTasks] = useState<ResearchTaskItem[]>([
-    {
-      id: 't-1',
-      title: 'Validate the core problem with 2 users',
-      dueDate: 'Today · 8:00 PM',
-      sourceConnection: 'Connected to 5 sources',
-      completed: false,
-      projectId: 'urugendo',
-    },
-    {
-      id: 't-2',
-      title: 'Write problem statement on checkout friction',
-      dueDate: 'Today · 8:00 PM',
-      sourceConnection: 'Connected to 3 AI chats',
-      completed: true,
-      projectId: 'urugendo',
-    },
-    {
-      id: 't-3',
-      title: 'Compare 3 competitor ticket dispatch apps',
-      dueDate: 'Tomorrow',
-      sourceConnection: 'Connected to 4 tabs',
-      completed: false,
-      projectId: 'urugendo',
-    },
-  ]);
+  // Seed Tasks with localStorage persistence
+  const [tasks, setTasks] = useState<ResearchTaskItem[]>(() => {
+    try {
+      const stored = localStorage.getItem('bob_tasks_v2');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [
+      {
+        id: 't-1',
+        title: 'Validate the core problem with 2 users',
+        dueDate: 'Today · 8:00 PM',
+        sourceConnection: 'Connected to 5 sources',
+        completed: false,
+        projectId: 'urugendo',
+      },
+      {
+        id: 't-2',
+        title: 'Write problem statement on checkout friction',
+        dueDate: 'Today · 8:00 PM',
+        sourceConnection: 'Connected to 3 AI chats',
+        completed: true,
+        projectId: 'urugendo',
+      },
+      {
+        id: 't-3',
+        title: 'Compare 3 competitor ticket dispatch apps',
+        dueDate: 'Tomorrow',
+        sourceConnection: 'Connected to 4 tabs',
+        completed: false,
+        projectId: 'urugendo',
+      },
+    ];
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('bob_tasks_v2', JSON.stringify(tasks));
+    } catch {}
+  }, [tasks]);
 
   // Seed Notes
   const [notes, setNotes] = useState<ResearchNoteItem[]>([
@@ -876,16 +891,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  const addTask = (title: string, dueDate: string = 'Today', projectId: string = activeResearchId, options: { sourceConnection?: string; isAiGenerated?: boolean } = {}) => {
+  const addTask = (
+    title: string, 
+    dueDate: string = 'Today', 
+    projectId: string = activeResearchId, 
+    optionsOrSource: { sourceConnection?: string; isAiGenerated?: boolean } | string = 'Created by user'
+  ) => {
     if (!title.trim()) return;
+    const sourceConnection = typeof optionsOrSource === 'string' 
+      ? optionsOrSource 
+      : (optionsOrSource?.sourceConnection || 'Created by user');
+    const isAiGenerated = typeof optionsOrSource === 'object' 
+      ? Boolean(optionsOrSource?.isAiGenerated) 
+      : false;
+
     const newTask: ResearchTaskItem = {
-      id: `t-${Date.now()}`,
+      id: `t-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       title: title.trim(),
       dueDate,
-      sourceConnection: options.sourceConnection || 'Created by user',
+      sourceConnection,
       completed: false,
       projectId,
-      isAiGenerated: Boolean(options.isAiGenerated),
+      isAiGenerated,
     };
     setTasks((prev) => [newTask, ...prev]);
   };
@@ -912,7 +939,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newNote: ResearchNoteItem = {
       ...noteData,
       id: `n-${Date.now()}`,
-      createdAt: new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
+      createdAt: 'Just now',
     };
     setNotes((prev) => [newNote, ...prev]);
 
