@@ -727,7 +727,9 @@ Due Date: ${s.dueDate}
         <div className="flex items-center gap-2.5 shrink-0">
           {stepIndex > 0 && stepIndex <= totalQuestionSteps && (
             <span className={`text-[11px] font-mono font-bold uppercase tracking-wider hidden sm:inline ${isDark ? 'text-[#8A8175]' : 'text-[#6B6358]'}`}>
-              STEP {String(stepIndex).padStart(2, '0')} / {String(totalQuestionSteps).padStart(2, '0')}
+              {stepIndex === 4 && adaptiveAnswers.length >= 3
+                ? `QUESTION ${adaptiveAnswers.length + 1} / UP TO 5`
+                : `STEP ${String(stepIndex).padStart(2, '0')} / ${String(totalQuestionSteps).padStart(2, '0')}`}
             </span>
           )}
 
