@@ -195,6 +195,7 @@ Known preferences the user has explicitly shared (use naturally, never assume mo
         if (response.text && response.text.trim()) {
           return response.text.trim();
         }
+        return "Gemini didn't return a reply this time. Please try sending that again.";
       } catch (err) {
         console.warn('Gemini casual chat failed:', err);
         return "I couldn't reach Gemini just now. Your message is still here—please check your Gemini API key or connection, then try again.";
