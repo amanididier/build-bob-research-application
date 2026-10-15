@@ -6,16 +6,22 @@
 - Restored the dashboard as a real route, separate from the homepage.
 - First launch of each local calendar day opens the sunflower homepage; later launches that day open the dashboard.
 - Removed the blocking daily greeting overlay so the homepage itself is the daily welcome.
+- Homepage now has a focused sunflower hero, centered composer and suggestion cards, with the sidebar/top bar hidden on first daily launch.
+- Dashboard retains a separate compact garden banner and colorful, dark-mode-aware workspace cards; its permanent Project Roadmap button is removed.
 - Homepage prompts now start a research conversation instead of opening a roadmap immediately.
 
 ### Adaptive roadmaps and tasks
 - Gemini can return 3–12 goal-specific milestones based on project complexity instead of a fixed five-step plan.
 - Roadmap tasks are marked as AI-generated with phase/source metadata and tied to the active project.
 - Saved roadmap data includes its project ID.
+- Roadmap discovery now uses two Gemini-generated multiple-choice follow-up pages based on prior answers, with optional goal starter cards and goal-specific fallback plans.
+- The first generated milestone is due Today so it can surface in the dashboard's Today's Focus card.
 
 ### Chat polish
 - Updated casual chat to a clean white/blue/yellow visual language with dark-mode support.
 - Removed unsolicited project/task reminders and made the conversation prompt more broadly useful and user-focused.
+- Gemini now receives recent chat history; blue Instagram-inspired message bubbles and lifestyle-focused follow-ups replace the old flat dotted chat treatment.
+- Search results are built from live workspace projects and tasks rather than static placeholder entries.
 
 ## Bob v1.0.71 — 2026-10-15
 
