@@ -193,7 +193,7 @@ export const SettingsPage: React.FC = () => {
     if (typeof window !== 'undefined' && (window as any).bob?.checkForUpdates) {
       try {
         const res = await (window as any).bob.checkForUpdates();
-        setUpdaterState(res || { status: 'latest', message: 'You are on the latest version (v1.0.59)' });
+        setUpdaterState(res || { status: 'error', version: installedVersion, message: 'The desktop updater returned no status. Please try again.' });
       } catch (err: any) {
         setUpdaterState({ status: 'error', message: err?.message || 'Update check failed.' });
       }
