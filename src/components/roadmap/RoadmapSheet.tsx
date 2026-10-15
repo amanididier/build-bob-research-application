@@ -377,6 +377,21 @@ No markdown codeblocks or prose, only valid JSON array.`;
     setIsGeneratingAdaptiveQuestion(false);
   };
 
+  const shouldAskFollowupQuestion = async (answers: string[]): Promise<boolean> => {
+    if (answers.length >= 5) return false;
+    const key = resolveGeminiApiKey();
+    if (!key) return false;
+    try {
+      const ai = new GoogleGenAI({ apiKey: key });
+      const prompt = `Decide whether Bob needs one more clarification before creating a useful action plan. Goal: "${goalQuery || 'infer from answers'}". Answers so far: ${JSON.stringify(answers)}. Saved profile context: ${localStorage.getItem('bob_profile_preferences_v1') || '{}'}. Ask another question only if an important unknown would materially change the plan. Be conservative: most goals should be ready after three answers. Ask at most five questions total. Return strict JSON only: {"askMore":true|false,"reason":"short reason"}.`;
+      const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+      const cleaned = (response.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const result = JSON.parse(cleaned);
+      return result.askMore === true;
+    } catch {
+      return false;
+    }
+  };
   const handleAdaptiveChoice = (option: AdaptiveQuestion['options'][number]) => {
     const answer = `${adaptiveQuestion.question}: ${option.value}`;
     const nextAnswers = [...adaptiveAnswers, answer];
@@ -391,6 +406,19 @@ No markdown codeblocks or prose, only valid JSON array.`;
     else if (paceAnswer.includes('5–10') || paceAnswer.includes('5-10')) { setSelectedTimeOption('5–10 hours'); setSelectedCadence('2weeks'); }
     else if (paceAnswer.includes('10+')) { setSelectedTimeOption('10+ hours'); setSelectedCadence('sprint'); }
     else { setSelectedTimeOption('Flexible'); setSelectedCadence('flexible'); }
+    if (nextAnswers.length < 5) {
+      setIsGeneratingAdaptiveQuestion(true);
+      void shouldAskFollowupQuestion(nextAnswers).then((askMore) => {
+        if (askMore) {
+          void generateAdaptiveQuestion(nextAnswers.length + 1, nextAnswers);
+        } else {
+          void synthesizeStepsWithAi(nextAnswers);
+          setStepIndex(5);
+        }
+        setIsGeneratingAdaptiveQuestion(false);
+      });
+      return;
+    }
     void synthesizeStepsWithAi(nextAnswers);
     setStepIndex(5);
   };
@@ -928,7 +956,7 @@ Due Date: ${s.dueDate}
                 })}
               </div>
               <div className="flex items-center justify-between pt-4 border-t border-[var(--line)]">
-                <span className="text-xs text-[#8A8175]">Question {stepIndex - 1} of 3 · Your answers shape the next page</span>
+                <span className="text-xs text-[#8A8175]">Question {adaptiveAnswers.length + 1} · Bob adapts the next question to your answers</span>
                 <button type="button" onClick={handleBack} className={`px-4 py-2.5 rounded-xl border text-xs font-semibold ${isDark ? 'border-[#2A2620] text-[#8A8175]' : 'border-[#E7E0D3] text-[#6B6358]'}`}>
                   Back
                 </button>
