@@ -1,5 +1,5 @@
 name: Bob Quality Checks
-# v1.0.74 adaptive roadmap/profile/update UI validation
+# v1.0.74 final validation after updater-download wiring
 
 on:
   push:
