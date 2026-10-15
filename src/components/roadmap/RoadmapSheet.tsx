@@ -235,7 +235,7 @@ export const RoadmapSheet: React.FC<RoadmapSheetProps> = ({
     if (key) {
       try {
         const ai = new GoogleGenAI({ apiKey: key });
-        const prompt = `You are Bob's engineering roadmap engine. Create exactly 5 sequential, realistic, highly actionable engineering roadmap steps for the project: "${goalQuery || 'Web App'}".
+        const prompt = `You are Bob's adaptive project-planning engine. Create a roadmap specific to the user's actual goal, not a generic template. Project: "${goalQuery || 'User project'}". Create the first three essential milestones first, then add only the further milestones required for confident completion. Return 3–12 milestones based on complexity: 3–4 for a small clear goal, 5–8 for medium work, 9–12 for complex work. Never force a fixed count or include irrelevant engineering/deployment tasks. Make each phase project-specific, ordered, actionable, and outcome-based. If the goal is unclear, use early milestones to clarify it.
 User situation: "${situationText}".
 Selected tools: "${toolLabels}".
 Target cadence: "${dueDateLabel}".
@@ -263,7 +263,7 @@ No markdown codeblocks or prose, only valid JSON array.`;
         const parsed = JSON.parse(cleaned);
 
         if (Array.isArray(parsed) && parsed.length >= 3) {
-          const mapped: RoadmapStepItem[] = parsed.slice(0, 6).map((item, idx) => ({
+          const mapped: RoadmapStepItem[] = parsed.slice(0, 12).map((item, idx) => ({
             id: `ai-step-${Date.now()}-${idx}`,
             phase: item.phase || `PHASE ${idx + 1}`,
             title: item.title || `Milestone ${idx + 1}`,
@@ -395,10 +395,10 @@ Due Date: ${s.dueDate}
     // 1. Add each arranged step into AppContext tasks with unique ID & source connection
     enabledSteps.forEach((step, idx) => {
       addTask(
-        step.title, 
-        step.dueDate, 
-        activeProject?.id || 'urugendo', 
-        `Roadmap · Phase ${idx + 1}`
+        step.title,
+        step.dueDate,
+        activeProject?.id || activeResearchId || 'urugendo',
+        { sourceConnection: 'Bob Roadmap · ' + (step.phase || ('Phase ' + (idx + 1))), isAiGenerated: true }
       );
     });
 
@@ -431,6 +431,7 @@ Due Date: ${s.dueDate}
     try {
       localStorage.setItem('bob_phased_roadmap_v2', JSON.stringify({
         goal: goalQuery || 'Project Roadmap',
+        projectId: activeProject?.id || activeResearchId || 'urugendo',
         situation: selectedSituation,
         tools: selectedTools,
         cadence: selectedCadence,
