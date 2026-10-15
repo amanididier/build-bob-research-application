@@ -11,7 +11,7 @@ export const SearchModal: React.FC = () => {
   const searchItems = [
     ...projects.map((project) => ({
       title: project.title,
-      sub: `${project.sourceCount} sources · `${project.openTasks} open tasks`,
+      sub: `${project.sourceCount} sources · ${project.openTasks} open tasks`,
       icon: '✦',
       page: 'research' as const,
       subView: 'chat' as const,
@@ -19,7 +19,7 @@ export const SearchModal: React.FC = () => {
     })),
     ...tasks.map((task) => ({
       title: task.title,
-      sub: `Task · `${task.completed ? 'completed' : (task.dueDate || 'no due date')}`,
+      sub: `Task · ${task.completed ? 'completed' : (task.dueDate || 'no due date')}`,
       icon: task.completed ? '✓' : '○',
       page: 'tasks' as const,
       subView: undefined,
