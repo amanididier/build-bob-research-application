@@ -156,7 +156,7 @@ export const ChatPage: React.FC = () => {
 
     // If user explicitly asks about roadmap, launch the full-page roadmap
     const lower = userInput.toLowerCase();
-    if (lower.includes('roadmap') || lower.includes('create roadmap') || lower.includes('build roadmap') || lower.includes('make roadmap')) {
+    if (/\b(create|make|build|generate|start|plan)\b.{0,35}\broadmap\b/i.test(userInput) || /\broadmap\b.{0,25}\b(for my project|please create|please build)\b/i.test(userInput)) {
       setTimeout(() => {
         setRoadmapGoal(activeProject?.title || 'Project Roadmap');
         setIsRoadmapActive(true);
@@ -290,20 +290,6 @@ Do not make the conversation about yourself. Do not bring up projects, tasks, re
 
         {/* WhatsApp Top Right Action Icons */}
         <div className="flex items-center gap-1 sm:gap-2 text-[#54656f] dark:text-[#aebac1]">
-          {/* Project Roadmap Trigger Button (Replaces Chat UI with Full Page Roadmap) */}
-          <button
-            type="button"
-            onClick={() => {
-              setRoadmapGoal(activeProject?.title || 'Project Roadmap');
-              setIsRoadmapActive(true);
-            }}
-            className="px-3 py-1.5 rounded-full bg-[var(--y)] hover:bg-[#e0ac15] text-[#171717] text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer mr-1"
-            title="Open Full Page Project Roadmap"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Project Roadmap</span>
-          </button>
-
           <button
             type="button"
             onClick={() => handleSend("Hey Bob! Just felt like saying hi.")}
@@ -417,23 +403,6 @@ Do not make the conversation about yourself. Do not bring up projects, tasks, re
           className="px-3 py-1 rounded-full bg-white dark:bg-[#1b202b] hover:bg-[#f5c842] hover:text-[#171717] border border-black/5 dark:border-white/5 text-[11px] font-medium text-[#172033] dark:text-[#f2f6ff] transition-colors shrink-0 shadow-2xs cursor-pointer"
         >
           ☕ Coffee break
-        </button>
-        <button
-          type="button"
-          onClick={() => handleSend("Hey Bob, how did that step I worked on sound to you?")}
-          className="px-3 py-1 rounded-full bg-white dark:bg-[#1b202b] hover:bg-[#f5c842] hover:text-[#171717] border border-black/5 dark:border-white/5 text-[11px] font-medium text-[#172033] dark:text-[#f2f6ff] transition-colors shrink-0 shadow-2xs cursor-pointer"
-        >
-          ✨ Ask about my step
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setRoadmapGoal(activeProject?.title || 'Project Roadmap');
-            setIsRoadmapActive(true);
-          }}
-          className="px-3 py-1 rounded-full bg-white dark:bg-[#1b202b] hover:bg-[var(--y)] hover:text-black border border-black/5 dark:border-white/5 text-[11px] font-medium text-[#172033] dark:text-[#f2f6ff] transition-colors shrink-0 shadow-2xs cursor-pointer"
-        >
-          🧭 Launch Roadmap
         </button>
       </div>
 
