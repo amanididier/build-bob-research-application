@@ -1,5 +1,14 @@
 # Changelog
 
+## Bob v1.0.73 — 2026-10-15
+
+### Experience fixes
+- Extend the sunflower garden backdrop across the homepage, with centered greeting/composer, legible suggestion cards, and a visible navigation toggle while the sidebar starts closed.
+- Restore the dashboard as a separate white workspace with distinct recent, focus, and discovery cards that adapt to dark mode.
+- Keep casual chat focused on the user, remember explicitly shared preference statements locally, and avoid scripted fallback answers when Gemini is unavailable.
+- Keep Bob's replies visually concise and preserve the two adaptive multiple-choice roadmap questions before goal-specific milestone synthesis.
+
+
 ## Bob v1.0.72 — 2026-10-15
 
 ### Navigation and daily start
