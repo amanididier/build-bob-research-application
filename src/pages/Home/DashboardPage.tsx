@@ -183,7 +183,7 @@ export const DashboardPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         {/* CARD 1: Recents */}
-        <div className="bg-[var(--s)] border border-[var(--line)] rounded-[24px] p-6 shadow-[0_5px_25px_rgba(0,0,0,0.03)] flex flex-col justify-between animate-in fade-in slide-in-from-bottom-3 duration-500">
+        <div className="bg-gradient-to-br from-[#eef7ff] to-white dark:from-[#18283b] dark:to-[var(--s)] border border-[#d7eaff] dark:border-[#29425c] rounded-[24px] p-6 shadow-[0_5px_25px_rgba(0,0,0,0.03)] flex flex-col justify-between animate-in fade-in slide-in-from-bottom-3 duration-500">
           <div>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
@@ -258,7 +258,7 @@ export const DashboardPage: React.FC = () => {
 
         {/* CARD 2: Today's Focus */}
         <div
-          className="bg-[var(--s)] border border-[var(--line)] rounded-[24px] p-6 shadow-[0_5px_25px_rgba(0,0,0,0.03)] flex flex-col justify-between animate-in fade-in slide-in-from-bottom-3 duration-500"
+          className="bg-gradient-to-br from-[#fff8df] to-white dark:from-[#332b18] dark:to-[var(--s)] border border-[#f5e7b4] dark:border-[#5b4b27] rounded-[24px] p-6 shadow-[0_5px_25px_rgba(0,0,0,0.03)] flex flex-col justify-between animate-in fade-in slide-in-from-bottom-3 duration-500"
           style={{ animationDelay: '120ms' }}
         >
           <div>
