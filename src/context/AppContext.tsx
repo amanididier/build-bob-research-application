@@ -167,7 +167,18 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentPage, setCurrentPage] = useState<AppPage>('home');
+  const [currentPage, setCurrentPage] = useState<AppPage>(() => {
+    if (typeof window === 'undefined') return 'dashboard';
+    const now = new Date();
+    const today = String(now.getFullYear()) + '-' + String(now.getMonth() + 1) + '-' + String(now.getDate());
+    try {
+      if (localStorage.getItem('bob_home_day') !== today) {
+        localStorage.setItem('bob_home_day', today);
+        return 'home';
+      }
+    } catch {}
+    return 'dashboard';
+  });
   const [researchSubView, setResearchSubView] = useState<ResearchSubView>('chat');
   const [activeResearchId, setActiveResearchId] = useState<string>('urugendo');
   const [isSidebarClosed, setIsSidebarClosed] = useState<boolean>(false);
