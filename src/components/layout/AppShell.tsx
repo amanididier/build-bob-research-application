@@ -54,7 +54,7 @@ export const AppShell: React.FC = () => {
       <div className="flex-1 min-h-0 flex overflow-hidden relative">
         <Sidebar />
         <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden relative">
-          {currentPage !== 'chat' && <TopBar />}
+          {currentPage !== 'chat' && currentPage !== 'home' && <TopBar />}
           <main className={`flex-1 relative ${currentPage === 'chat' ? 'h-full overflow-hidden' : 'overflow-y-auto'}`}>
             <ErrorBoundary key={`${currentPage}-${activeResearchId}-${researchSubView}`}>
               {renderCurrentPage()}
