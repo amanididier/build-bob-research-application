@@ -99,7 +99,7 @@ export const DashboardPage: React.FC = () => {
   };
 
   return (
-    <div className="w-full pb-36 animate-in fade-in duration-300">
+    <div className="w-full min-h-full pb-36 bg-[var(--bg)] animate-in fade-in duration-300">
       {/* 1. Full-Width 100% Sunflower Garden Hero Banner (Spans whole screen, not in a card) */}
       <div className="relative w-[calc(100%-2.5rem)] md:w-[calc(100%-4rem)] max-w-[1140px] mx-auto mt-5 min-h-[180px] md:min-h-[210px] rounded-[28px] flex items-center justify-center overflow-hidden text-white group shadow-md">
         {/* Background Image spanning 100% */}
@@ -171,7 +171,7 @@ export const DashboardPage: React.FC = () => {
         </div>
 
       {/* 3. Below the hero: ONLY 2 cards (Recents & Today's Focus) as requested */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
         
         {/* CARD 1: Recents */}
         <div className="bg-gradient-to-br from-[#eef7ff] to-white dark:from-[#18283b] dark:to-[var(--s)] border border-[#d7eaff] dark:border-[#29425c] rounded-[24px] p-6 shadow-[0_5px_25px_rgba(0,0,0,0.03)] flex flex-col justify-between animate-in fade-in slide-in-from-bottom-3 duration-500">
@@ -325,6 +325,25 @@ export const DashboardPage: React.FC = () => {
               <ArrowUpRight className="w-3.5 h-3.5" />
             </button>
           </div>
+        </div>
+
+        {/* CARD 3: Create / discover — a distinct, colorful entry point */}
+        <div className="rounded-[24px] p-6 border border-[#dcd8ff] dark:border-[#38345c] bg-gradient-to-br from-[#f0efff] via-white to-[#eaf7ff] dark:from-[#25233f] dark:via-[#171b25] dark:to-[#172b3c] shadow-[0_5px_25px_rgba(0,0,0,0.03)] flex flex-col justify-between animate-in fade-in slide-in-from-bottom-3 duration-500" style={{ animationDelay: '220ms' }}>
+          <div>
+            <div className="w-10 h-10 rounded-2xl bg-[#e4e0ff] dark:bg-[#38345c] text-[#6555d9] dark:text-[#c4baff] grid place-items-center mb-4">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <p className="text-[10px] uppercase tracking-[0.14em] font-extrabold text-[#6555d9] dark:text-[#c4baff] mb-2">A FRESH START</p>
+            <h3 className="text-[19px] font-extrabold tracking-tight text-[var(--t)] mb-2">Explore a new idea</h3>
+            <p className="text-[12.5px] leading-relaxed text-[var(--m)]">Start with a question or a source. Bob will help you explore it first; a roadmap is optional and only appears when it makes sense.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => { const newId = createNewResearchSession(); navigateTo('research', 'chat', newId); }}
+            className="mt-6 w-full inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 bg-[#6555d9] hover:bg-[#5545c9] text-white text-[12px] font-bold transition-colors shadow-sm"
+          >
+            Start exploring <ArrowRight className="w-4 h-4" />
+          </button>
         </div>
 
       </div>
