@@ -69,11 +69,12 @@ const formatDay = (ts: number) => {
 
 // Casual friendly companion follow-ups (like chatting with a close friend)
 const CASUAL_FOLLOWUPS = [
-  "How did that step you were working on earlier go? Did it turn out alright?",
-  "Did you manage to take a quick breather away from the screen yet?",
-  "How's your energy holding up today? Feeling good about where things stand?",
-  "Did that last change you made feel smooth, or did you hit any weird snags?",
-  "Always remember to stay hydrated! How's the rest of your afternoon looking?"
+  "By the way, what kind of music have you been enjoying lately?",
+  "What movie or series has actually kept your attention recently?",
+  "How has your day been outside of the screen?",
+  "If you could spend a free afternoon anywhere, where would you go?",
+  "What is a small thing that has made you smile lately?",
+  "Who is someone you admire at the moment, and what do you like about them?"
 ];
 
 export const ChatPage: React.FC = () => {
@@ -245,7 +246,7 @@ Do not make the conversation about yourself. Do not bring up projects, tasks, re
 
   return (
     // Clean edge-to-edge WhatsApp Container with full 100% dot pattern background covering the entire page
-    <div className="w-full h-full flex flex-col relative select-text bg-[#f8faff] dark:bg-[#10131b] [background-image:radial-gradient(circle_at_1px_1px,rgba(59,130,246,0.07)_1px,transparent_0)] dark:[background-image:radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.045)_1px,transparent_0)] [background-size:22px_22px] overflow-hidden">
+    <div className="w-full h-full flex flex-col relative select-text bg-gradient-to-b from-[#f7faff] via-white to-[#fffdf4] dark:from-[#10131b] dark:via-[#131927] dark:to-[#1b1a14] overflow-hidden">
       
       {/* 1. Authentic WhatsApp Top Bar (Spans 100% width, no double borders) */}
       <header className="w-full h-15 px-4 sm:px-6 bg-white dark:bg-[#171b25] border-b border-black/5 dark:border-white/5 flex items-center justify-between gap-3 shrink-0 z-10 shadow-xs">
@@ -349,8 +350,8 @@ Do not make the conversation about yourself. Do not bring up projects, tasks, re
                 <div
                   className={`relative max-w-[85%] sm:max-w-[70%] px-3.5 py-2 rounded-2xl shadow-xs ${
                     isUser
-                      ? 'bg-[#e8f1ff] dark:bg-[#243a5d] text-[#172033] dark:text-[#f2f6ff] rounded-tr-xs'
-                      : 'bg-white dark:bg-[#1b202b] text-[#172033] dark:text-[#f2f6ff] rounded-tl-xs border border-[#e7edf5] dark:border-white/5'
+                      ? 'bg-gradient-to-br from-[#4388ff] to-[#2764d8] dark:from-[#3b82f6] dark:to-[#1d4ed8] text-white rounded-tr-sm'
+                      : 'bg-white dark:bg-[#1b202b] text-[#172033] dark:text-[#f2f6ff] rounded-tl-sm border border-[#e7edf5] dark:border-white/5 shadow-sm'
                   }`}
                 >
                   <p className="text-[13.5px] leading-relaxed m-0 whitespace-pre-wrap select-text">
@@ -434,7 +435,7 @@ Do not make the conversation about yourself. Do not bring up projects, tasks, re
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder="Type a casual message…"
-            className="flex-1 h-10 px-4 rounded-lg bg-white dark:bg-[#2a3942] border-none text-[13.5px] text-[#172033] dark:text-[#f2f6ff] placeholder:text-[#8696a0] outline-none shadow-2xs"
+            className="flex-1 h-11 px-5 rounded-full bg-[#f1f5fb] dark:bg-[#222b3a] border border-[#e5ebf5] dark:border-white/5 text-[13.5px] text-[#172033] dark:text-[#f2f6ff] placeholder:text-[#8696a0] outline-none shadow-inner"
           />
 
           {draft.trim() ? (
@@ -442,7 +443,7 @@ Do not make the conversation about yourself. Do not bring up projects, tasks, re
               type="submit"
               disabled={isBobTyping}
               title="Send message"
-              className="w-10 h-10 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white grid place-items-center transition-all active:scale-95 disabled:opacity-40 cursor-pointer shrink-0 shadow-xs"
+              className="w-10 h-10 rounded-full bg-[#3478f6] hover:bg-[#f5c842] hover:text-[#172033] text-white grid place-items-center transition-all active:scale-95 disabled:opacity-40 cursor-pointer shrink-0 shadow-xs"
             >
               <Send className="w-4 h-4 ml-0.5" />
             </button>
@@ -451,7 +452,7 @@ Do not make the conversation about yourself. Do not bring up projects, tasks, re
               type="button"
               onClick={() => handleSend("Hey Bob! Just taking a quick break to chat.")}
               title="Voice message"
-              className="w-10 h-10 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white grid place-items-center transition-all active:scale-95 cursor-pointer shrink-0 shadow-xs"
+              className="w-10 h-10 rounded-full bg-[#3478f6] hover:bg-[#f5c842] hover:text-[#172033] text-white grid place-items-center transition-all active:scale-95 cursor-pointer shrink-0 shadow-xs"
             >
               <Mic className="w-4 h-4" />
             </button>
