@@ -990,7 +990,7 @@ Due Date: ${s.dueDate}
 
                 <button
                   type="button"
-                  onClick={synthesizeStepsWithAi}
+                  onClick={() => void synthesizeStepsWithAi()}
                   disabled={isAiSynthesizing}
                   className={`p-2 rounded-xl border flex items-center gap-1.5 text-xs font-semibold shrink-0 cursor-pointer ${
                     isDark ? 'border-[#2A2620] bg-[#17150F] hover:bg-[#201D17]' : 'border-[#E7E0D3] bg-white hover:bg-neutral-100'
