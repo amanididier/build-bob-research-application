@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { ArrowUp, LayoutDashboard, MessageSquare, Settings, Sparkles, Search, BookOpen, GitCompare, Map } from 'lucide-react';
+import { ArrowUp, Menu, Sparkles, Search, BookOpen, GitCompare, Map } from 'lucide-react';
 import sunflowerMorning from '../../assets/images/sunflower_garden_morning_user.png';
 import sunflowerNight from '../../assets/images/sunflower_garden_night_1791540711934.jpg';
 import bobOrb from '../../assets/images/bob_mascot_orb_1791540734514.jpg';
@@ -14,7 +14,7 @@ const SUGGESTIONS = [
 ];
 
 export const HomePage: React.FC = () => {
-  const { userName, navigateTo, createNewResearchSession } = useApp();
+  const { userName, navigateTo, createNewResearchSession, toggleSidebar } = useApp();
   const [draft, setDraft] = useState('');
   const composerRef = useRef<HTMLInputElement>(null);
 
@@ -35,6 +35,9 @@ export const HomePage: React.FC = () => {
     <div className="relative isolate min-h-full pb-14 overflow-hidden">
       <img src={sunflowerMorning} alt="" aria-hidden="true" className="pointer-events-none absolute inset-0 -z-20 h-full min-h-[1000px] w-full object-cover object-center" />
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b from-black/35 via-black/30 to-white/95 dark:to-[#111722]/95" />
+      <button type="button" onClick={toggleSidebar} aria-label="Open navigation" title="Open navigation" className="absolute left-4 top-4 z-20 grid h-10 w-10 place-items-center rounded-xl border border-white/40 bg-black/20 text-white backdrop-blur-md transition hover:bg-black/35">
+        <Menu className="h-5 w-5" />
+      </button>
       <section className="relative min-h-[58vh] md:min-h-[64vh] flex items-center justify-center overflow-hidden">
         <div className="relative z-10 w-full max-w-3xl mx-auto px-5 py-12 text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 border border-white/20 text-white/90 text-[10px] font-bold tracking-[0.16em] uppercase mb-5 backdrop-blur-md"><Sparkles className="w-3.5 h-3.5 text-[#f5c842]" />Your research companion</div>
