@@ -5,19 +5,24 @@ import { Check, Sparkles, User, Shield, Compass } from 'lucide-react';
 
 export const ProfilePage: React.FC = () => {
   const { triggerThinking, userName, setUserName, startOnboarding } = useApp();
-  const [name, setName] = useState(userName || 'Amani');
-  const [style, setStyle] = useState<'concise' | 'detailed' | 'explain'>('concise');
+  const [name, setName] = useState(() => userName || localStorage.getItem('bob_user_name') || '');
+  const [profilePrefs, setProfilePrefs] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('bob_profile_preferences_v1') || '{}');
+    } catch { return {}; }
+  });
+  const [style, setStyle] = useState<'concise' | 'detailed' | 'explain'>(profilePrefs.style || 'concise');
   const [priorities, setPriorities] = useState({
-    evidence: true,
-    steps: true,
-    contradictions: false,
-    links: true,
+    evidence: profilePrefs.priorities?.evidence ?? true,
+    steps: profilePrefs.priorities?.steps ?? true,
+    contradictions: profilePrefs.priorities?.contradictions ?? false,
+    links: profilePrefs.priorities?.links ?? true,
   });
 
   const [toggles, setToggles] = useState({
-    proactive: true,
-    confidence: true,
-    friendly: true,
+    proactive: profilePrefs.toggles?.proactive ?? true,
+    confidence: profilePrefs.toggles?.confidence ?? true,
+    friendly: profilePrefs.toggles?.friendly ?? true,
   });
 
   const handleSave = () => {
@@ -25,7 +30,10 @@ export const ProfilePage: React.FC = () => {
       setUserName(name.trim());
       localStorage.setItem('bob_user_name', name.trim());
     }
-    triggerThinking('Saving Profile Preferences', 'Updating Bob personal context model...', 'Preferences stored');
+    const saved = { style, priorities, toggles, updatedAt: new Date().toISOString() };
+    localStorage.setItem('bob_profile_preferences_v1', JSON.stringify(saved));
+    setProfilePrefs(saved);
+    triggerThinking('Profile Saved', 'Your display name and Bob preferences are saved on this device.', 'Saved');
   };
 
   return (
@@ -33,7 +41,7 @@ export const ProfilePage: React.FC = () => {
       {/* Profile Hero */}
       <div className="flex items-center gap-5 pb-6 border-b border-[var(--line)] mb-8">
         <div className="w-16 h-16 rounded-[22px] bg-gradient-to-br from-[#d9e7ff] to-[#f2d4bb] text-neutral-800 font-extrabold text-2xl grid place-items-center shadow-md flex-shrink-0">
-          A
+          {(name.trim() || userName || 'B').slice(0, 1).toUpperCase()}
         </div>
         <div>
           <div className="text-[10px] tracking-[0.08em] text-[#999] uppercase font-semibold">
