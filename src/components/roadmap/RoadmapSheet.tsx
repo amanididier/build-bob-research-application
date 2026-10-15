@@ -83,7 +83,7 @@ export const RoadmapSheet: React.FC<RoadmapSheetProps> = ({
   const { userName, triggerThinking, addTask, navigateTo, activeResearchId, projects, currentPage } = useApp();
   const [internalOpen, setInternalOpen] = useState(false);
   const [goalQuery, setGoalQuery] = useState(initialGoal || '');
-  const [stepIndex, setStepIndex] = useState(0); // 0 = Intro, 1..4 Questions, 5 = Arranger, 6 = Result
+  const [stepIndex, setStepIndex] = useState(0); // Intro, goal, 3 adaptive questions, arranger, result
   const [originSource, setOriginSource] = useState<'chat' | 'desktop' | 'tasks'>('chat');
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const [isOverviewOpen, setIsOverviewOpen] = useState(false);
@@ -105,7 +105,7 @@ export const RoadmapSheet: React.FC<RoadmapSheetProps> = ({
   const [isAiSynthesizing, setIsAiSynthesizing] = useState<boolean>(false);
   const [completedMilestoneIds, setCompletedMilestoneIds] = useState<Record<string, boolean>>({});
 
-  type AdaptiveQuestion = { question: string; helperText: string; options: Array<{ label: string; description?: string; value: string }> };
+  type AdaptiveQuestion = { question: string; helperText: string; layout?: 'cards' | 'pills' | 'timeline'; options: Array<{ label: string; description?: string; value: string }> };
   const [adaptiveQuestion, setAdaptiveQuestion] = useState<AdaptiveQuestion>({
     question: 'What matters most for this goal?',
     helperText: 'Choose the closest fit. Bob will use your answer to tailor the next question.',
@@ -318,6 +318,17 @@ No markdown codeblocks or prose, only valid JSON array.`;
           { label: 'Technical or practical blockers', description: 'I know the goal but need help executing', value: 'execution blockers' },
         ],
       },
+      {
+        question: 'What pace can you realistically sustain?',
+        helperText: 'Choose a rhythm that fits your life; Bob will keep the plan achievable.',
+        layout: 'timeline',
+        options: [
+          { label: 'A little at a time', description: 'Short sessions around other responsibilities', value: 'a few hours weekly; steady flexible cadence' },
+          { label: 'A consistent weekly rhythm', description: 'Dedicated blocks of time most weeks', value: '5–10 hours weekly; balanced cadence' },
+          { label: 'Focused sprint', description: 'I can make this a near-term priority', value: '10+ hours weekly; fast sprint cadence' },
+          { label: 'It depends on the task', description: 'Keep timing flexible and adjust as I learn', value: 'flexible cadence; adapt timing to each milestone' },
+        ],
+      },
     ];
     if (!key) {
       setAdaptiveQuestion(fallbackQuestions[Math.min(questionNumber - 1, fallbackQuestions.length - 1)]);
@@ -326,7 +337,7 @@ No markdown codeblocks or prose, only valid JSON array.`;
     }
     try {
       const ai = new GoogleGenAI({ apiKey: key });
-      const prompt = `You are Bob's adaptive project discovery assistant. The user's goal is: "${goalQuery || 'not fully defined yet'}". Previous answers: ${JSON.stringify(answers)}. Generate the next of exactly TWO adaptive multiple-choice discovery questions (question ${questionNumber} of 2). Ask only about an important unknown that the goal and previous answers have not resolved. Make every option specific and useful for this particular goal, not generic boilerplate. The user must be able to answer by selecting a card; do not require typing. Return strict JSON only: {"question":"...","helperText":"...","options":[{"label":"short choice","description":"brief explanation","value":"meaningful value"}]}. Include 3–5 distinct options.`;
+      const prompt = `You are Bob's adaptive project discovery assistant. The user's goal is: "${goalQuery || 'not fully defined yet'}". Previous answers: ${JSON.stringify(answers)}. Generate the next of exactly THREE adaptive discovery questions (question ${questionNumber} of 3). Ask only about an important unknown that the goal and previous answers have not resolved. Make every option specific and useful for this particular goal, not generic boilerplate. The user must be able to answer by selecting a card; do not require typing. Choose the most useful UI layout for this question from cards, pills, or timeline; vary the layout when it improves clarity. Return strict JSON only: {"question":"...","helperText":"...","layout":"cards|pills|timeline","options":[{"label":"short choice","description":"brief explanation","value":"meaningful value"}]}. Include 3–5 distinct options.`;
       const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
       const cleaned = (response.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
       const parsed = JSON.parse(cleaned);
@@ -334,6 +345,7 @@ No markdown codeblocks or prose, only valid JSON array.`;
         setAdaptiveQuestion({
           question: parsed.question,
           helperText: typeof parsed.helperText === 'string' ? parsed.helperText : 'Choose the option that best fits your situation.',
+          layout: ['cards', 'pills', 'timeline'].includes(parsed.layout) ? parsed.layout : 'cards',
           options: parsed.options.slice(0, 5).map((option: any) => ({
             label: String(option.label || option.value || 'Option'),
             description: typeof option.description === 'string' ? option.description : '',
@@ -354,11 +366,16 @@ No markdown codeblocks or prose, only valid JSON array.`;
     const answer = `${adaptiveQuestion.question}: ${option.value}`;
     const nextAnswers = [...adaptiveAnswers, answer];
     setAdaptiveAnswers(nextAnswers);
-    if (stepIndex === 2) {
-      void generateAdaptiveQuestion(2, nextAnswers);
-      setStepIndex(3);
+    if (stepIndex < 4) {
+      void generateAdaptiveQuestion(nextAnswers.length + 1, nextAnswers);
+      setStepIndex(stepIndex + 1);
       return;
     }
+    const paceAnswer = nextAnswers[nextAnswers.length - 1]?.toLowerCase() || '';
+    if (paceAnswer.includes('few hours')) { setSelectedTimeOption('A few hours'); setSelectedCadence('month'); }
+    else if (paceAnswer.includes('5–10') || paceAnswer.includes('5-10')) { setSelectedTimeOption('5–10 hours'); setSelectedCadence('2weeks'); }
+    else if (paceAnswer.includes('10+')) { setSelectedTimeOption('10+ hours'); setSelectedCadence('sprint'); }
+    else { setSelectedTimeOption('Flexible'); setSelectedCadence('flexible'); }
     void synthesizeStepsWithAi(nextAnswers);
     setStepIndex(5);
   };
@@ -437,7 +454,7 @@ Due Date: ${s.dueDate}
 
   if (!open) return null;
 
-  const totalQuestionSteps = 3; // Goal plus two Gemini-adaptive multiple-choice pages
+  const totalQuestionSteps = 4; // Goal selection plus three adaptive, goal-specific choice pages
 
   const handleNext = () => {
     if (stepIndex === 1) {
@@ -677,7 +694,7 @@ Due Date: ${s.dueDate}
       </header>
 
       {/* Segmented Wizard Progress across top when on question steps */}
-      {stepIndex > 0 && stepIndex <= 3 && (
+      {stepIndex > 0 && stepIndex <= 4 && (
         <div className="w-full flex gap-1 px-6 sm:px-12 pt-2 shrink-0">
           {[1, 2, 3, 4, 5].map((s) => (
             <span
@@ -862,16 +879,16 @@ Due Date: ${s.dueDate}
           )}
 
           {/* GEMINI-ADAPTIVE QUESTION PAGES: each answer determines the next question. */}
-          {(stepIndex === 2 || stepIndex === 3) && (
+          {(stepIndex === 2 || stepIndex === 3 || stepIndex === 4) && (
             <div className="space-y-6">
               <div className="space-y-1.5">
                 <span className="text-xs font-mono tracking-[0.16em] uppercase font-bold text-[var(--mint)]">
-                  {stepIndex === 2 ? 'DISCOVERING YOUR PRIORITIES' : 'TAILORING YOUR PLAN'}
+                  {stepIndex === 2 ? 'DISCOVERING YOUR PRIORITIES' : stepIndex === 3 ? 'REFINING YOUR DIRECTION' : 'MAKING IT REALISTIC'}
                 </span>
                 <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">{isGeneratingAdaptiveQuestion ? 'Thinking about your answers…' : adaptiveQuestion.question}</h1>
                 <p className={`text-sm ${isDark ? 'text-[#8A8175]' : 'text-[#6B6358]'}`}>{adaptiveQuestion.helperText}</p>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className={adaptiveQuestion.layout === 'pills' ? 'flex flex-wrap gap-2 justify-center' : adaptiveQuestion.layout === 'timeline' ? 'relative space-y-3 pl-5 before:absolute before:left-[9px] before:top-3 before:bottom-3 before:w-px before:bg-[#d8cba7] dark:before:bg-[#514936]' : 'grid grid-cols-1 sm:grid-cols-2 gap-3'}>
                 {adaptiveQuestion.options.map((option, index) => {
                   const colors = [
                     'bg-[#eaf4ff] border-[#cfe4ff] dark:bg-[#18283b] dark:border-[#29425c]',
@@ -882,17 +899,21 @@ Due Date: ${s.dueDate}
                   ];
                   return (
                     <button key={option.value} type="button" disabled={isGeneratingAdaptiveQuestion} onClick={() => handleAdaptiveChoice(option)}
-                      className={`rounded-2xl border p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-md ${colors[index % colors.length]}`}>
+                      className={adaptiveQuestion.layout === 'pills'
+                        ? 'rounded-full border border-[#c9d9ff] dark:border-[#30486d] bg-[#eef4ff] dark:bg-[#18283b] px-4 py-2.5 text-left text-xs font-bold text-[#2759b7] dark:text-[#c4d7ff] hover:-translate-y-0.5 transition-all disabled:opacity-50'
+                        : adaptiveQuestion.layout === 'timeline'
+                          ? 'relative w-full rounded-2xl border border-[#e7e0d3] dark:border-[#383328] bg-white dark:bg-[#17150f] p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-md before:absolute before:-left-[25px] before:top-5 before:w-3 before:h-3 before:rounded-full before:bg-[#eac94f] before:border-2 before:border-white dark:before:border-[#17150f]'
+                          : `rounded-2xl border p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-md ${colors[index % colors.length]}`}>
                       <span className="flex items-center justify-between gap-2 text-sm font-bold text-[var(--t)]">
-                        {option.label}<ArrowRight className="w-4 h-4 shrink-0" />
+                        {option.label}{adaptiveQuestion.layout !== 'pills' && <ArrowRight className="w-4 h-4 shrink-0" />}
                       </span>
-                      {option.description && <span className="block mt-1.5 text-xs leading-relaxed text-[var(--m)]">{option.description}</span>}
+                      {option.description && adaptiveQuestion.layout !== 'pills' && <span className="block mt-1.5 text-xs leading-relaxed text-[var(--m)]">{option.description}</span>}
                     </button>
                   );
                 })}
               </div>
               <div className="flex items-center justify-between pt-4 border-t border-[var(--line)]">
-                <span className="text-xs text-[#8A8175]">Question {stepIndex} of 3 · Your answers shape the next page</span>
+                <span className="text-xs text-[#8A8175]">Question {stepIndex - 1} of 3 · Your answers shape the next page</span>
                 <button type="button" onClick={handleBack} className={`px-4 py-2.5 rounded-xl border text-xs font-semibold ${isDark ? 'border-[#2A2620] text-[#8A8175]' : 'border-[#E7E0D3] text-[#6B6358]'}`}>
                   Back
                 </button>
@@ -900,8 +921,8 @@ Due Date: ${s.dueDate}
             </div>
           )}
 
-          {/* STEP 4: Question 4 - Pacing & Time Commitment (3-Column Time Options) */}
-          {stepIndex === 4 && (
+          {/* STEP 4 is the third Gemini-adaptive choice page above; pacing is inferred from its answer. */}
+          {false && stepIndex === 4 && (
             <div className="space-y-6">
               <div className="space-y-1.5">
                 <span className="text-xs font-mono tracking-[0.16em] uppercase font-bold text-[var(--lilac)]">
