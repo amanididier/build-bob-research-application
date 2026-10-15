@@ -161,7 +161,7 @@ export const ChatPage: React.FC = () => {
     const lower = userInput.toLowerCase();
     if (/\b(create|make|build|generate|start|plan)\b.{0,35}\broadmap\b/i.test(userInput) || /\broadmap\b.{0,25}\b(for my project|please create|please build)\b/i.test(userInput)) {
       setTimeout(() => {
-        const goalFromRequest = userInput.replace(/.*?\\broadmap\\b/i, '').replace(/^\\s*(?:for|about|to)\\s+/i, '').trim();
+        const goalFromRequest = userInput.replace(/.*?\broadmap\b/i, '').replace(/^\s*(?:for|about|to)\s+/i, '').trim();
         setRoadmapGoal(goalFromRequest || '');
         setIsRoadmapActive(true);
       }, 500);
@@ -176,7 +176,7 @@ export const ChatPage: React.FC = () => {
 Treat this like a real ongoing conversation, not a search box: respond to what the person actually said, acknowledge feelings or details, and sometimes ask one natural follow-up question rather than ending every turn with a generic line.
 You can discuss everyday life, interests, music, celebrities, films, hobbies, friendships, culture, learning, creativity, decisions, emotions, technology, and practical questions.
 Keep replies concise and warm, usually one or two short sentences. Do not make the conversation about yourself. Do not bring up projects, tasks, research sessions, or roadmaps unless the user explicitly asks or the current message clearly concerns them. If a meaningful multi-step goal comes up, ask whether they want help planning before opening any roadmap. Never insert scheduled project reminders.
-Known preferences the user has explicitly shared (use naturally, never assume more than these): ${rememberedFacts.join(' | ') || 'No saved preferences yet.'}`);
+Known preferences the user has explicitly shared (use naturally, never assume more than these): ${rememberedFacts.join(' | ') || 'No saved preferences yet.'}`;
 
         const response = await ai.models.generateContent({
           model: 'gemini-2.5-flash',
