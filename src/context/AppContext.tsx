@@ -419,6 +419,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Dynamic interactive chat send with automatic title and priority color assignment
   const sendMessage = async (promptText: string) => {
     if (!promptText.trim()) return;
+    // Guest conversion prompt: show once after five submitted chats unless a roadmap triggers it first.
+    if (typeof window !== 'undefined' && localStorage.getItem('bob_guest_mode') === 'true' &&
+        localStorage.getItem('bob_guest_auth_prompted') !== 'true') {
+      const nextCount = Number(localStorage.getItem('bob_guest_chat_count') || '0') + 1;
+      localStorage.setItem('bob_guest_chat_count', String(nextCount));
+      if (nextCount >= 5) {
+        localStorage.setItem('bob_guest_auth_prompted', 'true');
+        setIsAuthModalOpen(true);
+      }
+    }
 
     const currentProject = projects.find((p) => p.id === activeResearchId);
     const isNewSession = !currentProject || currentProject.title === 'New research' || currentProject.title.startsWith('New ');
