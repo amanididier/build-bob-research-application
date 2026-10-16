@@ -21,6 +21,7 @@ import { downloadExtensionZip } from '../../lib/downloadHelper';
 import { warmupVoiceEngine } from '../../lib/voice/startupWarmup';
 import { tts } from '../../lib/voice/ttsProvider';
 import { localVoiceManager } from '../../lib/voice/localVoiceManager';
+import { signInWithEmail, signUpWithEmail, signInWithGoogle } from '../../lib/supabaseClient';
 
 export const OnboardingFlow: React.FC = () => {
   const { 
@@ -58,11 +59,13 @@ export const OnboardingFlow: React.FC = () => {
   const [isExtensionConnected, setIsExtensionConnected] = useState<boolean>(false);
 
   // Step 6: Auth state (Email & Google sign-in)
-  const [authMode, setAuthMode] = useState<'options' | 'email'>('options');
-  const [authEmail, setAuthEmail] = useState<string>('ishimweamanid@gmail.com');
+  const [authMode, setAuthMode] = useState<'options' | 'email-signin' | 'email-signup'>('options');
+  const [authEmail, setAuthEmail] = useState<string>('');
   const [authPassword, setAuthPassword] = useState<string>('');
   const [authLoading, setAuthLoading] = useState<boolean>(false);
   const [authSuccess, setAuthSuccess] = useState<boolean>(false);
+  const [authError, setAuthError] = useState<string>('');
+  const [authInfo, setAuthInfo] = useState<string>('');
 
   // Step 8: Welcome Chat state
   const [chatMessages, setChatMessages] = useState<Array<{ role: 'assistant' | 'user'; text: string; time: string }>>([
@@ -163,47 +166,58 @@ export const OnboardingFlow: React.FC = () => {
     }
   };
 
+  const completeAuth = (user: { email: string; name: string }) => {
+    localStorage.setItem('bob_auth_user', JSON.stringify(user));
+    localStorage.setItem('bob_user_email', user.email);
+    setUserEmail(user.email);
+    if (user.name) setUserName(user.name);
+    setAuthSuccess(true);
+    setAuthError('');
+    setTimeout(() => handleNextStep(), 500);
+  };
+
   const handleGoogleSignIn = async () => {
     setAuthLoading(true);
-    await new Promise((r) => setTimeout(r, 650));
-    const userProfile = {
-      id: `usr_${Date.now()}`,
-      name: localName.trim() || 'Didier',
-      email: authEmail || 'ishimweamanid@gmail.com',
-      avatarUrl: '',
-      provider: 'google',
-      created_at: new Date().toISOString()
-    };
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('bob_auth_user', JSON.stringify(userProfile));
-      localStorage.setItem('bob_user_email', userProfile.email);
+    setAuthError('');
+    setAuthInfo('');
+    try {
+      const result = await signInWithGoogle();
+      if (!result.success) setAuthError(result.error || 'Google sign-in could not start. Please try again.');
+      // OAuth redirects the user to Google; do not fabricate a local signed-in user.
+    } catch (error: any) {
+      setAuthError(error?.message || 'Google sign-in could not start. Please try again.');
+    } finally {
+      setAuthLoading(false);
     }
-    setUserEmail(userProfile.email);
-    setAuthLoading(false);
-    setAuthSuccess(true);
-    setTimeout(() => handleNextStep(), 400);
   };
 
   const handleEmailAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!authEmail.trim()) return;
+    const cleanEmail = authEmail.trim().toLowerCase();
+    if (!cleanEmail || !authPassword) return;
     setAuthLoading(true);
-    await new Promise((r) => setTimeout(r, 650));
-    const userProfile = {
-      id: `usr_${Date.now()}`,
-      name: localName.trim() || authEmail.split('@')[0],
-      email: authEmail.trim(),
-      provider: 'email',
-      created_at: new Date().toISOString()
-    };
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('bob_auth_user', JSON.stringify(userProfile));
-      localStorage.setItem('bob_user_email', userProfile.email);
+    setAuthError('');
+    setAuthInfo('');
+    try {
+      const result = authMode === 'email-signup'
+        ? await signUpWithEmail(cleanEmail, authPassword, localName.trim() || cleanEmail.split('@')[0])
+        : await signInWithEmail(cleanEmail, authPassword);
+      if (!result.success || !result.user) {
+        const message = result.error || 'We could not authenticate this account.';
+        if (authMode === 'email-signin' && /invalid login credentials|user not found|invalid email or password/i.test(message)) {
+          setAuthError('We couldn’t sign you in with those details. If you’re new to Bob, choose Create an account.');
+        } else {
+          setAuthError(message);
+        }
+        return;
+      }
+      const displayName = String(result.user.user_metadata?.full_name || result.user.user_metadata?.display_name || localName.trim() || cleanEmail.split('@')[0]);
+      completeAuth({ email: result.user.email || cleanEmail, name: displayName });
+    } catch (error: any) {
+      setAuthError(error?.message || 'Authentication failed. Please try again.');
+    } finally {
+      setAuthLoading(false);
     }
-    setUserEmail(userProfile.email);
-    setAuthLoading(false);
-    setAuthSuccess(true);
-    setTimeout(() => handleNextStep(), 400);
   };
 
   const handleChatSend = async (e?: React.FormEvent) => {
@@ -240,7 +254,7 @@ export const OnboardingFlow: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-md animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/10 animate-in fade-in duration-200">
       <div className="w-full max-w-[720px] bg-[var(--s)] border border-[var(--line)] shadow-2xl rounded-[32px] p-7 sm:p-9 relative flex flex-col justify-between min-h-[580px] transition-all">
         
         {/* Step Indicator */}
@@ -484,97 +498,65 @@ export const OnboardingFlow: React.FC = () => {
             </div>
           )}
 
-          {/* CARD 6: Login / Sign Up */}
+          {/* CARD 6: Real Supabase authentication */}
           {step === 6 && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-              <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-                <ShieldCheck className="w-7 h-7 text-emerald-500" />
-              </div>
-              <div className="space-y-2">
-                <span className="text-[11px] font-bold tracking-wider text-[var(--m)] uppercase">
-                  Step 6 of 8 · Account & Sync
-                </span>
+            <div className="mx-auto w-full max-w-[430px] space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div className="text-center space-y-2">
+                <div className="mx-auto w-12 h-12 rounded-2xl bg-[var(--ys)] flex items-center justify-center">
+                  <BobLogo size={27} shape="transparent" />
+                </div>
+                <span className="text-[11px] font-bold tracking-wider text-[var(--m)] uppercase">Your Bob account</span>
                 <h2 className="text-[28px] sm:text-[32px] font-extrabold tracking-tight text-[var(--t)]">
-                  Save your research identity
+                  {authMode === 'email-signup' ? 'Create your account' : authMode === 'email-signin' ? 'Welcome back' : 'Log in or sign up'}
                 </h2>
-                <p className="text-[14px] text-[var(--m)] leading-relaxed max-w-[560px]">
-                  Sign in to persist your research projects, notes, and local memory securely across all your devices and database.
+                <p className="text-[13px] text-[var(--m)] leading-relaxed">
+                  Save your research and pick up where you left off on another device.
                 </p>
               </div>
 
               {authMode === 'options' ? (
-                <div className="space-y-3 max-w-[420px]">
-                  <button
-                    type="button"
-                    onClick={handleGoogleSignIn}
-                    disabled={authLoading}
-                    className="w-full h-12 px-4 rounded-2xl bg-[var(--s)] hover:bg-[var(--s2)] border border-[var(--line)] text-[13.5px] font-bold text-[var(--t)] flex items-center justify-center gap-3 transition-all active:scale-[0.99] cursor-pointer shadow-sm"
-                  >
-                    <svg className="w-4 h-4" viewBox="0 0 24 24">
-                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                <div className="space-y-3">
+                  <button type="button" onClick={handleGoogleSignIn} disabled={authLoading}
+                    className="w-full h-[54px] rounded-full border border-[var(--line)] bg-[var(--s)] hover:bg-[var(--s2)] text-[14px] font-bold text-[var(--t)] flex items-center justify-center gap-3 transition-all disabled:opacity-60">
+                    <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" aria-hidden="true">
+                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
                     </svg>
-                    <span>{authLoading ? 'Connecting…' : 'Continue with Google'}</span>
+                    {authLoading ? 'Connecting…' : 'Continue with Google'}
                   </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setAuthMode('email')}
-                    className="w-full h-12 px-4 rounded-2xl bg-[var(--s2)] hover:bg-[var(--line)] border border-[var(--line)] text-[13.5px] font-semibold text-[var(--t)] flex items-center justify-center gap-2.5 transition-all cursor-pointer"
-                  >
-                    <Mail className="w-4 h-4 text-[var(--m)]" />
-                    <span>Sign in with Email</span>
+                  <div className="flex items-center gap-3 py-1 text-[11px] text-[var(--m)]"><span className="h-px flex-1 bg-[var(--line)]"/><span>OR</span><span className="h-px flex-1 bg-[var(--line)]"/></div>
+                  <button type="button" onClick={() => { setAuthMode('email-signin'); setAuthError(''); }}
+                    className="w-full h-[54px] rounded-full border border-[var(--line)] bg-transparent hover:bg-[var(--s2)] text-[14px] font-semibold text-[var(--t)] transition-all">
+                    Continue with email
                   </button>
-
-                  {authSuccess && (
-                    <p className="text-[12px] font-semibold text-emerald-600 dark:text-emerald-400 text-center pt-1">
-                      Account authenticated and synced!
-                    </p>
-                  )}
+                  <button type="button" onClick={handleNextStep}
+                    className="w-full pt-2 text-[12px] font-semibold underline underline-offset-4 text-[var(--m)] hover:text-[var(--t)]">
+                    Try it first
+                  </button>
                 </div>
               ) : (
-                <form onSubmit={handleEmailAuthSubmit} className="space-y-3 max-w-[420px]">
-                  <div>
-                    <label className="text-[11.5px] font-semibold text-[var(--m)] block mb-1">Email Address</label>
-                    <input
-                      type="email"
-                      required
-                      value={authEmail}
-                      onChange={(e) => setAuthEmail(e.target.value)}
-                      placeholder="you@domain.com"
-                      className="w-full h-11 px-3.5 rounded-xl bg-[var(--s2)] border border-[var(--line)] text-[13px] text-[var(--t)] outline-none focus:border-[var(--y)]"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11.5px] font-semibold text-[var(--m)] block mb-1">Password</label>
-                    <input
-                      type="password"
-                      value={authPassword}
-                      onChange={(e) => setAuthPassword(e.target.value)}
-                      placeholder="••••••••"
-                      className="w-full h-11 px-3.5 rounded-xl bg-[var(--s2)] border border-[var(--line)] text-[13px] text-[var(--t)] outline-none focus:border-[var(--y)]"
-                    />
-                  </div>
-                  <div className="flex gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setAuthMode('options')}
-                      className="h-11 px-4 rounded-xl text-[12px] font-semibold text-[var(--m)] hover:text-[var(--t)] cursor-pointer"
-                    >
-                      Back
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={authLoading}
-                      className="flex-1 h-11 px-4 rounded-xl bg-[#171717] dark:bg-[#f2eee7] text-white dark:text-[#171717] font-bold text-[12.5px] transition-all hover:opacity-90 cursor-pointer"
-                    >
-                      {authLoading ? 'Signing in…' : 'Save & Continue'}
+                <form onSubmit={handleEmailAuthSubmit} className="space-y-3">
+                  {authMode === 'email-signup' && <input type="text" value={localName} onChange={e => setLocalName(e.target.value)} placeholder="Your name" className="w-full h-[54px] px-5 rounded-full bg-[var(--s)] border border-[var(--line)] text-[14px] text-[var(--t)] outline-none focus:border-[var(--y)]" />}
+                  <input type="email" required autoComplete="email" value={authEmail} onChange={e => setAuthEmail(e.target.value)} placeholder="Email address" className="w-full h-[54px] px-5 rounded-full bg-[var(--s)] border border-[var(--line)] text-[14px] text-[var(--t)] outline-none focus:border-[var(--y)]" />
+                  <input type="password" required minLength={8} autoComplete={authMode === 'email-signup' ? 'new-password' : 'current-password'} value={authPassword} onChange={e => setAuthPassword(e.target.value)} placeholder="Password (at least 8 characters)" className="w-full h-[54px] px-5 rounded-full bg-[var(--s)] border border-[var(--line)] text-[14px] text-[var(--t)] outline-none focus:border-[var(--y)]" />
+                  {authError && <p role="alert" className="text-[12px] text-red-600 dark:text-red-400">{authError}</p>}
+                  {authInfo && <p role="status" className="text-[12px] text-emerald-600">{authInfo}</p>}
+                  <button type="submit" disabled={authLoading} className="w-full h-[54px] rounded-full bg-[#f7f7f7] text-[#111] hover:bg-white font-bold text-[14px] disabled:opacity-60">
+                    {authLoading ? 'Please wait…' : authMode === 'email-signup' ? 'Create account' : 'Continue'}
+                  </button>
+                  <div className="flex items-center justify-between gap-3 text-[12px]">
+                    <button type="button" onClick={() => { setAuthMode('options'); setAuthError(''); }} className="text-[var(--m)] hover:text-[var(--t)]">Back</button>
+                    <button type="button" onClick={() => { setAuthMode(authMode === 'email-signup' ? 'email-signin' : 'email-signup'); setAuthError(''); }} className="font-semibold text-[var(--t)] underline underline-offset-4">
+                      {authMode === 'email-signup' ? 'Already have an account?' : 'Create an account'}
                     </button>
                   </div>
+                  {authMode === 'email-signin' && <button type="button" onClick={() => { setAuthMode('email-signup'); setAuthError(''); }} className="w-full text-[12px] underline text-[var(--m)]">New to Bob? Create an account</button>}
                 </form>
               )}
+              {authError && authMode === 'options' && <p role="alert" className="text-[12px] text-red-600 dark:text-red-400 text-center">{authError}</p>}
+              {authSuccess && <p role="status" className="text-[12px] text-emerald-600 text-center">You’re signed in. Your account is connected.</p>}
             </div>
           )}
 
