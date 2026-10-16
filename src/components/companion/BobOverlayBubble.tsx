@@ -1,66 +1,74 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Sparkles, 
-  PanelRight, 
-  Clock, 
-  Volume2, 
-  X, 
-  Send, 
-  ArrowRight, 
-  Heart, 
-  Coffee, 
-  Moon, 
-  Sun, 
-  BookOpen, 
-  Utensils, 
-  Headphones,
-  RotateCcw
-} from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { X, Send, PanelRight, ArrowRight, Heart, Clock, RotateCcw } from 'lucide-react';
 import { bobRoutines, RoutineDetail } from '../../lib/companion/bobRoutines';
 import { useApp } from '../../context/AppContext';
 import { UserInterestsModal } from './UserInterestsModal';
+import { bobAi } from '../../lib/aiEngine';
+
+/** Map routine → preferred video then image under public/assets/companion-loops/ */
+function mediaForRoutine(id: string): { video?: string; image?: string } {
+  const base = '/assets/companion-loops';
+  const map: Record<string, { video?: string; image?: string }> = {
+    waking_up: { image: `${base}/bob-waking-up.png`, video: `${base}/bob-waking-up.webm` },
+    sleeping: { image: `${base}/bob-sleeping.png`, video: `${base}/bob-sleeping.webm` },
+    eating: { image: `${base}/bob-eating.png`, video: `${base}/bob-eating.webm` },
+    cooking: { image: `${base}/bob-cooking.png`, video: `${base}/bob-cooking.webm` },
+    reading: { image: `${base}/bob-reading-book.png`, video: `${base}/bob-reading.webm` },
+    meditating: { video: `${base}/bob-meditating.webm`, image: `${base}/bob-meditating.png` },
+    listening_music: { video: `${base}/bob-listening-music.webm`, image: `${base}/bob-listening-music.png` },
+    thinking: { video: `${base}/bob-thinking.webm`, image: `${base}/bob-thinking.png` },
+    listening: { video: `${base}/bob-listening.webm`, image: `${base}/bob-listening.png` },
+    speaking: { video: `${base}/bob-speaking.webm`, image: `${base}/bob-speaking.png` },
+  };
+  return map[id] || { video: `${base}/bob-idle.webm`, image: `${base}/bob-idle.png` };
+}
+
+type BubbleMsg = {
+  role: 'assistant' | 'user';
+  text: string;
+  actionType?: 'research_redirect';
+};
+
+type PanelTab = 'chat' | 'research';
+
+const CHAT_SYSTEM = `You are Bob, a friendly browsing companion in a small chat bubble.
+Reply in 1–3 short sentences. Casual, warm, plain words.
+Do not write long research reports. If the user needs deep research, roadmap, or multi-step work, say so briefly and suggest the side panel or desktop research tab.
+Never invent sources. Match the user's language.`;
 
 export const BobOverlayBubble: React.FC = () => {
-  const { 
-    currentPage, 
-    navigateTo, 
-    userName,
-    openChromeBridge
-  } = useApp();
+  const { currentPage, navigateTo, userName, openChromeBridge } = useApp();
 
-  // Routine state
   const [currentRoutine, setCurrentRoutine] = useState<RoutineDetail>(() => bobRoutines.getCurrentRoutine());
-  const [minutesOfDay, setMinutesOfDay] = useState<number>(() => bobRoutines.getCurrentMinutesOfDay());
-  const [showTimeScrubber, setShowTimeScrubber] = useState<boolean>(false);
-  const [isInterestsModalOpen, setIsInterestsModalOpen] = useState<boolean>(false);
+  const [minutesOfDay, setMinutesOfDay] = useState(() => bobRoutines.getCurrentMinutesOfDay());
+  const [showTimeScrubber, setShowTimeScrubber] = useState(false);
+  const [isInterestsModalOpen, setIsInterestsModalOpen] = useState(false);
 
-  // Bubble open/close state
-  const [isExpanded, setIsExpanded] = useState<boolean>(false);
-  const [hasUnreadMessage, setHasUnreadMessage] = useState<boolean>(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+  const [hasUnreadMessage, setHasUnreadMessage] = useState(false);
   const [videoFailed, setVideoFailed] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
 
-  // Mini chat messages in bubble (chat only)
-  const [chatInput, setChatInput] = useState<string>('');
-  const [bubbleMessages, setBubbleMessages] = useState<Array<{ role: 'assistant' | 'user'; text: string; actionType?: 'research_redirect' }>>([
+  const [panelTab, setPanelTab] = useState<PanelTab>('chat');
+  const [selectedExcerpt, setSelectedExcerpt] = useState('');
+  const [chatInput, setChatInput] = useState('');
+  const [isThinking, setIsThinking] = useState(false);
+  const [bubbleMessages, setBubbleMessages] = useState<BubbleMsg[]>([
     {
       role: 'assistant',
-      text: `Hey ${userName || 'buddy'}! I'm here beside you while you browse. We can chat casually about anything!`,
+      text: `Hey ${userName || 'buddy'}! I'm right here while you browse. Tap me anytime.`,
     },
   ]);
 
-  const routineVideoPath = currentRoutine.id === 'speaking'
-    ? '/assets/companion-loops/bob-speaking.webm'
-    : currentRoutine.id === 'listening'
-      ? '/assets/companion-loops/bob-listening.webm'
-      : currentRoutine.id === 'thinking'
-        ? '/assets/companion-loops/bob-thinking.webm'
-        : '/assets/companion-loops/bob-idle.webm';
+  const feedRef = useRef<HTMLDivElement>(null);
+  const media = mediaForRoutine(currentRoutine.id);
 
   useEffect(() => {
     setVideoFailed(false);
-  }, [routineVideoPath]);
+    setImageFailed(false);
+  }, [currentRoutine.id]);
 
-  // Subscribe to routine manager
   useEffect(() => {
     const unsub = bobRoutines.subscribe((r, m) => {
       setCurrentRoutine(r);
@@ -69,346 +77,372 @@ export const BobOverlayBubble: React.FC = () => {
     return unsub;
   }, []);
 
-  // Proactive check-in: sends a friendly casual chat message with yellow circle indicator
   useEffect(() => {
-    const initialTimer = setTimeout(() => {
-      const pingText = `Hey ${userName || 'buddy'}! Found anything interesting while browsing? Let me know if you want to chat.`;
+    const t = setTimeout(() => {
       setBubbleMessages((prev) => [
         ...prev,
-        { role: 'assistant', text: pingText }
+        {
+          role: 'assistant',
+          text: `Hey ${userName || 'buddy'}! Found anything interesting? I'm here if you want a quick chat.`,
+        },
       ]);
       setHasUnreadMessage(true);
-    }, 14000);
-
-    return () => clearTimeout(initialTimer);
+    }, 16000);
+    return () => clearTimeout(t);
   }, [userName]);
 
-  // If user is not inside chrome view, Bob overlay does not render (new messages show in Desktop Chat page)
-  if (currentPage !== 'chrome') {
-    return null;
-  }
-
-  const handleBubbleClick = () => {
-    setIsExpanded((prev) => {
-      const next = !prev;
-      if (next) {
-        setHasUnreadMessage(false);
+  // Selection Ask from extension / desktop events
+  useEffect(() => {
+    const onAsk = (ev: Event) => {
+      const detail = (ev as CustomEvent).detail || {};
+      const text = String(detail.text || detail.selection || '').trim();
+      if (text) {
+        setSelectedExcerpt(text.slice(0, 280));
+        setPanelTab('research');
+        openPanel();
       }
-      return next;
-    });
+    };
+    window.addEventListener('bob-overlay-ask', onAsk as EventListener);
+    return () => window.removeEventListener('bob-overlay-ask', onAsk as EventListener);
+  }, []);
+
+  useEffect(() => {
+    if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight;
+  }, [bubbleMessages, isThinking, isExpanded]);
+
+  if (currentPage !== 'chrome') return null;
+
+  const openPanel = () => {
+    setIsClosing(false);
+    setIsExpanded(true);
+    setHasUnreadMessage(false);
   };
 
-  const handleSendBubbleChat = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!chatInput.trim()) return;
-
-    const query = chatInput.trim();
-    setChatInput('');
-    setBubbleMessages((prev) => [...prev, { role: 'user', text: query }]);
-
+  const closePanel = () => {
+    setIsClosing(true);
     setTimeout(() => {
-      const lower = query.toLowerCase();
-      // If user asks about research/projects/roadmap/tasks, suggest Chrome side panel or Desktop
-      if (
-        lower.includes('research') ||
-        lower.includes('project') ||
-        lower.includes('task') ||
-        lower.includes('roadmap') ||
-        lower.includes('source') ||
-        lower.includes('study')
-      ) {
+      setIsExpanded(false);
+      setIsClosing(false);
+    }, 220);
+  };
+
+  const handleBubbleClick = () => {
+    if (isExpanded) closePanel();
+    else openPanel();
+  };
+
+  const handleSend = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const query = chatInput.trim();
+    if (!query || isThinking) return;
+
+    setChatInput('');
+    const userLine =
+      panelTab === 'research' && selectedExcerpt
+        ? `About this text: “${selectedExcerpt.slice(0, 120)}${selectedExcerpt.length > 120 ? '…' : ''}” — ${query}`
+        : query;
+
+    setBubbleMessages((prev) => [...prev, { role: 'user', text: query }]);
+    setIsThinking(true);
+
+    const lower = query.toLowerCase();
+    const needsResearch =
+      /research|project|roadmap|task|source|study|summarize this page|deep dive/.test(lower);
+
+    try {
+      if (needsResearch) {
         setBubbleMessages((prev) => [
           ...prev,
           {
             role: 'assistant',
-            text: `For research, roadmaps, and project tasks, I recommend using the Chrome Side Panel or opening the Desktop view where we have full deep-dive tools!`,
-            actionType: 'research_redirect'
+            text: 'For research, roadmaps, and project tasks, use the side panel or desktop research tab — more room to work.',
+            actionType: 'research_redirect',
           },
         ]);
-        if (!isExpanded) setHasUnreadMessage(true);
         return;
       }
 
-      // Casual conversational replies
+      // Prefer Gemini short chat-style reply when available
       let reply = '';
-      if (lower.includes('sport') || lower.includes('team') || lower.includes('football') || lower.includes('arsenal')) {
-        reply = `Arsenal looked sharp in their recent European fixture! High press structure was crisp. Taking a quick break to check match scores?`;
-      } else if (lower.includes('news') || lower.includes('tech') || lower.includes('ai')) {
-        reply = `Tech moves fast today! There's some exciting work in lightweight on-device models. How's your browsing going so far?`;
-      } else if (lower.includes('how are you') || lower.includes('what are you doing')) {
-        reply = `I'm just chilling right here beside you while you browse! Ready for a quick chat whenever you need a breather.`;
-      } else {
-        reply = `I hear you! It's always nice to pause and share a quick thought. What's on your mind?`;
+      try {
+        if (bobAi?.generateResearchAnswer) {
+          const prompt = [
+            CHAT_SYSTEM,
+            selectedExcerpt ? `Selected page text: ${selectedExcerpt.slice(0, 400)}` : '',
+            `Bob routine: ${currentRoutine.label}`,
+            `User message: ${userLine}`,
+          ]
+            .filter(Boolean)
+            .join('\n');
+          const res = await bobAi.generateResearchAnswer(prompt, 'overlay-chat', undefined, 'warm short chat');
+          reply = (res?.answer || '').trim();
+        }
+      } catch {
+        /* fallback below */
       }
+
+      if (!reply) {
+        if (/how are you|what are you doing/.test(lower)) {
+          reply = `I'm ${currentRoutine.label.toLowerCase()} beside you. What's on your mind?`;
+        } else if (selectedExcerpt && panelTab === 'research') {
+          reply = `Got it. From that snippet, the main idea seems useful — want a one-line takeaway or a next step?`;
+        } else {
+          reply = `I hear you. Tell me a bit more and I'll keep it short.`;
+        }
+      }
+
+      // Keep bubble replies short
+      if (reply.length > 320) reply = reply.slice(0, 300).trim() + '…';
 
       setBubbleMessages((prev) => [...prev, { role: 'assistant', text: reply }]);
-      if (!isExpanded) {
-        setHasUnreadMessage(true);
-      }
-    }, 450);
+      if (!isExpanded) setHasUnreadMessage(true);
+    } finally {
+      setIsThinking(false);
+    }
   };
 
-  // Convert minutes to HH:MM format
   const formatTime = (totalMinutes: number) => {
     const h = Math.floor(totalMinutes / 60) % 24;
     const m = totalMinutes % 60;
-    const hh = h < 10 ? `0${h}` : `${h}`;
-    const mm = m < 10 ? `0${m}` : `${m}`;
-    return `${hh}:${mm}`;
+    return `${h < 10 ? '0' : ''}${h}:${m < 10 ? '0' : ''}${m}`;
   };
 
   return (
     <>
-      {/* Floating Container in bottom-right (Chrome overlay only) */}
-      <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end select-none pointer-events-auto">
-        {/* Expanded chat opens directly from the Bob bubble; no hover quick-pill. */}
+      <div className="fixed bottom-5 right-5 z-40 flex flex-col items-end select-none pointer-events-none">
+        {/* Slide-up panel */}
         {isExpanded && (
-          <div className="mb-3 w-80 sm:w-96 bg-[var(--s)]/95 backdrop-blur-xl border border-[var(--line)] rounded-[26px] shadow-2xl p-4 flex flex-col max-h-[460px] animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
+          <div
+            className={`pointer-events-auto mb-3 w-[min(100vw-2rem,360px)] bg-white/95 dark:bg-[#151515]/95 backdrop-blur-xl border border-black/5 dark:border-white/10 rounded-[24px] shadow-[0_20px_50px_rgba(0,0,0,0.28)] flex flex-col max-h-[min(70vh,480px)] overflow-hidden ${
+              isClosing ? 'bob-panel-out' : 'bob-panel-in'
+            }`}
+          >
             {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-[var(--line)] shrink-0">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between px-4 pt-3.5 pb-2 shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
                 <span
-                  className="w-2.5 h-2.5 rounded-full animate-pulse"
+                  className="w-2 h-2 rounded-full animate-pulse shrink-0"
                   style={{ backgroundColor: currentRoutine.bubbleColor }}
                 />
-                <div>
-                  <div className="text-xs font-extrabold text-[var(--t)] flex items-center gap-1.5">
-                    <span>Bob</span>
-                    <span className="text-[10px] text-[var(--m)] font-normal">· {currentRoutine.label}</span>
-                  </div>
-                  <div className="text-[10px] text-[var(--m)] truncate max-w-[190px]">
-                    Casual chat & browsing buddy
-                  </div>
+                <div className="min-w-0">
+                  <p className="text-[13px] font-semibold text-neutral-900 dark:text-white m-0 truncate">
+                    Bob <span className="font-normal text-neutral-500">· {currentRoutine.label}</span>
+                  </p>
                 </div>
               </div>
-
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-0.5">
                 <button
                   type="button"
                   onClick={() => setIsInterestsModalOpen(true)}
-                  title="Configure Passions & Sports"
-                  className="p-1 rounded-lg text-[var(--m)] hover:text-[var(--y)] hover:bg-[var(--s2)] transition-colors"
+                  className="p-1.5 rounded-full text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                  title="Interests"
                 >
                   <Heart className="w-3.5 h-3.5" />
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowTimeScrubber((prev) => !prev)}
-                  title="Toggle 24-Hour Routine Scrubber"
-                  className="p-1 rounded-lg text-[var(--m)] hover:text-[var(--t)] hover:bg-[var(--s2)] transition-colors"
+                  onClick={() => setShowTimeScrubber((v) => !v)}
+                  className="p-1.5 rounded-full text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                  title="Routine clock"
                 >
                   <Clock className="w-3.5 h-3.5" />
                 </button>
+                {/* Red close circle */}
                 <button
                   type="button"
-                  onClick={() => setIsExpanded(false)}
-                  className="p-1 rounded-lg text-[var(--m)] hover:text-[var(--t)] hover:bg-[var(--s2)] transition-colors"
+                  onClick={closePanel}
+                  className="ml-1 w-7 h-7 rounded-full bg-[#ff3b30] hover:bg-[#e0342b] text-white grid place-items-center shadow-sm"
+                  title="Close"
+                  aria-label="Close"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <X className="w-3.5 h-3.5" strokeWidth={2.5} />
                 </button>
               </div>
             </div>
 
-            {/* Time Scrubber (Dev tool / testing feature) */}
+            {/* Tabs: Chat default · Research when selection */}
+            <div className="px-4 pb-2 flex gap-1.5 shrink-0">
+              {(['chat', 'research'] as PanelTab[]).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setPanelTab(tab)}
+                  className={`h-7 px-3 rounded-full text-[11px] font-semibold capitalize transition-colors ${
+                    panelTab === tab
+                      ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900'
+                      : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500'
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+
             {showTimeScrubber && (
-              <div className="p-2.5 my-2 bg-[var(--s2)] border border-[var(--line)] rounded-xl text-xs space-y-1.5 animate-in fade-in">
-                <div className="flex items-center justify-between font-bold text-[11px] text-[var(--t)]">
-                  <span>24-Hour Routine Scrubber</span>
-                  <span className="font-mono text-[var(--y)]">{formatTime(minutesOfDay)}</span>
+              <div className="mx-4 mb-2 p-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-[11px] space-y-1.5">
+                <div className="flex justify-between font-semibold">
+                  <span>Routine clock</span>
+                  <span className="font-mono text-amber-600">{formatTime(minutesOfDay)}</span>
                 </div>
                 <input
                   type="range"
-                  min="0"
-                  max="1439"
+                  min={0}
+                  max={1439}
                   value={minutesOfDay}
                   onChange={(e) => {
                     const val = parseInt(e.target.value, 10);
                     bobRoutines.setSimulatedTime(Math.floor(val / 60), val % 60);
                   }}
-                  className="w-full accent-[var(--y)] cursor-pointer"
+                  className="w-full accent-[#f5c842]"
                 />
-                <div className="flex items-center justify-between text-[10px] text-[var(--m)]">
-                  <span>07:00 Breakfast</span>
-                  <span>12:00 Lunch</span>
-                  <span>20:00 Supper</span>
-                  <span>22:00 Sleep</span>
-                </div>
-                <div className="flex justify-end pt-1">
-                  <button
-                    type="button"
-                    onClick={() => bobRoutines.clearSimulatedTime()}
-                    className="text-[10px] text-[var(--m)] hover:text-[var(--t)] flex items-center gap-1 font-semibold"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                    <span>Reset to Live Clock</span>
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => bobRoutines.clearSimulatedTime()}
+                  className="text-neutral-500 inline-flex items-center gap-1 font-medium"
+                >
+                  <RotateCcw className="w-3 h-3" /> Live clock
+                </button>
               </div>
             )}
 
-            {/* Message Feed */}
-            <div className="flex-1 overflow-y-auto space-y-2.5 py-3 pr-1 text-xs">
-              {bubbleMessages.map((msg, i) => (
-                <div
-                  key={i}
-                  className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
+            {/* Selected text card (research) */}
+            {panelTab === 'research' && selectedExcerpt && (
+              <div className="mx-4 mb-2 px-3 py-2.5 rounded-xl bg-[#fff8df] border border-[#f5c842]/50 text-[12px] text-neutral-800 leading-snug">
+                <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wide m-0 mb-1">Selected</p>
+                <p className="m-0 line-clamp-3">“{selectedExcerpt}”</p>
+                <button
+                  type="button"
+                  onClick={() => setSelectedExcerpt('')}
+                  className="mt-1 text-[10px] font-semibold text-neutral-500 hover:text-neutral-800"
                 >
+                  Clear
+                </button>
+              </div>
+            )}
+
+            {/* Messages */}
+            <div ref={feedRef} className="flex-1 overflow-y-auto px-4 py-2 space-y-2.5 min-h-[120px]">
+              {bubbleMessages.map((msg, i) => (
+                <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                   <div
-                    className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl leading-relaxed ${
+                    className={`max-w-[88%] px-3.5 py-2 rounded-[16px] text-[12.5px] leading-relaxed ${
                       msg.role === 'user'
-                        ? 'bg-[var(--y)] text-[#171717] font-medium'
-                        : 'bg-[var(--s2)] text-[var(--t)] border border-[var(--line)]'
+                        ? 'bg-[#3797f0] text-white rounded-br-sm font-medium'
+                        : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-100 rounded-bl-sm'
                     }`}
                   >
-                    <p className="m-0 text-xs">
-                      {msg.text}
-                    </p>
+                    {msg.text}
                   </div>
-                  {/* Research redirect suggestion buttons if user asked about research */}
                   {msg.actionType === 'research_redirect' && (
-                    <div className="flex items-center gap-2 mt-2 ml-1">
+                    <div className="flex gap-2 mt-1.5">
                       <button
                         type="button"
                         onClick={() => {
-                          navigateTo('chrome');
                           openChromeBridge();
                         }}
-                        className="px-2.5 py-1 rounded-lg bg-[var(--y)] text-[#171717] font-bold text-[11px] shadow-sm flex items-center gap-1 hover:bg-[#e0ac15]"
+                        className="h-7 px-2.5 rounded-lg bg-[#f5c842] text-[#171717] text-[11px] font-bold inline-flex items-center gap-1"
                       >
-                        <PanelRight className="w-3 h-3" />
-                        <span>Chrome Side Panel</span>
+                        <PanelRight className="w-3 h-3" /> Side panel
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
-                          navigateTo('research');
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-[var(--s)] border border-[var(--line)] text-[var(--t)] font-semibold text-[11px] flex items-center gap-1 hover:bg-[var(--s2)]"
+                        onClick={() => navigateTo('research')}
+                        className="h-7 px-2.5 rounded-lg border border-neutral-200 dark:border-neutral-700 text-[11px] font-semibold inline-flex items-center gap-1"
                       >
-                        <ArrowRight className="w-3 h-3" />
-                        <span>Desktop Workspace</span>
+                        <ArrowRight className="w-3 h-3" /> Research
                       </button>
                     </div>
                   )}
                 </div>
               ))}
+              {isThinking && (
+                <div className="flex items-center gap-1.5 text-[11px] text-neutral-400 pl-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                  Bob is typing…
+                </div>
+              )}
             </div>
 
-            {/* Input Bar */}
-            <form onSubmit={handleSendBubbleChat} className="flex gap-2 pt-2 border-t border-[var(--line)] shrink-0">
+            {/* Composer */}
+            <form
+              onSubmit={handleSend}
+              className="px-3 pb-3 pt-2 border-t border-neutral-100 dark:border-neutral-800 shrink-0 flex gap-2"
+            >
               <input
                 type="text"
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Chat casually with Bob..."
-                className="flex-1 px-3.5 py-2 rounded-xl bg-[var(--s2)] border border-[var(--line)] text-xs text-[var(--t)] placeholder:text-[var(--m)] focus:outline-none focus:border-[var(--y)]"
+                placeholder={
+                  panelTab === 'research' && selectedExcerpt
+                    ? 'Ask about this selection…'
+                    : 'Message Bob…'
+                }
+                className="flex-1 h-10 px-3.5 rounded-full bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 text-[13px] outline-none focus:border-[#f5c842]"
               />
               <button
                 type="submit"
-                className="p-2 rounded-xl bg-[var(--y)] hover:bg-[#e0ac15] text-[#171717] font-bold transition-transform active:scale-95"
+                disabled={isThinking || !chatInput.trim()}
+                className="w-10 h-10 rounded-full bg-[#f5c842] hover:bg-[#e0ac15] text-[#171717] grid place-items-center disabled:opacity-40 shrink-0"
               >
-                <Send className="w-3.5 h-3.5" />
+                <Send className="w-4 h-4" />
               </button>
             </form>
           </div>
         )}
 
-        {/* 3. The Central Overlay Bubble Circle */}
-        <div className="relative group cursor-pointer" onClick={handleBubbleClick}>
-          {/* Subtle glow ring */}
-          <div className="absolute -inset-1 rounded-full ring-2 ring-white/60 ring-offset-1 ring-offset-black/30 pointer-events-none transition-all group-hover:ring-white/90" />
-
-          {/* New message small yellow circle indicator */}
+        {/* Medium floating bubble */}
+        <button
+          type="button"
+          onClick={handleBubbleClick}
+          className="pointer-events-auto relative w-[56px] h-[56px] rounded-full shadow-[0_8px_28px_rgba(0,0,0,0.28)] border-2 border-white/80 dark:border-white/20 overflow-hidden transition-transform hover:scale-105 active:scale-95 focus:outline-none"
+          style={{
+            background: `radial-gradient(circle at 30% 30%, #3a3a3a, #121212)`,
+            boxShadow: `0 8px 28px rgba(0,0,0,0.28), 0 0 0 3px ${currentRoutine.glowColor}`,
+          }}
+          aria-label={isExpanded ? 'Close Bob' : 'Open Bob'}
+        >
           {hasUnreadMessage && !isExpanded && (
-            <span 
-              title="New message from Bob"
-              className="absolute -top-1 -right-1 z-30 w-4 h-4 rounded-full bg-amber-400 border-2 border-[#121212] shadow-lg flex items-center justify-center animate-bounce"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-950" />
-            </span>
+            <span className="absolute -top-0.5 -right-0.5 z-10 w-3.5 h-3.5 rounded-full bg-[#f5c842] border-2 border-[#121212] animate-bounce" />
           )}
 
-          {/* Bob Avatar Circle */}
-          <div
-            className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-full shadow-2xl flex items-center justify-center overflow-hidden transition-transform duration-200 group-hover:scale-105 active:scale-95 border-2 border-white/20"
-            style={{
-              background: `radial-gradient(circle at 35% 35%, #2a2a2a, #121212)`,
-            }}
-          >
-            {/* Use registered Bob loops when supplied; fall back to accessible routine icons. */}
-            {!videoFailed && (
-              <video
-                key={routineVideoPath}
-                src={routineVideoPath}
-                autoPlay
-                loop
-                muted
-                playsInline
-                aria-label="Bob companion animation"
-                onError={() => setVideoFailed(true)}
-                className="absolute inset-0 w-full h-full object-cover"
-              />
-            )}
-            {videoFailed && <div className="relative flex flex-col items-center justify-center text-center">
-              {currentRoutine.id === 'waking_up' && (
-                <Sun className="w-6 h-6 text-amber-400 animate-spin duration-3000" />
-              )}
-              {currentRoutine.id === 'eating' && (
-                <Utensils className="w-6 h-6 text-emerald-400 animate-pulse" />
-              )}
-              {currentRoutine.id === 'meditating' && (
-                <Sparkles className="w-6 h-6 text-purple-400 animate-pulse" />
-              )}
-              {currentRoutine.id === 'reading' && (
-                <BookOpen className="w-6 h-6 text-blue-400" />
-              )}
-              {currentRoutine.id === 'cooking' && (
-                <Coffee className="w-6 h-6 text-orange-400 animate-bounce" />
-              )}
-              {currentRoutine.id === 'listening_music' && (
-                <Headphones className="w-6 h-6 text-pink-400 animate-pulse" />
-              )}
-              {currentRoutine.id === 'sleeping' && (
-                <Moon className="w-6 h-6 text-indigo-400" />
-              )}
-              {currentRoutine.id === 'thinking' && (
-                <div className="w-5 h-5 rounded-full border-2 border-yellow-400 border-t-transparent animate-spin" />
-              )}
-              {currentRoutine.id === 'listening' && (
-                <div className="flex items-center gap-0.5">
-                  <div className="w-1 h-3 bg-cyan-400 animate-pulse" />
-                  <div className="w-1 h-5 bg-cyan-400 animate-pulse delay-75" />
-                  <div className="w-1 h-3 bg-cyan-400 animate-pulse delay-150" />
-                </div>
-              )}
-              {currentRoutine.id === 'speaking' && (
-                <Volume2 className="w-6 h-6 text-green-400 animate-pulse" />
-              )}
-            </div>}
-
-            {/* Micro status badge on the bottom-right */}
-            <span
-              className="absolute bottom-1 right-1 w-3 h-3 rounded-full border-2 border-black"
-              style={{ backgroundColor: currentRoutine.bubbleColor }}
+          {!videoFailed && media.video ? (
+            <video
+              key={media.video}
+              src={media.video}
+              autoPlay
+              loop
+              muted
+              playsInline
+              onError={() => setVideoFailed(true)}
+              className="absolute inset-0 w-full h-full object-cover"
             />
-          </div>
-        </div>
+          ) : !imageFailed && media.image ? (
+            <img
+              src={media.image}
+              alt=""
+              onError={() => setImageFailed(true)}
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+          ) : (
+            <span className="relative z-10 text-[#f5c842] font-black text-lg">B</span>
+          )}
+        </button>
       </div>
 
-      {/* User Interests Modal for sports, teams & news */}
-      <UserInterestsModal
-        isOpen={isInterestsModalOpen}
-        onClose={() => setIsInterestsModalOpen(false)}
-        onSave={(interests) => {
-          setBubbleMessages((prev) => [
-            ...prev,
-            {
-              role: 'assistant',
-              text: `Got it! I saved your interests (${interests.slice(0, 3).join(', ')}). I'll keep you posted with relevant news and friendly banter!`,
-            },
-          ]);
-        }}
-      />
+      <UserInterestsModal isOpen={isInterestsModalOpen} onClose={() => setIsInterestsModalOpen(false)} />
+
+      <style>{`
+        @keyframes bobPanelIn {
+          from { opacity: 0; transform: translateY(18px) scale(0.98); }
+          to { opacity: 1; transform: none; }
+        }
+        @keyframes bobPanelOut {
+          from { opacity: 1; transform: none; }
+          to { opacity: 0; transform: translateY(16px) scale(0.98); }
+        }
+        .bob-panel-in { animation: bobPanelIn 0.22s ease-out both; }
+        .bob-panel-out { animation: bobPanelOut 0.2s ease-in both; }
+      `}</style>
     </>
   );
 };

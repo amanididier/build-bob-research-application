@@ -345,7 +345,9 @@
     selectionBar.querySelector('.bob-sel-ask').addEventListener('mousedown', (e) => {
       e.preventDefault(); e.stopPropagation();
       closeSelectionBar();
-      openQuickAskCard(text, range);
+      openPagePanel(text);
+      // Also notify desktop overlay if embedded
+      try { window.dispatchEvent(new CustomEvent('bob-overlay-ask', { detail: { text } })); } catch {}
     });
     selectionBar.querySelector('.bob-sel-save').addEventListener('mousedown', async (e) => {
       e.preventDefault(); e.stopPropagation();
@@ -1237,4 +1239,114 @@
       }
     }
   });
+
+
+  // -------- Medium floating Bob bubble (page overlay) ----------
+  let pageBubble = null;
+  let pagePanel = null;
+  let pagePanelOpen = false;
+
+  function ensurePageBubble() {
+    if (pageBubble && pageBubble.isConnected) return;
+    const root = ensureRoot();
+    pageBubble = el('button', 'bob-page-bubble');
+    pageBubble.type = 'button';
+    pageBubble.title = 'Bob';
+    pageBubble.innerHTML = '<span class="bob-page-bubble-letter">B</span>';
+    pageBubble.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      togglePagePanel();
+    });
+    root.appendChild(pageBubble);
+  }
+
+  function togglePagePanel() {
+    if (pagePanelOpen) closePagePanel();
+    else openPagePanel('');
+  }
+
+  function closePagePanel() {
+    if (!pagePanel) { pagePanelOpen = false; return; }
+    pagePanel.classList.add('bob-page-panel-out');
+    setTimeout(() => {
+      if (pagePanel) pagePanel.remove();
+      pagePanel = null;
+      pagePanelOpen = false;
+    }, 200);
+  }
+
+  function openPagePanel(selectedText) {
+    ensurePageBubble();
+    if (pagePanel && pagePanel.isConnected) {
+      pagePanelOpen = true;
+      const excerpt = pagePanel.querySelector('.bob-page-excerpt');
+      if (excerpt && selectedText) {
+        excerpt.style.display = 'block';
+        excerpt.textContent = '“' + selectedText.slice(0, 160) + (selectedText.length > 160 ? '…' : '') + '”';
+        pagePanel.dataset.selected = selectedText;
+      }
+      return;
+    }
+    const root = ensureRoot();
+    pagePanel = el('div', 'bob-page-panel bob-page-panel-in');
+    pagePanel.dataset.selected = selectedText || '';
+    pagePanel.innerHTML = `
+      <div class="bob-page-panel-head">
+        <span class="bob-page-panel-title">Bob <span>· Chat</span></span>
+        <button type="button" class="bob-page-close" title="Close">✕</button>
+      </div>
+      <div class="bob-page-excerpt" style="${selectedText ? '' : 'display:none'}">“${(selectedText || '').slice(0, 160)}${(selectedText || '').length > 160 ? '…' : ''}”</div>
+      <div class="bob-page-thread" id="bob-page-thread"></div>
+      <form class="bob-page-form" id="bob-page-form">
+        <input type="text" placeholder="${selectedText ? 'Ask about this…' : 'Message Bob…'}" autocomplete="off" />
+        <button type="submit" title="Send">↑</button>
+      </form>
+    `;
+    pagePanel.querySelector('.bob-page-close').addEventListener('click', (e) => {
+      e.stopPropagation();
+      closePagePanel();
+    });
+    pagePanel.querySelector('#bob-page-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const input = pagePanel.querySelector('input');
+      const q = (input.value || '').trim();
+      if (!q) return;
+      input.value = '';
+      const thread = pagePanel.querySelector('#bob-page-thread');
+      const u = el('div', 'bob-page-msg user', q);
+      thread.appendChild(u);
+      const b = el('div', 'bob-page-msg bob', 'Bob is thinking…');
+      thread.appendChild(b);
+      thread.scrollTop = thread.scrollHeight;
+      const sel = pagePanel.dataset.selected || '';
+      const res = await send({
+        type: 'CHAT',
+        prompt: q,
+        context: {
+          title: document.title,
+          url: location.href,
+          excerpt: sel,
+          selection: sel,
+          mode: 'overlay-chat',
+        },
+      });
+      b.textContent = (res && res.reply) || 'Got it — keep it simple and tell me more if you need.';
+      thread.scrollTop = thread.scrollHeight;
+    });
+    root.appendChild(pagePanel);
+    pagePanelOpen = true;
+  }
+
+  // Selection Ask opens panel with excerpt (also keeps Quick Ask for richer thread)
+  const _origShowBar = typeof showSelectionBar === 'function' ? showSelectionBar : null;
+
+  // Patch: when Ask is used from selection bar, open page panel
+  document.addEventListener('bob-open-page-ask', (ev) => {
+    const text = (ev.detail && ev.detail.text) || '';
+    openPagePanel(text);
+  });
+
+  setTimeout(() => ensurePageBubble(), 800);
+
 })();
