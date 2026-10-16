@@ -1,30 +1,50 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { 
-  Bookmark, 
-  Search, 
-  Copy, 
-  Check, 
-  Sparkles, 
-  Plus, 
-  HardDrive,
-  ExternalLink,
-  Bot,
+import {
+  Search,
+  Plus,
   Pencil,
+  X,
+  Star,
+  ExternalLink,
+  Copy,
+  Check,
   Save,
-  X
 } from 'lucide-react';
 
+/** Soft pastel faces matching the Docket-style reference */
+const CARD_TONES = [
+  { bg: 'bg-[#FFE08A]', text: 'text-[#3d3420]', muted: 'text-[#6b5e3a]', accent: 'bg-[#f5c842]' },
+  { bg: 'bg-[#FF9F7A]', text: 'text-[#4a2a1c]', muted: 'text-[#7a4a38]', accent: 'bg-[#e07a50]' },
+  { bg: 'bg-[#C8F07A]', text: 'text-[#2a3a18]', muted: 'text-[#4a5e2e]', accent: 'bg-[#8bc34a]' },
+  { bg: 'bg-[#C9B6FF]', text: 'text-[#2e2450]', muted: 'text-[#5a4a7a]', accent: 'bg-[#9b7cf0]' },
+  { bg: 'bg-[#B8F0C8]', text: 'text-[#1e3a28]', muted: 'text-[#3a5e48]', accent: 'bg-[#4caf7a]' },
+  { bg: 'bg-[#7AD4FF]', text: 'text-[#1a3040]', muted: 'text-[#3a5a6a]', accent: 'bg-[#29b6f6]' },
+  { bg: 'bg-[#FFB3D1]', text: 'text-[#4a2038]', muted: 'text-[#7a4a60]', accent: 'bg-[#ec6ba8]' },
+  { bg: 'bg-[#FFE0B2]', text: 'text-[#4a3820]', muted: 'text-[#7a5e3a]', accent: 'bg-[#ffb74d]' },
+];
+
+function toneFor(noteId: string, index: number) {
+  let h = index;
+  for (let i = 0; i < noteId.length; i++) h = (h + noteId.charCodeAt(i) * (i + 1)) % CARD_TONES.length;
+  return CARD_TONES[h % CARD_TONES.length];
+}
+
+function formatNoteDate(raw: string) {
+  if (!raw) return '';
+  const parsed = Date.parse(raw);
+  if (Number.isFinite(parsed)) {
+    return new Date(parsed).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  }
+  return raw;
+}
+
 export const NotesPage: React.FC = () => {
-  const { 
-    notes, 
-    projects, 
-    addNote, 
-    updateNote,
-    polishNote, 
-    memoryStats, 
-    activeResearchId 
-  } = useApp();
+  const { notes, projects, addNote, updateNote, polishNote, activeResearchId } = useApp();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProject, setSelectedProject] = useState<string>(() => {
@@ -35,280 +55,417 @@ export const NotesPage: React.FC = () => {
         return fromResearch;
       }
     } catch {}
-    return activeResearchId || 'all';
+    return activeResearchId || 'general';
   });
-  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
+  const [isEditingExpanded, setIsEditingExpanded] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editText, setEditText] = useState('');
   const [editSource, setEditSource] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // New Note Modal/Form toggle
   const [isAddingNote, setIsAddingNote] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newText, setNewText] = useState('');
   const [newSource, setNewSource] = useState('');
 
+  // When opened from Research, lock to that project; don't auto-switch away from intentional filters
   useEffect(() => {
-    if (activeResearchId) setSelectedProject(activeResearchId);
-  }, [activeResearchId]);
+    try {
+      const fromResearch = localStorage.getItem('bob_notes_project_filter');
+      if (fromResearch) {
+        localStorage.removeItem('bob_notes_project_filter');
+        setSelectedProject(fromResearch);
+      }
+    } catch {}
+  }, []);
 
-  const startEditing = (note: (typeof notes)[number]) => {
-    setEditingId(note.id);
-    setEditTitle(note.title);
-    setEditText(note.selectedText);
-    setEditSource(note.sourceUrl || note.sourceTitle || '');
+  const activeProject = projects.find((p) => p.id === selectedProject);
+
+  /** Strict isolation: project notes never mix; general is only non-project notes */
+  const scopedNotes = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    const list = notes.filter((n) => {
+      if (selectedProject === 'general') {
+        const isGeneral =
+          !n.projectId ||
+          n.projectId === 'general' ||
+          n.projectId === 'all' ||
+          n.projectId === '';
+        if (!isGeneral) return false;
+      } else if (selectedProject === 'all') {
+        // "all" only for browsing from side panel — still show source project label
+      } else {
+        // Exact project match only — never leak other projects
+        if (n.projectId !== selectedProject) return false;
+      }
+      if (!q) return true;
+      return (
+        n.title.toLowerCase().includes(q) ||
+        n.selectedText.toLowerCase().includes(q) ||
+        (n.sourceTitle || '').toLowerCase().includes(q)
+      );
+    });
+
+    // Recent → oldest
+    return [...list].sort((a, b) => {
+      const ta = Date.parse(a.createdAt) || 0;
+      const tb = Date.parse(b.createdAt) || 0;
+      if (ta !== tb) return tb - ta;
+      return b.id.localeCompare(a.id);
+    });
+  }, [notes, selectedProject, searchTerm]);
+
+  const expandedNote = expandedNoteId ? notes.find((n) => n.id === expandedNoteId) : null;
+
+  const openNote = (id: string) => {
+    const n = notes.find((x) => x.id === id);
+    if (!n) return;
+    setExpandedNoteId(id);
+    setIsEditingExpanded(false);
+    setEditTitle(n.title);
+    setEditText(n.selectedText);
+    setEditSource(n.sourceUrl || n.sourceTitle || '');
   };
 
-  const saveEditing = (id: string) => {
-    if (!editTitle.trim() || !editText.trim()) return;
+  const saveExpanded = () => {
+    if (!expandedNoteId || !editTitle.trim() || !editText.trim()) return;
     const source = editSource.trim();
-    updateNote(id, {
+    updateNote(expandedNoteId, {
       title: editTitle.trim(),
       selectedText: editText.trim(),
-      sourceTitle: source || 'Manual research note',
-      sourceUrl: /^https?:\/\//i.test(source) ? source : (source ? `local://${encodeURIComponent(source)}` : 'local://notebook')
+      sourceTitle: source || 'Manual note',
+      sourceUrl: /^https?:\/\//i.test(source)
+        ? source
+        : source
+          ? `local://${encodeURIComponent(source)}`
+          : 'local://notebook',
     });
-    setEditingId(null);
-  };
-
-  const filteredNotes = notes.filter((n) => {
-    // 'general' = notes from browser when no active research project was selected
-    const matchesProj =
-      selectedProject === 'all' ||
-      (selectedProject === 'general' &&
-        (!n.projectId || n.projectId === 'general' || n.projectId === 'all')) ||
-      n.projectId === selectedProject;
-    const matchesQuery =
-      n.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      n.selectedText.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      n.sourceTitle.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesProj && matchesQuery;
-  });
-
-  const handleCopy = (id: string, text: string) => {
-    navigator.clipboard?.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 1800);
+    setIsEditingExpanded(false);
   };
 
   const handleCreateNote = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim() || !newText.trim()) return;
-
+    const projectId =
+      selectedProject === 'all' || selectedProject === 'general'
+        ? 'general'
+        : selectedProject || activeResearchId || 'general';
+    const colors = ['emerald', 'blue', 'yellow', 'red'] as const;
     addNote({
       title: newTitle.trim(),
       selectedText: newText.trim(),
-      sourceTitle: newSource.trim() || 'Manual research note',
+      sourceTitle: newSource.trim() || 'Manual note',
       sourceUrl: newSource.trim() || 'local://notebook',
-      projectId: activeResearchId,
+      projectId,
       relevance: 95,
-      color: 'emerald',
+      color: colors[scopedNotes.length % colors.length],
     });
-
     setNewTitle('');
     setNewText('');
     setNewSource('');
     setIsAddingNote(false);
   };
 
+  const pageTitle =
+    selectedProject === 'general'
+      ? 'General notes'
+      : selectedProject === 'all'
+        ? 'Notes'
+        : `${activeProject?.title || 'Project'}-notes`;
+
   return (
-    <div className="max-w-[1130px] mx-auto px-6 md:px-10 py-7 pb-36">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-3 pb-6 border-b border-[var(--line)] mb-6">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] tracking-[0.08em] text-[#999] uppercase font-semibold">
-              LOCAL PC REPOSITORY · PERMANENT MEMORY
-            </span>
-            <span className="text-[9.5px] font-mono px-2 py-0.5 rounded-full bg-[var(--ys)] text-[#765700] font-bold flex items-center gap-1">
-              <HardDrive className="w-3 h-3" />
-              <span>{memoryStats.totalNodes} Items Saved Locally ({memoryStats.storageSizeKb} KB)</span>
-            </span>
-          </div>
-
-          <h1 className="text-[31px] tracking-[-1px] font-extrabold my-2 text-[var(--t)]">
-            {selectedProject !== 'all'
-              ? `${projects.find((p) => p.id === selectedProject)?.title || 'Project'} Notes`
-              : 'Saved Notes & Evidence'}
-          </h1>
-          <p className="text-[var(--m)] text-[13px] leading-relaxed max-w-[620px] m-0">
-            {selectedProject !== 'all'
-              ? 'Notes for this project only — each card keeps its source, date, and edit history on this device.'
-              : 'Passages, quotes, and AI synthesis stored on your computer. Each note stays attached to its project.'}
-          </p>
-        </div>
-
-        {/* Action Controls */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => setIsAddingNote(!isAddingNote)}
-            className="h-9 px-3.5 rounded-xl bg-[#171717] dark:bg-[#f2eee7] text-white dark:text-[#171717] font-bold text-[12px] flex items-center gap-1.5 shadow-sm hover:opacity-90 active:scale-95 transition-all"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Add Note</span>
-          </button>
-
-          <div className="relative">
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search notes..."
-              className="h-9 pl-8 pr-3 text-[12px] rounded-xl bg-[var(--s2)] border border-[var(--line)] outline-none w-44 focus:w-56 transition-all"
-            />
-            <Search className="w-3.5 h-3.5 text-[var(--m)] absolute left-2.5 top-3" />
-          </div>
-
-          <select
-            value={selectedProject}
-            onChange={(e) => setSelectedProject(e.target.value)}
-            className="h-9 px-3 text-[12px] rounded-xl bg-[var(--s)] border border-[var(--line)] text-[var(--t)] outline-none cursor-pointer"
-          >
-            <option value="all">All notes</option>
-            <option value="general">General (browser / no project)</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.title}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* Manual Note Creation Card (Software Operation) */}
-      {isAddingNote && (
-        <form onSubmit={handleCreateNote} className="mb-6 p-5 rounded-2xl bg-[var(--s)] border-2 border-[var(--y)] shadow-md space-y-3 animate-in fade-in duration-200">
-          <div className="flex items-center justify-between">
-            <h3 className="text-[14px] font-bold text-[var(--t)]">Add Note to Local PC Memory</h3>
+    <div className="min-h-full bg-[#f7f8fc] dark:bg-[var(--bg)] pb-28">
+      <div className="max-w-[1280px] mx-auto px-5 md:px-8 pt-8">
+        {/* Header row — Docket-inspired */}
+        <div className="flex flex-col lg:flex-row lg:items-center gap-4 mb-8">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
             <button
               type="button"
-              onClick={() => setIsAddingNote(false)}
-              className="text-[11px] text-[var(--m)] hover:text-[var(--t)]"
+              onClick={() => setIsAddingNote(true)}
+              className="shrink-0 w-10 h-10 rounded-full bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 grid place-items-center shadow-md hover:scale-105 transition-transform"
+              title="Add note"
             >
-              Cancel
+              <Plus className="w-5 h-5" strokeWidth={2.5} />
             </button>
+            <h1 className="text-[32px] sm:text-[40px] font-extrabold tracking-tight text-neutral-900 dark:text-white m-0 truncate">
+              {pageTitle}
+            </h1>
           </div>
-          <input
-            type="text"
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            placeholder="Note title (e.g. Booking abandonment reason)"
-            className="w-full h-9 px-3 text-[13px] rounded-xl bg-[var(--s2)] border border-[var(--line)] outline-none"
-            required
-          />
-          <textarea
-            value={newText}
-            onChange={(e) => setNewText(e.target.value)}
-            placeholder="Key evidence passage, observation, or quote..."
-            rows={3}
-            className="w-full p-3 text-[12.5px] rounded-xl bg-[var(--s2)] border border-[var(--line)] outline-none resize-none"
-            required
-          />
-          <div className="flex items-center gap-3">
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="relative">
+              <Search className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="search"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search"
+                className="h-10 w-44 sm:w-56 pl-9 pr-3 rounded-full bg-white dark:bg-[var(--s)] border border-neutral-200/80 dark:border-[var(--line)] text-[13px] outline-none focus:ring-2 focus:ring-[#f5c842]/40 shadow-sm"
+              />
+            </div>
+            <select
+              value={selectedProject}
+              onChange={(e) => setSelectedProject(e.target.value)}
+              className="h-10 px-3 rounded-full bg-white dark:bg-[var(--s)] border border-neutral-200/80 dark:border-[var(--line)] text-[12px] font-semibold text-neutral-700 dark:text-[var(--t)] outline-none shadow-sm cursor-pointer"
+            >
+              <option value="general">General notes</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.title}
+                </option>
+              ))}
+              <option value="all">All (read-only mix)</option>
+            </select>
+          </div>
+        </div>
+
+        <p className="text-[12px] text-neutral-500 dark:text-[var(--m)] mb-6 m-0">
+          {selectedProject === 'general'
+            ? 'Notes saved from the browser when no research project was active. Kept separate from project notes.'
+            : selectedProject === 'all'
+              ? 'Browsing every note. Prefer a single project filter so nothing mixes by mistake.'
+              : `Only notes attached to this project. Nothing from other projects appears here.`}
+        </p>
+
+        {/* Add note form */}
+        {isAddingNote && (
+          <form
+            onSubmit={handleCreateNote}
+            className="mb-8 p-5 rounded-[22px] bg-white dark:bg-[var(--s)] border border-neutral-200 dark:border-[var(--line)] shadow-lg space-y-3 max-w-xl"
+          >
+            <div className="flex items-center justify-between">
+              <b className="text-[14px] text-neutral-900 dark:text-white">New note</b>
+              <button type="button" onClick={() => setIsAddingNote(false)} className="p-1.5 rounded-full hover:bg-neutral-100 dark:hover:bg-[var(--s2)]">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
             <input
-              type="text"
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              placeholder="Title"
+              className="w-full h-10 px-3 rounded-xl bg-neutral-50 dark:bg-[var(--s2)] border border-neutral-200 dark:border-[var(--line)] text-[13px] outline-none"
+              required
+            />
+            <textarea
+              value={newText}
+              onChange={(e) => setNewText(e.target.value)}
+              placeholder="Note content…"
+              rows={4}
+              className="w-full p-3 rounded-xl bg-neutral-50 dark:bg-[var(--s2)] border border-neutral-200 dark:border-[var(--line)] text-[13px] outline-none resize-none"
+              required
+            />
+            <input
               value={newSource}
               onChange={(e) => setNewSource(e.target.value)}
-              placeholder="Source URL or document name (optional)"
-              className="flex-1 h-9 px-3 text-[12px] rounded-xl bg-[var(--s2)] border border-[var(--line)] outline-none"
+              placeholder="Source (URL or document name)"
+              className="w-full h-10 px-3 rounded-xl bg-neutral-50 dark:bg-[var(--s2)] border border-neutral-200 dark:border-[var(--line)] text-[12px] outline-none"
             />
+            <button type="submit" className="h-10 px-5 rounded-full bg-neutral-900 dark:bg-[#f5c842] text-white dark:text-[#171717] text-[13px] font-bold">
+              Save note
+            </button>
+          </form>
+        )}
+
+        {/* 5-column colorful grid */}
+        {scopedNotes.length === 0 ? (
+          <div className="rounded-[24px] border border-dashed border-neutral-300 dark:border-[var(--line)] bg-white/60 dark:bg-[var(--s)]/50 py-20 text-center">
+            <p className="text-[15px] font-semibold text-neutral-700 dark:text-white m-0">No notes here yet</p>
+            <p className="text-[13px] text-neutral-500 mt-1 m-0">
+              Save from the browser extension or add one with the + button.
+            </p>
             <button
-              type="submit"
-              className="h-9 px-5 rounded-xl bg-[var(--y)] hover:bg-[#e0ac15] text-[#171717] font-bold text-[12px] shadow-sm"
+              type="button"
+              onClick={() => setIsAddingNote(true)}
+              className="mt-5 h-10 px-5 rounded-full bg-neutral-900 text-white text-[13px] font-bold inline-flex items-center gap-2"
             >
-              Save to PC
+              <Plus className="w-4 h-4" /> Add note
             </button>
           </div>
-        </form>
-      )}
-
-      {/* Project-scoped notes board */}
-      <div className="flex items-center justify-between gap-3 mb-4">
-        <div>
-          <h2 className="text-[17px] font-extrabold text-[var(--t)]">
-            {projects.find((project) => project.id === selectedProject)?.title || 'All project notes'}
-          </h2>
-          <p className="text-[11px] text-[var(--m)] mt-1">Each note keeps its project, date, and original source attached.</p>
-        </div>
-        <span className="text-[11px] font-semibold text-[var(--m)]">{filteredNotes.length} notes</span>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
+            {scopedNotes.map((note, index) => {
+              const tone = toneFor(note.id, index);
+              const preview =
+                note.selectedText.length > 120
+                  ? note.selectedText.slice(0, 120).trim() + '…'
+                  : note.selectedText;
+              return (
+                <button
+                  key={note.id}
+                  type="button"
+                  onClick={() => openNote(note.id)}
+                  className={`relative aspect-square rounded-[18px] p-4 text-left shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all ${tone.bg} ${tone.text} flex flex-col`}
+                >
+                  {note.isPolished && (
+                    <span className="absolute top-3 right-3 w-6 h-6 rounded-full bg-black/10 grid place-items-center">
+                      <Star className="w-3.5 h-3.5 fill-current" />
+                    </span>
+                  )}
+                  <h3 className="text-[14px] sm:text-[15px] font-bold leading-snug line-clamp-4 pr-6 m-0">
+                    {note.title}
+                  </h3>
+                  <p className={`mt-2 text-[11px] leading-relaxed line-clamp-3 flex-1 m-0 opacity-90 ${tone.muted}`}>
+                    {preview}
+                  </p>
+                  <div className="mt-auto pt-3 flex items-end justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className={`block text-[10px] font-semibold truncate ${tone.muted}`}>
+                        {note.sourceTitle || 'Source'}
+                      </span>
+                      <span className={`block text-[10px] mt-0.5 ${tone.muted}`}>
+                        {formatNoteDate(note.createdAt)}
+                      </span>
+                    </div>
+                    <span
+                      className="shrink-0 w-7 h-7 rounded-full bg-black/10 grid place-items-center hover:bg-black/15"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openNote(note.id);
+                        setIsEditingExpanded(true);
+                      }}
+                      title="Edit"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {filteredNotes.length === 0 ? (
-        <div className="text-center py-20 bg-[var(--s)] border border-[var(--line)] rounded-[24px] p-8">
-          <Bookmark className="w-10 h-10 text-[var(--m)] mx-auto mb-3 opacity-40" />
-          <h3 className="text-[15px] font-bold text-[var(--t)] m-0 mb-1">No notes in this project yet</h3>
-          <p className="text-[12px] text-[var(--m)] max-w-sm mx-auto">
-            Save a passage from a source or add a note manually. Bob will keep it attached to this project.
-          </p>
-          <button onClick={() => setIsAddingNote(true)} className="mt-4 h-9 px-4 rounded-xl bg-[var(--y)] text-[#171717] font-bold text-[12px] inline-flex items-center gap-2">
-            <Plus className="w-3.5 h-3.5" /> Add the first note
-          </button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filteredNotes.map((note, index) => {
-            const palette = ['emerald', 'blue', 'yellow', 'red', 'purple', 'pink'] as const;
-            const colorClass = {
-              emerald: 'bg-[#e9f7ec] border-[#c9e9d0] dark:bg-[#1b3025] dark:border-[#31543f]',
-              blue: 'bg-[#eaf3ff] border-[#cbdfff] dark:bg-[#1b293b] dark:border-[#2d4565]',
-              yellow: 'bg-[#fff7d9] border-[#f1e3a8] dark:bg-[#352e19] dark:border-[#5a4c25]',
-              red: 'bg-[#fff0eb] border-[#f2d0c5] dark:bg-[#38251f] dark:border-[#674035]',
-              purple: 'bg-[#f3eaff] border-[#e0d0f5] dark:bg-[#2a1f3d] dark:border-[#4a3a65]',
-              pink: 'bg-[#ffeaf3] border-[#f5cfe0] dark:bg-[#3a1f2d] dark:border-[#65405a]'
-            }[note.color || palette[index % palette.length]];
-            const projectName = projects.find((project) => project.id === note.projectId)?.title || 'Unassigned project';
-            const isEditing = editingId === note.id;
-            return (
-              <article key={note.id} className={`min-h-[260px] rounded-[22px] border p-5 flex flex-col shadow-sm hover:shadow-md transition-all ${colorClass}`}>
-                <div className="flex items-start justify-between gap-3 mb-3">
-                  <div className="min-w-0">
-                    <span className="text-[9px] uppercase tracking-[0.14em] font-extrabold opacity-65">{projectName}</span>
-                    {isEditing ? (
-                      <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="mt-2 w-full rounded-lg border border-black/10 bg-white/70 dark:bg-black/20 px-2.5 py-2 text-[14px] font-bold outline-none" aria-label="Edit note title" />
-                    ) : (
-                      <h3 className="text-[16px] font-extrabold leading-snug mt-2">{note.title}</h3>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    {note.isPolished && <span className="p-1.5 rounded-full bg-white/50 dark:bg-black/15" title="Polished by Bob"><Bot className="w-3.5 h-3.5" /></span>}
-                    <button onClick={() => isEditing ? setEditingId(null) : startEditing(note)} className="p-1.5 rounded-lg hover:bg-white/50 dark:hover:bg-black/15" title={isEditing ? 'Cancel edit' : 'Edit note'}>
-                      {isEditing ? <X className="w-3.5 h-3.5" /> : <Pencil className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
-                </div>
+      {/* Full note overlay */}
+      {expandedNote && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-150"
+          onClick={() => {
+            setExpandedNoteId(null);
+            setIsEditingExpanded(false);
+          }}
+        >
+          <div
+            className={`relative w-full max-w-lg max-h-[85vh] rounded-[24px] shadow-2xl flex flex-col overflow-hidden ${
+              toneFor(expandedNote.id, 0).bg
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 p-5 pb-2">
+              {isEditingExpanded ? (
+                <input
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="flex-1 text-[18px] font-extrabold bg-white/40 rounded-xl px-3 py-2 outline-none border border-black/10"
+                />
+              ) : (
+                <h2 className={`text-[18px] font-extrabold leading-snug m-0 pr-2 ${toneFor(expandedNote.id, 0).text}`}>
+                  {expandedNote.title}
+                </h2>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setExpandedNoteId(null);
+                  setIsEditingExpanded(false);
+                }}
+                className="shrink-0 w-8 h-8 rounded-full bg-black/10 hover:bg-black/15 grid place-items-center"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
-                {isEditing ? (
-                  <textarea value={editText} onChange={(e) => setEditText(e.target.value)} rows={5} className="w-full flex-1 rounded-xl border border-black/10 bg-white/70 dark:bg-black/20 p-3 text-[12px] leading-relaxed outline-none resize-y" aria-label="Edit note content" />
-                ) : (
-                  <p className="text-[12px] leading-[1.75] opacity-85 whitespace-pre-line flex-1">{note.selectedText}</p>
+            <div
+              className={`px-5 pb-2 text-[11px] font-semibold flex items-center gap-2 flex-wrap ${
+                toneFor(expandedNote.id, 0).muted
+              }`}
+            >
+              <span>{formatNoteDate(expandedNote.createdAt)}</span>
+              <span>·</span>
+              <span className="truncate max-w-[220px]">{expandedNote.sourceTitle}</span>
+              {/^https?:\/\//i.test(expandedNote.sourceUrl) && (
+                <a
+                  href={expandedNote.sourceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 underline underline-offset-2"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <ExternalLink className="w-3 h-3" /> Open source
+                </a>
+              )}
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-5 py-3 custom-scrollbar">
+              {isEditingExpanded ? (
+                <textarea
+                  value={editText}
+                  onChange={(e) => setEditText(e.target.value)}
+                  rows={10}
+                  className="w-full min-h-[200px] p-3 rounded-xl bg-white/50 border border-black/10 text-[14px] leading-relaxed outline-none resize-y"
+                />
+              ) : (
+                <p className={`text-[14px] leading-[1.7] whitespace-pre-wrap m-0 ${toneFor(expandedNote.id, 0).text}`}>
+                  {expandedNote.selectedText}
+                </p>
+              )}
+            </div>
+
+            {isEditingExpanded && (
+              <div className="px-5 pb-2">
+                <input
+                  value={editSource}
+                  onChange={(e) => setEditSource(e.target.value)}
+                  placeholder="Source URL or name"
+                  className="w-full h-9 px-3 rounded-xl bg-white/50 border border-black/10 text-[12px] outline-none"
+                />
+              </div>
+            )}
+
+            <div className="p-4 pt-2 flex items-center justify-between gap-2 border-t border-black/10">
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(expandedNote.selectedText);
+                    setCopiedId(expandedNote.id);
+                    setTimeout(() => setCopiedId(null), 1500);
+                  }}
+                  className="h-9 px-3 rounded-full bg-black/10 hover:bg-black/15 text-[12px] font-semibold inline-flex items-center gap-1.5"
+                >
+                  {copiedId === expandedNote.id ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copiedId === expandedNote.id ? 'Copied' : 'Copy'}
+                </button>
+                {!expandedNote.isPolished && (
+                  <button
+                    type="button"
+                    onClick={() => polishNote(expandedNote.id)}
+                    className="h-9 px-3 rounded-full bg-black/10 hover:bg-black/15 text-[12px] font-semibold"
+                  >
+                    Polish
+                  </button>
                 )}
-
-                <div className="mt-4 pt-3 border-t border-black/10 dark:border-white/10">
-                  {isEditing ? (
-                    <div className="space-y-2">
-                      <input value={editSource} onChange={(e) => setEditSource(e.target.value)} placeholder="Source URL or document name" className="w-full rounded-lg border border-black/10 bg-white/70 dark:bg-black/20 px-2.5 py-2 text-[11px] outline-none" aria-label="Edit note source" />
-                      <button onClick={() => saveEditing(note.id)} disabled={!editTitle.trim() || !editText.trim()} className="w-full h-9 rounded-xl bg-[#171717] text-white dark:bg-[#f2eee7] dark:text-[#171717] font-bold text-[11px] inline-flex items-center justify-center gap-2 disabled:opacity-40"><Save className="w-3.5 h-3.5" /> Save changes</button>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <span className="block text-[10px] font-bold truncate">{note.sourceTitle}</span>
-                          <span className="block text-[9px] opacity-65 truncate">{note.createdAt}</span>
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          {!note.isPolished && <button onClick={() => polishNote(note.id)} className="p-1.5 rounded-lg hover:bg-white/50 dark:hover:bg-black/15" title="Polish note with Bob"><Sparkles className="w-3.5 h-3.5" /></button>}
-                          <button onClick={() => handleCopy(note.id, note.selectedText)} className="p-1.5 rounded-lg hover:bg-white/50 dark:hover:bg-black/15" title="Copy note">{copiedId === note.id ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}</button>
-                        </div>
-                      </div>
-                      {/^https?:\/\//i.test(note.sourceUrl) && <a href={note.sourceUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-[10px] underline underline-offset-2 opacity-75"><ExternalLink className="w-3 h-3" /> Open original source</a>}
-                    </>
-                  )}
-                </div>
-              </article>
-            );
-          })}
+              </div>
+              {isEditingExpanded ? (
+                <button
+                  type="button"
+                  onClick={saveExpanded}
+                  className="h-9 px-4 rounded-full bg-neutral-900 text-white text-[12px] font-bold inline-flex items-center gap-1.5"
+                >
+                  <Save className="w-3.5 h-3.5" /> Save
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsEditingExpanded(true)}
+                  className="h-9 px-4 rounded-full bg-black/10 hover:bg-black/15 text-[12px] font-bold inline-flex items-center gap-1.5"
+                >
+                  <Pencil className="w-3.5 h-3.5" /> Edit
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
