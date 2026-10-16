@@ -294,3 +294,184 @@
 
 .download-page{min-height:100vh;background:#fbfaf7;color:#302019;padding:0 5vw;display:flex;flex-direction:column;overflow:hidden}.download-nav{width:100%;max-width:1180px;margin:0 auto;padding:27px 0;display:flex;align-items:center;justify-content:space-between}.download-brand{display:flex;align-items:center;gap:10px;color:#302019;text-decoration:none;font-size:19px;font-weight:800;letter-spacing:-.04em}.download-mark{display:grid;place-items:center;width:31px;height:31px;border-radius:10px;background:#f6c928;box-shadow:inset 0 -3px 0 #e6a91c;font-size:16px}.download-signin{color:#6c5b52;text-decoration:none;font-size:12px;font-weight:700}.download-signin:hover{text-decoration:underline}.download-hero{position:relative;display:flex;align-items:center;flex-direction:column;text-align:center;padding:92px 16px 104px}.download-orb{position:absolute;top:56px;width:240px;height:240px;border-radius:50%;background:radial-gradient(circle at 42% 36%,#fff9b9 0,#f9d734 44%,#e8ac1b 100%);filter:blur(.2px);opacity:.68;z-index:0}.download-orb span{position:absolute;left:50%;top:50%;width:46px;height:46px;border-radius:50% 50% 45% 45%;background:#fff5ab;box-shadow:0 0 55px 26px #fff6a2;transform:translate(-50%,-50%)}.download-kicker,.download-hero h1,.download-lede,.download-button,.download-note{position:relative;z-index:1}.download-kicker{margin:0 0 20px;color:#8a6856;font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase}.download-hero h1{margin:0;max-width:700px;font-size:clamp(47px,7vw,83px);font-weight:700;letter-spacing:-.075em;line-height:.95}.download-hero h1 em{color:#b07c20;font-style:normal}.download-lede{max-width:455px;margin:25px auto 29px;color:#806d62;font-size:16px;line-height:1.55}.download-button{display:flex;align-items:center;gap:13px;min-width:272px;padding:13px 15px;border-radius:14px;background:#302019;color:#fffaf2;text-decoration:none;text-align:left;box-shadow:0 12px 24px #3020191c;transition:transform .2s,box-shadow .2s}.download-button:hover{transform:translateY(-2px);box-shadow:0 16px 29px #30201930}.windows-glyph{font-size:24px;color:#f6cf31}.download-button strong,.download-button small{display:block}.download-button strong{font-size:13px}.download-button small{margin-top:3px;color:#c7b9ae;font-size:10px}.download-arrow{margin-left:auto;color:#f6cf31;font-size:20px}.download-note{margin:14px 0 0;color:#a08e83;font-size:10px}.download-features{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;max-width:950px;width:100%;margin:0 auto;border-top:1px solid #e8e0d8;border-bottom:1px solid #e8e0d8}.download-features article{padding:27px 25px 30px;border-right:1px solid #e8e0d8}.download-features article:last-child{border-right:0}.feature-icon{display:block;margin-bottom:19px;color:#d8a91e;font-size:24px}.download-features h2{margin:0 0 8px;font-size:14px;letter-spacing:-.02em}.download-features p{max-width:210px;margin:0;color:#907f75;font-size:12px;line-height:1.5}.download-footer{display:flex;justify-content:space-between;max-width:1180px;width:100%;margin:auto auto 0;padding:26px 0 24px;color:#a08e83;font-size:10px}@media(max-width:650px){.download-page{padding:0 20px}.download-hero{padding:78px 0 76px}.download-hero h1{font-size:50px}.download-lede{font-size:14px}.download-features{grid-template-columns:1fr}.download-features article{border-right:0;border-bottom:1px solid #e8e0d8;padding:22px 10px}.download-features article:last-child{border-bottom:0}.download-features p{max-width:none}.download-footer{gap:12px;flex-direction:column}}
 
+
+
+/* ========== Bob premium login (sunflower) ========== */
+.bob-login-page {
+  min-height: 100vh;
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 28px 16px;
+  overflow: hidden;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+.bob-login-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(0,0,0,0.25), rgba(0,0,0,0.45)),
+    url('/sunflower-login.png') center / cover no-repeat;
+  z-index: 0;
+}
+.bob-login-scrim {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 20%, rgba(0,0,0,0.35) 100%);
+  z-index: 1;
+  pointer-events: none;
+}
+.bob-login-card {
+  position: relative;
+  z-index: 2;
+  width: min(100%, 400px);
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(16px);
+  border-radius: 28px;
+  padding: 32px 28px 28px;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.28);
+  border: 1px solid rgba(255,255,255,0.65);
+}
+.bob-login-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.bob-login-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: #171717;
+  color: #f5c842;
+  font-weight: 800;
+  font-size: 18px;
+  display: grid;
+  place-items: center;
+}
+.bob-login-product {
+  font-weight: 700;
+  font-size: 15px;
+  color: #171717;
+  letter-spacing: -0.02em;
+}
+.bob-login-card h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  color: #171717;
+  line-height: 1.15;
+}
+.bob-login-lede {
+  margin: 8px 0 20px;
+  font-size: 13.5px;
+  color: #666;
+  line-height: 1.45;
+}
+.bob-login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.bob-login-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #555;
+}
+.bob-login-label input {
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid #e5e5df;
+  background: #fafaf8;
+  padding: 0 14px;
+  font-size: 14px;
+  color: #171717;
+  outline: none;
+  font: inherit;
+}
+.bob-login-label input:focus {
+  border-color: #f5c842;
+  box-shadow: 0 0 0 3px rgba(245, 200, 66, 0.25);
+}
+.bob-login-primary {
+  height: 46px;
+  border: 0;
+  border-radius: 999px;
+  background: #171717;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 4px;
+}
+.bob-login-primary:disabled { opacity: 0.55; cursor: wait; }
+.bob-login-primary:hover:not(:disabled) { background: #2a2a2a; }
+.bob-login-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #999;
+  font-size: 12px;
+  margin: 4px 0;
+}
+.bob-login-divider::before,
+.bob-login-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #e8e8e4;
+}
+.bob-login-google {
+  height: 46px;
+  border-radius: 999px;
+  border: 1px solid #e5e5df;
+  background: #fff;
+  color: #171717;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.bob-login-google:hover { background: #fafafa; }
+.bob-login-google:disabled { opacity: 0.55; cursor: wait; }
+.bob-login-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 12.5px;
+}
+.bob-login-info {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #ecfdf5;
+  color: #047857;
+  font-size: 12.5px;
+}
+.bob-login-desktop-hint {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  color: #888;
+  text-align: center;
+}
+.bob-login-switch {
+  margin: 18px 0 0;
+  text-align: center;
+  font-size: 13px;
+  color: #666;
+}
+.bob-login-switch a {
+  color: #171717;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
