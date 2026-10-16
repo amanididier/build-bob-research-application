@@ -728,7 +728,7 @@
     };
 
     // Suggestions list
-    $$('#goalModalSuggestions .goal-option-item').forEach((item) => {
+    $$('#goalModalSuggestions .goal-stack-item, #goalModalSuggestions .goal-option-item').forEach((item) => {
       item.onclick = () => {
         const val = item.dataset.goal || item.textContent.trim();
         commitGoal(val);
@@ -1537,7 +1537,25 @@
       });
     });
 
-    // Quick Ask Inline
+    // Attach files (not Quick Ask)
+    const btnAttach = $('btn-attach-file');
+    const fileInput = $('fileAttachInput');
+    if (btnAttach && fileInput) {
+      btnAttach.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', () => {
+        const files = Array.from(fileInput.files || []);
+        if (!files.length) return;
+        const names = files.map((f) => f.name).join(', ');
+        toast('Attached: ' + (names.length > 48 ? names.slice(0, 48) + '…' : names));
+        // Store names for context; binary upload can go through desktop bridge later
+        try {
+          const prev = JSON.parse(sessionStorage.getItem('bob_pending_attachments') || '[]');
+          const next = prev.concat(files.map((f) => ({ name: f.name, size: f.size, type: f.type })));
+          sessionStorage.setItem('bob_pending_attachments', JSON.stringify(next));
+        } catch {}
+        fileInput.value = '';
+      });
+    }
     const btnOpenInline = $('btn-open-inline');
     if (btnOpenInline) btnOpenInline.addEventListener('click', openInlineModal);
 

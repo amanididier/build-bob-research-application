@@ -313,7 +313,7 @@ export const ChromeSidePanelPage: React.FC = () => {
                         <div
                           className={`max-w-[85%] text-[11px] px-3 py-2 rounded-xl leading-relaxed ${
                             msg.role === 'user'
-                              ? 'bg-[var(--bs)] text-[#1e3a8a] dark:text-[#bfdbfe]'
+                              ? 'bg-[#3797f0] dark:bg-[#2a7fd4] text-white'
                               : 'bg-[var(--s2)] text-[var(--t)]'
                           }`}
                         >

@@ -50,6 +50,11 @@
 
 /* Fallback <mark> element highlights */
 mark.bob-hl {
+  padding: 0.18em 0.12em;
+  margin: 0 -0.04em;
+  border-radius: 0.35em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
   color: inherit;
   border-radius: 4px;
   padding: 0.12em 0.2em;
@@ -754,4 +759,100 @@ mark.bob-hl.bob-hl-focus {
 .bob-toast-info {
   background: #171717;
   color: #f5f4f0;
+}
+
+
+/* -------- Selection action bar (Copy / Ask / Save) -------- */
+.bob-selection-bar {
+  position: absolute;
+  z-index: 2147483000;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 6px;
+  border-radius: 999px;
+  background: #171717;
+  box-shadow: 0 10px 32px rgba(0,0,0,0.28), 0 0 0 1px rgba(255,255,255,0.08);
+  font-family: Inter, system-ui, sans-serif;
+  animation: bob-sel-in 0.16s ease-out;
+}
+@keyframes bob-sel-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+.bob-sel-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: #f5f5f5;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.bob-sel-btn svg { flex-shrink: 0; }
+.bob-sel-copy:hover { background: #f5c842; color: #171717; }
+.bob-sel-ask:hover { background: #3b82f6; color: #fff; }
+.bob-sel-save:hover { background: #58cc02; color: #fff; }
+
+/* Instagram-style user bubble in Quick Ask */
+.bob-colab-thread-msg.user {
+  align-self: flex-end;
+  background: #3797f0 !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 18px 18px 4px 18px !important;
+  padding: 9px 13px !important;
+  max-width: 88%;
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 500;
+}
+.bob-colab-thread-msg.bob {
+  align-self: flex-start;
+  background: #f4f4f5 !important;
+  color: #171717 !important;
+  border-radius: 18px 18px 18px 4px !important;
+  padding: 9px 13px !important;
+  max-width: 92%;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.bob-colab-excerpt {
+  font-size: 12px !important;
+  line-height: 1.4 !important;
+  max-height: 3.6em;
+  overflow: hidden;
+  border-left: 3px solid #f5c842;
+  padding-left: 10px;
+  margin: 8px 12px;
+  color: #555;
+}
+
+/* Thicker CSS Highlight API paints */
+::highlight(bob-hl-claim) {
+  background-color: rgba(55, 151, 240, 0.35);
+  text-decoration: none;
+}
+::highlight(bob-hl-data) {
+  background-color: rgba(88, 204, 2, 0.28);
+}
+::highlight(bob-hl-definition) {
+  background-color: rgba(167, 139, 250, 0.32);
+}
+::highlight(bob-hl-conclusion) {
+  background-color: rgba(245, 200, 66, 0.45);
+}
+::highlight(bob-hl-caveat) {
+  background-color: rgba(251, 146, 60, 0.32);
+}
+::highlight(bob-hl-action) {
+  background-color: rgba(244, 114, 182, 0.28);
+}
+::highlight(bob-hl-top) {
+  background-color: rgba(245, 200, 66, 0.55);
 }

@@ -104,7 +104,7 @@
       const excerptEl = inlineColabCard.querySelector('#colab-excerpt');
       if (excerptEl && cleanText) {
         excerptEl.style.display = 'block';
-        excerptEl.textContent = `“${cleanText.slice(0, 240)}${cleanText.length > 240 ? '…' : ''}”`;
+        excerptEl.textContent = `“${cleanText.slice(0, 140)}${cleanText.length > 140 ? '…' : ''}”`;
         inlineColabCard.dataset.selectedText = cleanText;
       }
       const input = inlineColabCard.querySelector('#colab-input');
@@ -130,7 +130,7 @@
         </div>
       </div>
       <div class="bob-colab-excerpt" id="colab-excerpt" style="${cleanText ? '' : 'display:none;'}">
-        “${cleanText.slice(0, 240)}${cleanText.length > 240 ? '…' : ''}”
+        “${cleanText.slice(0, 140)}${cleanText.length > 140 ? '…' : ''}”
       </div>
       <div class="bob-colab-body" id="colab-thread"></div>
       <form class="bob-colab-form" id="colab-form">
@@ -304,6 +304,70 @@
     });
   }
 
+  let selectionBar = null;
+
+  function closeSelectionBar() {
+    if (selectionBar) {
+      selectionBar.remove();
+      selectionBar = null;
+    }
+  }
+
+  function showSelectionBar(text, range) {
+    closeSelectionBar();
+    const root = ensureRoot();
+    const rect = range.getBoundingClientRect();
+    selectionBar = el('div', 'bob-selection-bar');
+    selectionBar.innerHTML = `
+      <button type="button" class="bob-sel-btn bob-sel-copy" title="Copy">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        <span>Copy</span>
+      </button>
+      <button type="button" class="bob-sel-btn bob-sel-ask" title="Ask Bob">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg>
+        <span>Ask</span>
+      </button>
+      <button type="button" class="bob-sel-btn bob-sel-save" title="Save note">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+        <span>Save</span>
+      </button>
+    `;
+    const left = Math.max(12, Math.min(window.scrollX + rect.left + rect.width / 2 - 110, window.scrollX + window.innerWidth - 240));
+    const top = Math.max(8, window.scrollY + rect.top - 48);
+    selectionBar.style.left = Math.round(left) + 'px';
+    selectionBar.style.top = Math.round(top) + 'px';
+
+    selectionBar.querySelector('.bob-sel-copy').addEventListener('mousedown', async (e) => {
+      e.preventDefault(); e.stopPropagation();
+      try { await navigator.clipboard.writeText(text); showToast('Copied', 'ok'); } catch {}
+      closeSelectionBar();
+    });
+    selectionBar.querySelector('.bob-sel-ask').addEventListener('mousedown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      closeSelectionBar();
+      openQuickAskCard(text, range);
+    });
+    selectionBar.querySelector('.bob-sel-save').addEventListener('mousedown', async (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const res = await send({
+        type: 'SAVE_NOTE',
+        data: { text, pageTitle: document.title, url: location.href, origin: 'selection-bar' },
+      });
+      showToast(res && res.ok ? 'Saved to notes' : 'Note saved locally', 'ok');
+      closeSelectionBar();
+    });
+
+    root.appendChild(selectionBar);
+    // Dismiss on outside click / scroll
+    const dismiss = (ev) => {
+      if (selectionBar && !selectionBar.contains(ev.target)) {
+        closeSelectionBar();
+        document.removeEventListener('mousedown', dismiss, true);
+      }
+    };
+    setTimeout(() => document.addEventListener('mousedown', dismiss, true), 30);
+  }
+
   function handleSelectionChange() {
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || !selection.rangeCount) {
@@ -321,8 +385,8 @@
     const rect = range.getBoundingClientRect();
     if (!rect || (!rect.width && !rect.height)) return;
 
-    // Directly open the new Quick Ask card with the copied/selected text!
-    openQuickAskCard(text, range);
+    // Thick action bar: Copy · Ask · Save — do not auto-open Ask
+    showSelectionBar(text, range);
   }
 
   const CATEGORY_COLOR_MAP = {

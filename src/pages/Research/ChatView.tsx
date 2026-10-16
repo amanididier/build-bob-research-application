@@ -356,7 +356,7 @@ export const ChatView: React.FC = () => {
                   </div>
                 )}
                 <div className="flex gap-3 items-start justify-end">
-                  <div className="max-w-[80%] bg-[var(--bs)] text-[#1e3a8a] dark:text-[#bfdbfe] px-4 py-3 rounded-[18px] text-[13px] leading-relaxed shadow-sm">
+                  <div className="max-w-[80%] bg-[#3797f0] dark:bg-[#2a7fd4] text-white px-4 py-3 rounded-[18px_18px_4px_18px] text-[13px] font-medium leading-relaxed shadow-sm">
                     {msg.text}
                   </div>
                 </div>
