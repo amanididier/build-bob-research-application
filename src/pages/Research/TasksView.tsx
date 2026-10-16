@@ -1,17 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { 
-  CheckCircle2, 
-  Circle, 
-  Plus, 
-  Filter, 
-  Calendar, 
-  Sparkles, 
-  Lock, 
-  Layers, 
-  ArrowRight,
-  ListTodo
-} from 'lucide-react';
+import { Check, Lock, Sparkles, Star } from 'lucide-react';
 import { TaskStepExecutionView } from '../../components/roadmap/TaskStepExecutionView';
 import { RoadmapWizardModal, PhasedTask } from '../../components/roadmap/RoadmapWizardModal';
 
@@ -19,312 +8,450 @@ interface TasksViewProps {
   isSidePanel?: boolean;
 }
 
+const PHASED_KEY = 'bob_phased_tasks_v1';
+const COMPLETED_KEY = 'bob_phased_completed_v1';
+const STARS_KEY = 'bob_roadmap_stars_v1';
+
+function loadPhased(projectId: string): PhasedTask[] | null {
+  try {
+    const all = JSON.parse(localStorage.getItem(PHASED_KEY) || '{}');
+    return all[projectId] || null;
+  } catch {
+    return null;
+  }
+}
+
+function savePhased(projectId: string, tasks: PhasedTask[]) {
+  try {
+    const all = JSON.parse(localStorage.getItem(PHASED_KEY) || '{}');
+    all[projectId] = tasks;
+    localStorage.setItem(PHASED_KEY, JSON.stringify(all));
+  } catch {}
+}
+
+function loadCompleted(projectId: string): string[] {
+  try {
+    const all = JSON.parse(localStorage.getItem(COMPLETED_KEY) || '{}');
+    return all[projectId] || [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCompleted(projectId: string, ids: string[]) {
+  try {
+    const all = JSON.parse(localStorage.getItem(COMPLETED_KEY) || '{}');
+    all[projectId] = ids;
+    localStorage.setItem(COMPLETED_KEY, JSON.stringify(all));
+  } catch {}
+}
+
+function loadStars(projectId: string): number {
+  try {
+    const all = JSON.parse(localStorage.getItem(STARS_KEY) || '{}');
+    return Number(all[projectId]) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function saveStars(projectId: string, n: number) {
+  try {
+    const all = JSON.parse(localStorage.getItem(STARS_KEY) || '{}');
+    all[projectId] = Math.min(5, n);
+    localStorage.setItem(STARS_KEY, JSON.stringify(all));
+  } catch {}
+}
+
+/** Demo seed only when no stored roadmap — short titles */
+const SEED: PhasedTask[] = [
+  {
+    id: 'pt-1',
+    phase: 'Phase 1',
+    title: 'Understand the problem',
+    estimatedTime: '30 mins',
+    priority: 1,
+    steps: [
+      {
+        id: 's-1',
+        stepNumber: 1,
+        title: 'Watch a short video on the topic',
+        instruction: 'Open one of the links and watch the parts that match your goal. Write down two things that surprised you.',
+        tool: 'youtube',
+        links: [
+          {
+            title: 'YouTube search for this topic',
+            url: 'https://youtube.com/results?search_query=research+planning+basics',
+          },
+        ],
+      },
+      {
+        id: 's-2',
+        stepNumber: 2,
+        title: 'Ask ChatGPT three focused questions',
+        instruction: 'Copy each prompt, paste it into ChatGPT, and save the best answers as notes.',
+        tool: 'chatgpt',
+        prompts: [
+          'What are the main reasons people struggle with this problem?',
+          'What is a simple first version I can finish this week?',
+          'What should I ignore so I stay focused?',
+        ],
+      },
+      {
+        id: 's-3',
+        stepNumber: 3,
+        title: 'Write a one-sentence goal',
+        instruction: 'In plain words, write what “done” looks like for this project. Keep it under 20 words.',
+        tool: 'docs',
+      },
+    ],
+  },
+  {
+    id: 'pt-2',
+    phase: 'Phase 2',
+    title: 'Build the first version',
+    estimatedTime: '1 hour',
+    priority: 2,
+    steps: [
+      {
+        id: 's-4',
+        stepNumber: 1,
+        title: 'Make a tiny prototype',
+        instruction: 'Build the smallest thing that shows the idea works. Skip polish for now.',
+        tool: 'claude_code',
+      },
+      {
+        id: 's-5',
+        stepNumber: 2,
+        title: 'Test with one real example',
+        instruction: 'Run your prototype on one real case and note what broke.',
+        tool: 'other',
+      },
+    ],
+  },
+  {
+    id: 'pt-3',
+    phase: 'Phase 3',
+    title: 'Check and share',
+    estimatedTime: '20 mins',
+    priority: 3,
+    steps: [
+      {
+        id: 's-6',
+        stepNumber: 1,
+        title: 'Review against your goal',
+        instruction: 'Compare the result to your one-sentence goal. List one fix if something is missing.',
+        tool: 'docs',
+      },
+    ],
+  },
+];
+
 export const TasksView: React.FC<TasksViewProps> = ({ isSidePanel = false }) => {
-  const { tasks, toggleTask, activeResearchId, projects, addTask, triggerThinking, sendMessage, navigateTo } = useApp();
-  const [filterMode, setFilterMode] = useState<'all' | 'pending' | 'completed'>('all');
-  const [viewMode, setViewMode] = useState<'step_execution' | 'list'>('step_execution');
+  const {
+    tasks,
+    toggleTask,
+    activeResearchId,
+    projects,
+    addTask,
+    triggerThinking,
+    sendMessage,
+    navigateTo,
+    messages,
+  } = useApp();
+
+  const project = projects.find((p) => p.id === activeResearchId) || projects[0];
+  const projectId = project?.id || 'default';
+
+  const [phasedTasks, setPhasedTasks] = useState<PhasedTask[]>(() => loadPhased(projectId) || []);
+  const [completedTaskIds, setCompletedTaskIds] = useState<string[]>(() => loadCompleted(projectId));
+  const [activeTaskIndex, setActiveTaskIndex] = useState(0);
   const [isRoadmapWizardOpen, setIsRoadmapWizardOpen] = useState(false);
+  const [stars, setStars] = useState(() => loadStars(projectId));
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [hasRoadmap, setHasRoadmap] = useState(() => (loadPhased(projectId) || []).length > 0);
 
-  // Active phased roadmap tasks
-  const [phasedTasks, setPhasedTasks] = useState<PhasedTask[]>([
-    {
-      id: 'pt-1',
-      phase: 'Phase 1: Architecture & TTS Research',
-      title: 'Analyze TTS models & evaluate latency benchmarks',
-      estimatedTime: '45 mins',
-      priority: 1,
-      steps: [
-        {
-          id: 's-1',
-          stepNumber: 1,
-          title: 'Watch TTS & Streaming Audio Architectural breakdown',
-          instruction: 'Watch suggested high-yield video breakdowns on how modern real-time Web Audio and speech synthesis pipelines achieve sub-500ms voice output.',
-          tool: 'youtube',
-          links: [
-            { title: 'YouTube: Ultra-low latency TTS streaming architectures', url: 'https://youtube.com/results?search_query=low+latency+tts+streaming+architecture' },
-            { title: 'YouTube: Web Audio API & AudioBuffer worklets deep dive', url: 'https://youtube.com/results?search_query=web+audio+api+streaming+playback' }
-          ]
-        },
-        {
-          id: 's-2',
-          stepNumber: 2,
-          title: 'Plan integration prompts with ChatGPT / Claude',
-          instruction: 'Prompt your AI reasoning model using the structured deep inquiry prompts below. Click Copy to clipboard on each prompt.',
-          tool: 'chatgpt',
-          prompts: [
-            'How does streaming TTS work under the hood and which lightweight models or Web Speech fallbacks work best for immediate feedback?',
-            'Which streaming architecture delivers faster Time-To-First-Byte (TTFB) and feels genuinely real-time to users?',
-            'How do I integrate a zero-latency audio buffer and speech synthesizer directly into my Bob Companion project?',
-            'Create for me a strong complete prompt to provide my building AI (Claude Code) including verification tests and error boundaries.'
-          ]
-        },
-        {
-          id: 's-3',
-          stepNumber: 3,
-          title: 'Execute implementation prompts in Claude Code',
-          instruction: 'Paste the generated prompts into Claude Code in your terminal. Paste them one at a time and run the verification tests between each step.',
-          tool: 'claude_code'
-        }
-      ]
-    },
-    {
-      id: 'pt-2',
-      phase: 'Phase 2: Local Audio Pipeline Integration',
-      title: 'Connect Web Audio Chime generator & synthesis fallback',
-      estimatedTime: '1 hour',
-      priority: 2,
-      steps: [
-        {
-          id: 's-4',
-          stepNumber: 1,
-          title: 'Verify audio worklet and chime frequencies',
-          instruction: 'Test dual harmonic chime oscillators (659Hz, 830Hz, 987Hz) for proactive speech rings.',
-          tool: 'docs'
-        },
-        {
-          id: 's-5',
-          stepNumber: 2,
-          title: 'Benchmark memory allocation',
-          instruction: 'Ensure Web Audio context never leaks oscillators and handles browser autoplay policies.',
-          tool: 'chatgpt'
-        }
-      ]
-    },
-    {
-      id: 'pt-3',
-      phase: 'Phase 3: End-to-End User Verification',
-      title: 'Validate 45s proactive speech ring and focus pacing',
-      estimatedTime: '30 mins',
-      priority: 3,
-      steps: [
-        {
-          id: 's-6',
-          stepNumber: 1,
-          title: 'Simulate idle and active tab transitions',
-          instruction: 'Trigger the green outer arc and verify the 45-second timer transitions smoothly to white if unanswered.',
-          tool: 'other'
-        }
-      ]
+  useEffect(() => {
+    const loaded = loadPhased(projectId);
+    const done = loadCompleted(projectId);
+    setPhasedTasks(loaded || []);
+    setCompletedTaskIds(done);
+    setStars(loadStars(projectId));
+    setHasRoadmap(!!(loaded && loaded.length));
+    setActiveTaskIndex(0);
+  }, [projectId]);
+
+  // Listen for roadmap created elsewhere
+  useEffect(() => {
+    const onRoadmap = () => {
+      const loaded = loadPhased(projectId);
+      if (loaded?.length) {
+        setPhasedTasks(loaded);
+        setHasRoadmap(true);
+      }
+    };
+    window.addEventListener('bob-roadmap-saved', onRoadmap);
+    return () => window.removeEventListener('bob-roadmap-saved', onRoadmap);
+  }, [projectId]);
+
+  const phaseCount = phasedTasks.length;
+  const usePhases = phaseCount > 1;
+  const totalSteps = phasedTasks.reduce((n, p) => n + p.steps.length, 0);
+
+  /** Stars: max 5, spread evenly across phases (or steps if single phase) */
+  const starsFromProgress = useMemo(() => {
+    if (phaseCount === 0) return 0;
+    const finished = completedTaskIds.length;
+    if (phaseCount === 1) {
+      // single phase → stars by step ratio
+      const steps = phasedTasks[0]?.steps.length || 1;
+      // approximate via completed phases only in this model
+      return finished >= 1 ? 5 : 0;
     }
-  ]);
+    return Math.min(5, Math.round((finished / phaseCount) * 5));
+  }, [completedTaskIds, phaseCount, phasedTasks]);
 
-  const [completedTaskIds, setCompletedTaskIds] = useState<string[]>([]);
-  const [activeTaskIndex, setActiveTaskIndex] = useState<number>(0);
+  const displayStars = Math.max(stars, starsFromProgress);
 
   const handleTaskCompleted = (taskId: string) => {
-    setCompletedTaskIds((prev) => [...prev, taskId]);
-    if (activeTaskIndex < phasedTasks.length - 1) {
-      setActiveTaskIndex((prev) => prev + 1);
-    }
+    setCompletedTaskIds((prev) => {
+      if (prev.includes(taskId)) return prev;
+      const next = [...prev, taskId];
+      saveCompleted(projectId, next);
+      const finished = next.length;
+      const earned =
+        phaseCount <= 1
+          ? 5
+          : Math.min(5, Math.round((finished / phaseCount) * 5));
+      setStars(earned);
+      saveStars(projectId, earned);
+      setShowConfetti(true);
+      setTimeout(() => setShowConfetti(false), 2200);
+      if (activeTaskIndex < phasedTasks.length - 1) {
+        setActiveTaskIndex((i) => i + 1);
+      }
+      triggerThinking('Phase complete', `You earned progress stars (${earned}/5).`, 'Nice work');
+      return next;
+    });
   };
 
   const handleAskBobHelp = (query: string) => {
-    triggerThinking('Analyzing Blockage', 'Bob is reading your open tabs and codebase context...', 'Synthesizing unblocker');
     navigateTo('research', 'chat');
-    sendMessage(query);
+    sendMessage(`Help me with this step: ${query}`);
   };
 
-  const filteredTasks = tasks.filter((t) => {
-    if (filterMode === 'pending') return !t.completed;
-    if (filterMode === 'completed') return t.completed;
-    return true;
-  });
+  const openCreateRoadmap = () => {
+    const hasChat = (messages || []).some((m) => m.role === 'user');
+    if (!hasChat) {
+      // Fresh session: wizard will collect goal in simple words
+      setIsRoadmapWizardOpen(true);
+      return;
+    }
+    setIsRoadmapWizardOpen(true);
+  };
 
-  const currentActivePhasedTask = phasedTasks[activeTaskIndex] || phasedTasks[0];
+  const seedDemo = () => {
+    setPhasedTasks(SEED);
+    savePhased(projectId, SEED);
+    setHasRoadmap(true);
+    setCompletedTaskIds([]);
+    saveCompleted(projectId, []);
+    setActiveTaskIndex(0);
+  };
+
+  // Empty state — no roadmap yet
+  if (!hasRoadmap || phasedTasks.length === 0) {
+    return (
+      <div className={`mx-auto ${isSidePanel ? 'px-1' : 'max-w-[560px]'} min-h-[50vh] flex flex-col items-center justify-center py-16 px-4`}>
+        <div className="w-14 h-14 rounded-2xl bg-[var(--y)]/20 text-[#b88900] grid place-items-center mb-5">
+          <Sparkles className="w-7 h-7" />
+        </div>
+        <h2 className="text-[20px] font-semibold text-[var(--t)] m-0 text-center tracking-tight">
+          No plan yet
+        </h2>
+        <p className="mt-2 text-[13px] text-[var(--m)] text-center max-w-sm m-0 leading-relaxed">
+          Create a roadmap with clear steps. Bob will ask a few short questions so the plan fits what you want to do.
+        </p>
+        <button
+          type="button"
+          onClick={openCreateRoadmap}
+          className="mt-6 h-11 px-6 rounded-full bg-[var(--y)] hover:bg-[#e0ac15] text-[#171717] text-[14px] font-semibold shadow-sm"
+        >
+          Create roadmap
+        </button>
+        <button
+          type="button"
+          onClick={seedDemo}
+          className="mt-3 text-[12px] font-medium text-[var(--m)] hover:text-[var(--t)]"
+        >
+          Preview sample steps
+        </button>
+
+        <RoadmapWizardModal
+          isOpen={isRoadmapWizardOpen}
+          onClose={() => setIsRoadmapWizardOpen(false)}
+          onFinishRoadmap={(data) => {
+            const tasksOut = data.tasks?.length ? data.tasks : SEED;
+            setPhasedTasks(tasksOut);
+            savePhased(projectId, tasksOut);
+            setHasRoadmap(true);
+            setCompletedTaskIds([]);
+            saveCompleted(projectId, []);
+            setActiveTaskIndex(0);
+            data.tasks?.forEach((t) => addTask(t.title, data.deadline, projectId));
+            setIsRoadmapWizardOpen(false);
+            try {
+              window.dispatchEvent(new Event('bob-roadmap-saved'));
+            } catch {}
+          }}
+        />
+      </div>
+    );
+  }
+
+  const current = phasedTasks[activeTaskIndex] || phasedTasks[0];
 
   return (
-    <div className={isSidePanel ? "w-full py-1 pb-6" : "max-w-[880px] mx-auto py-2 pb-24"}>
-      {/* Header */}
-      {!isSidePanel && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-3 pb-6 border-b border-[var(--line)] mb-6">
-          <div>
-            <div className="text-[10px] tracking-[0.08em] text-[var(--m)] uppercase font-semibold">
-              RESEARCH ROADMAP & SEQUENTIAL EXECUTION
+    <div className={`relative mx-auto ${isSidePanel ? 'px-1 pb-8' : 'max-w-[640px] py-4 pb-24'}`}>
+      {/* Confetti burst */}
+      {showConfetti && (
+        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/20 backdrop-blur-[2px]" />
+          <div className="relative bg-white dark:bg-[var(--s)] rounded-[24px] px-8 py-7 shadow-2xl text-center animate-in zoom-in-95 fade-in duration-200">
+            <div className="flex justify-center gap-1 mb-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Star
+                  key={i}
+                  className={`w-7 h-7 ${i < displayStars ? 'text-[var(--y)] fill-[var(--y)]' : 'text-neutral-300'}`}
+                />
+              ))}
             </div>
-            <h1 className="text-2xl sm:text-3xl tracking-tight font-extrabold my-1.5 text-[var(--t)]">
-              Tasks & Action Plans
-            </h1>
-            <p className="text-[var(--m)] text-xs leading-relaxed max-w-[620px] m-0">
-              Tasks are sequentially paced. To unlock phase 2, confirm completion of phase 1 steps to stay focused and eliminate overwhelm.
+            <p className="text-[18px] font-bold text-[var(--t)] m-0">Nice work!</p>
+            <p className="text-[13px] text-[var(--m)] mt-1 m-0">
+              {displayStars}/5 stars · phase unlocked
             </p>
           </div>
-
-          {/* Action Buttons */}
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            <button
-              type="button"
-              onClick={() => setIsRoadmapWizardOpen(true)}
-              className="px-3.5 py-2 rounded-xl bg-[var(--y)] hover:bg-[#e0ac15] text-[#171717] font-extrabold text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Create Roadmap</span>
-            </button>
-          </div>
         </div>
       )}
 
-      {isSidePanel && (
-        <div className="flex items-center justify-between gap-2 pb-3 mb-3 border-b border-[var(--line)]">
-          <div>
-            <span className="text-[9px] font-bold text-[var(--m)] uppercase tracking-wider block">Roadmap Steps</span>
-            <span className="text-xs font-bold text-[var(--t)]">{currentActivePhasedTask.phase}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setIsRoadmapWizardOpen(true)}
-            className="px-2.5 py-1 rounded-lg bg-[var(--y)] text-[#171717] font-bold text-[10px] flex items-center gap-1"
-          >
-            <Sparkles className="w-3 h-3" />
-            <span>Roadmap</span>
-          </button>
+      {/* Slim top: stars + short description — no bulky titles */}
+      <div className="flex items-center justify-between gap-3 mb-4 px-0.5">
+        <div className="flex items-center gap-0.5">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Star
+              key={i}
+              className={`w-4 h-4 ${i < displayStars ? 'text-[var(--y)] fill-[var(--y)]' : 'text-neutral-300 dark:text-neutral-600'}`}
+            />
+          ))}
         </div>
-      )}
+        <button
+          type="button"
+          onClick={openCreateRoadmap}
+          className="text-[12px] font-semibold text-[var(--m)] hover:text-[var(--t)]"
+        >
+          New roadmap
+        </button>
+      </div>
 
-      {/* Mode Switcher (Step Guidance vs Full List) */}
-      <div className="flex items-center justify-between gap-3 mb-6 bg-[var(--s)] p-1.5 rounded-2xl border border-[var(--line)]">
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setViewMode('step_execution')}
-            className={`px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
-              viewMode === 'step_execution'
-                ? 'bg-[var(--y)] text-[#171717] shadow-sm'
-                : 'text-[var(--m)] hover:text-[var(--t)]'
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5" />
-            <span>Step-by-Step Guidance (Phase {activeTaskIndex + 1})</span>
-          </button>
+      <p className="text-[13px] text-[var(--m)] m-0 mb-5 leading-relaxed">
+        {usePhases
+          ? `For this project you have ${phaseCount} phases (${totalSteps} steps). Finish one phase to unlock the next.`
+          : `For this project you have ${totalSteps} steps to follow.`}
+      </p>
 
-          <button
-            type="button"
-            onClick={() => setViewMode('list')}
-            className={`px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
-              viewMode === 'list'
-                ? 'bg-[var(--s2)] text-[var(--t)] shadow-sm'
-                : 'text-[var(--m)] hover:text-[var(--t)]'
-            }`}
-          >
-            <ListTodo className="w-3.5 h-3.5" />
-            <span>All Tasks ({tasks.length})</span>
-          </button>
-        </div>
-
-        {/* Phase Pill Progress */}
-        <div className="flex items-center gap-1.5 pr-2">
+      {/* Phase dots — locked ahead */}
+      {usePhases && (
+        <div className="flex items-center gap-2 mb-5 overflow-x-auto pb-1">
           {phasedTasks.map((pt, idx) => {
-            const isUnlocked = idx <= activeTaskIndex;
-            const isFinished = completedTaskIds.includes(pt.id);
-
+            const unlocked = idx <= activeTaskIndex || completedTaskIds.includes(pt.id);
+            const finished = completedTaskIds.includes(pt.id);
+            const active = idx === activeTaskIndex;
             return (
               <button
                 key={pt.id}
                 type="button"
+                disabled={!unlocked && !finished}
                 onClick={() => {
-                  if (isUnlocked) {
-                    setActiveTaskIndex(idx);
-                    setViewMode('step_execution');
-                  }
+                  if (unlocked || finished) setActiveTaskIndex(idx);
                 }}
-                disabled={!isUnlocked}
-                className={`w-6 h-6 rounded-lg text-xs font-extrabold flex items-center justify-center transition-all ${
-                  isFinished
-                    ? 'bg-[var(--g)] text-white'
-                    : idx === activeTaskIndex
-                    ? 'bg-[var(--y)] text-[#171717]'
-                    : isUnlocked
-                    ? 'bg-[var(--s2)] text-[var(--t)]'
-                    : 'bg-[var(--s2)]/40 text-[var(--m)] opacity-40 cursor-not-allowed'
+                className={`shrink-0 h-9 px-3 rounded-full text-[12px] font-semibold inline-flex items-center gap-1.5 border transition-all ${
+                  finished
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300'
+                    : active
+                      ? 'bg-[var(--y)] border-[var(--y)] text-[#171717]'
+                      : unlocked
+                        ? 'bg-[var(--s)] border-[var(--line)] text-[var(--t)]'
+                        : 'bg-[var(--s2)] border-transparent text-[var(--m)] opacity-60 cursor-not-allowed'
                 }`}
-                title={pt.title}
               >
-                {isFinished ? '✓' : idx + 1}
+                {finished ? (
+                  <Check className="w-3.5 h-3.5" />
+                ) : !unlocked ? (
+                  <Lock className="w-3 h-3" />
+                ) : null}
+                {pt.phase}
               </button>
             );
           })}
         </div>
-      </div>
+      )}
 
-      {/* Render Selected View */}
-      {viewMode === 'step_execution' ? (
-        <TaskStepExecutionView
-          task={currentActivePhasedTask}
-          allTasks={phasedTasks}
-          onTaskCompleted={handleTaskCompleted}
-          onRequestHelp={handleAskBobHelp}
-        />
-      ) : (
-        /* Full Task List View */
-        <div className="bg-[var(--s)] border border-[var(--line)] rounded-[24px] p-6 shadow-sm space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-[var(--line)]">
-            <span className="text-xs font-bold text-[var(--t)]">Task Milestones</span>
-            <div className="flex items-center gap-1">
-              {(['all', 'pending', 'completed'] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setFilterMode(mode)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors ${
-                    filterMode === mode
-                      ? 'bg-[var(--s2)] text-[var(--t)]'
-                      : 'text-[var(--m)] hover:text-[var(--t)]'
-                  }`}
-                >
-                  {mode.charAt(0).toUpperCase() + mode.slice(1)}
-                </button>
-              ))}
-            </div>
-          </div>
+      <TaskStepExecutionView
+        task={current}
+        allTasks={phasedTasks}
+        onTaskCompleted={handleTaskCompleted}
+        onRequestHelp={handleAskBobHelp}
+      />
 
-          <div className="divide-y divide-[var(--line)]">
-            {filteredTasks.map((task) => (
-              <div
-                key={task.id}
-                onClick={() => toggleTask(task.id)}
-                className="py-3.5 flex items-start gap-3.5 cursor-pointer group hover:bg-[var(--s2)]/40 -mx-3 px-3 rounded-xl transition-colors"
-              >
-                <button
-                  type="button"
-                  className="mt-0.5 text-neutral-400 group-hover:text-[var(--y)] transition-colors shrink-0"
-                >
-                  {task.completed ? (
-                    <CheckCircle2 className="w-5 h-5 text-[var(--g)] fill-current" />
-                  ) : (
-                    <Circle className="w-5 h-5" />
-                  )}
-                </button>
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-3">
-                    <b className={`text-xs block font-semibold ${task.completed ? 'line-through text-[var(--m)]' : 'text-[var(--t)]'}`}>
-                      {task.title}
-                    </b>
-                    <span className="text-[10px] text-[var(--m)] font-mono flex items-center gap-1 shrink-0">
-                      <Calendar className="w-3 h-3 text-[var(--m)]" />
-                      {task.dueDate}
+      {/* Optional simple checklist of loose tasks */}
+      {tasks.filter((t) => t.projectId === projectId).length > 0 && (
+        <div className="mt-10 pt-6 border-t border-[var(--line)]">
+          <p className="text-[12px] font-semibold text-[var(--m)] m-0 mb-3">Also on your list</p>
+          <ul className="m-0 p-0 list-none space-y-1.5">
+            {tasks
+              .filter((t) => t.projectId === projectId)
+              .slice(0, 8)
+              .map((t) => (
+                <li key={t.id}>
+                  <button
+                    type="button"
+                    onClick={() => toggleTask(t.id)}
+                    className="w-full flex items-center gap-2.5 px-2 py-2 rounded-xl hover:bg-[var(--s2)] text-left"
+                  >
+                    {t.completed ? (
+                      <span className="w-4.5 h-4.5 rounded-full bg-emerald-500 text-white grid place-items-center">
+                        <Check className="w-2.5 h-2.5" strokeWidth={3} />
+                      </span>
+                    ) : (
+                      <span className="w-4.5 h-4.5 rounded-full border-2 border-neutral-300 dark:border-neutral-600" />
+                    )}
+                    <span
+                      className={`text-[13px] ${t.completed ? 'text-[var(--m)] line-through' : 'text-[var(--t)]'}`}
+                    >
+                      {t.title}
                     </span>
-                  </div>
-                  <div className="text-[10px] text-[var(--m)] mt-1">
-                    {task.sourceConnection} · Linked to active study
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+                  </button>
+                </li>
+              ))}
+          </ul>
         </div>
       )}
 
-      {/* Roadmap Wizard Modal */}
       <RoadmapWizardModal
         isOpen={isRoadmapWizardOpen}
         onClose={() => setIsRoadmapWizardOpen(false)}
         onFinishRoadmap={(data) => {
-          setPhasedTasks(data.tasks);
+          const tasksOut = data.tasks?.length ? data.tasks : SEED;
+          setPhasedTasks(tasksOut);
+          savePhased(projectId, tasksOut);
+          setHasRoadmap(true);
+          setCompletedTaskIds([]);
+          saveCompleted(projectId, []);
+          setStars(0);
+          saveStars(projectId, 0);
           setActiveTaskIndex(0);
-          setViewMode('step_execution');
-          data.tasks.forEach((t) => {
-            addTask(t.title, data.deadline);
-          });
+          data.tasks?.forEach((t) => addTask(t.title, data.deadline, projectId));
+          setIsRoadmapWizardOpen(false);
         }}
       />
     </div>
