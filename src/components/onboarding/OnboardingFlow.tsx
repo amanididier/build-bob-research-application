@@ -167,6 +167,9 @@ export const OnboardingFlow: React.FC = () => {
   };
 
   const completeAuth = (user: { email: string; name: string }) => {
+    localStorage.removeItem('bob_guest_mode');
+    localStorage.removeItem('bob_guest_chat_count');
+    localStorage.removeItem('bob_guest_auth_prompted');
     localStorage.setItem('bob_auth_user', JSON.stringify(user));
     localStorage.setItem('bob_user_email', user.email);
     setUserEmail(user.email);
@@ -541,7 +544,7 @@ export const OnboardingFlow: React.FC = () => {
                     className="w-full h-[54px] rounded-full border border-[var(--line)] bg-transparent hover:bg-[var(--s2)] text-[14px] font-semibold text-[var(--t)] transition-all">
                     Continue with email
                   </button>
-                  <button type="button" onClick={handleNextStep}
+                  <button type="button" onClick={() => { localStorage.setItem('bob_guest_mode', 'true'); handleNextStep(); }}
                     className="w-full pt-2 text-[12px] font-semibold underline underline-offset-4 text-[var(--m)] hover:text-[var(--t)]">
                     Try it first
                   </button>
