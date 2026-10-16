@@ -46,23 +46,30 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
     try {
       if (tab === 'signup') {
         const res = await signUpWithEmail(cleanEmail, password, displayName);
-        if (res.success) {
-          const authUser = { email: cleanEmail, name: displayName };
+        if (res.success && res.session && res.user) {
+          const authUser = {
+            email: res.user.email || cleanEmail,
+            name: res.user.user_metadata?.full_name || res.user.user_metadata?.display_name || displayName,
+          };
           localStorage.setItem('bob_auth_user', JSON.stringify(authUser));
           setInfoMsg('Account created successfully! Connecting your workspace…');
           setTimeout(() => {
             onSuccess(authUser);
             onClose();
           }, 600);
+        } else if (res.success && res.user && !res.session) {
+          setInfoMsg('Check your inbox to confirm your email, then return here and sign in.');
+          setTab('signin');
+          setPassword('');
         } else {
           setErrorMsg(res.error || 'Failed to create account.');
         }
       } else {
         const res = await signInWithEmail(cleanEmail, password);
-        if (res.success) {
+        if (res.success && res.session && res.user) {
           const authUser = {
-            email: cleanEmail,
-            name: res.user?.user_metadata?.full_name || res.user?.user_metadata?.display_name || displayName,
+            email: res.user.email || cleanEmail,
+            name: res.user.user_metadata?.full_name || res.user.user_metadata?.display_name || displayName,
           };
           localStorage.setItem('bob_auth_user', JSON.stringify(authUser));
           setInfoMsg('Signed in successfully! Workspace synced.');
@@ -71,7 +78,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
             onClose();
           }, 600);
         } else {
-          setErrorMsg(res.error || 'Invalid email or password.');
+          setErrorMsg(res.error || 'No active session was returned. Confirm your email if needed, then try again.');
         }
       }
     } catch (err: any) {
