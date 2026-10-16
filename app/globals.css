@@ -475,3 +475,44 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+.download-nav-float {
+  position: absolute;
+  top: 20px;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 24px;
+  max-width: 960px;
+  margin: 0 auto;
+}
+.download-brand-float {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #fff;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 15px;
+}
+.download-signin-float {
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.25);
+}
+.download-hero-card h1 {
+  margin: 0 0 8px;
+  font-size: 28px;
+  letter-spacing: -0.04em;
+  line-height: 1.15;
+}
+.download-hero-card em { font-style: italic; color: #b88900; }
+.download-landing { position: relative; }
