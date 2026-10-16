@@ -24,19 +24,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
     setErrorMsg(null);
     try {
       const res = await supabaseGoogleSignIn();
-      if (!res.success && res.error) {
-        // Fallback to local session if external OAuth redirect is constrained
-        const fallbackUser = { email: 'researcher@gmail.com', name: 'Google Researcher' };
-        localStorage.setItem('bob_auth_user', JSON.stringify(fallbackUser));
-        onSuccess(fallbackUser);
-        onClose();
-        return;
-      }
-    } catch {
-      const fallbackUser = { email: 'researcher@gmail.com', name: 'Google Researcher' };
-      localStorage.setItem('bob_auth_user', JSON.stringify(fallbackUser));
-      onSuccess(fallbackUser);
-      onClose();
+      if (!res.success) setErrorMsg(res.error || 'Google sign-in could not start. Please try again.');
+      // Supabase OAuth redirects to Google. Never create a fake authenticated user.
+    } catch (error: any) {
+      setErrorMsg(error?.message || 'Google authentication error. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -102,7 +93,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/10 animate-in fade-in duration-200"
     >
       <div className="w-full max-w-[430px] bg-white dark:bg-[#151515] border border-[#e6e1d6] dark:border-[#2a2a2a] shadow-[0_24px_64px_rgba(0,0,0,0.22)] rounded-[32px] p-8 relative overflow-hidden">
         {/* Subtle decorative glow */}
