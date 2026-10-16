@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { DesktopWindowHeader } from './DesktopWindowHeader';
 import { Sidebar } from './Sidebar';
@@ -29,7 +29,18 @@ import { NotificationsPage } from '../../pages/Notifications/NotificationsPage';
 import { DiagnosticsPage } from '../../pages/Diagnostics/DiagnosticsPage';
 
 export const AppShell: React.FC = () => {
-  const { currentPage, isAuthModalOpen, setIsAuthModalOpen, triggerThinking, activeResearchId, researchSubView } = useApp();
+  const { currentPage, isAuthModalOpen, setIsAuthModalOpen, setUserEmail, setUserName, triggerThinking, activeResearchId, researchSubView } = useApp();
+
+  useEffect(() => {
+    const onRoadmapFinished = () => {
+      if (localStorage.getItem('bob_guest_mode') !== 'true' ||
+          localStorage.getItem('bob_guest_auth_prompted') === 'true') return;
+      localStorage.setItem('bob_guest_auth_prompted', 'true');
+      setIsAuthModalOpen(true);
+    };
+    window.addEventListener('bob:roadmap-finished', onRoadmapFinished);
+    return () => window.removeEventListener('bob:roadmap-finished', onRoadmapFinished);
+  }, [setIsAuthModalOpen]);
 
   const renderCurrentPage = () => {
     switch (currentPage) {
@@ -74,7 +85,9 @@ export const AppShell: React.FC = () => {
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
-        onSuccess={() => {
+        onSuccess={(user) => {
+          setUserEmail(user.email);
+          setUserName(user.name);
           setIsAuthModalOpen(false);
           triggerThinking('Account Synced', 'You are signed in.', 'Ready');
         }}

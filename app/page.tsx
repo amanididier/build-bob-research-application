@@ -10,7 +10,6 @@ export default function Page() {
           <span className="download-mark">B</span>
           <span>Bob</span>
         </Link>
-        <Link className="download-signin" href="/sign-in">Sign in</Link>
       </header>
 
       <section className="download-hero" aria-labelledby="download-title">
