@@ -484,7 +484,7 @@
         activeNavIndex--;
         focusHighlight(activeNavIndex);
       } else {
-        showToast('First highlight reached', 'info');
+        // silent edge — no toast
       }
     } else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
       e.preventDefault();
@@ -493,11 +493,11 @@
         activeNavIndex++;
         focusHighlight(activeNavIndex);
       } else {
-        showToast('Last highlight reached', 'info');
+        // silent edge — no toast
       }
     } else if (e.key === 'Escape') {
       stopNavigation();
-      showToast('Highlight navigation closed', 'info');
+      // silent close — no toast
     }
   }
 
@@ -829,7 +829,17 @@
           mark.setAttribute('data-bob-category', cat);
           range.surroundContents(mark);
         } catch {
-          // surroundContents can fail if crossing boundaries; ignore and rely on element positioning
+          // surroundContents fails across element boundaries — extract and re-wrap safely
+          try {
+            const frag = range.extractContents();
+            const mark = el('mark', `bob-hl bob-hl-${cat}${index === 0 ? ' bob-hl-top' : ''}`);
+            mark.setAttribute('data-bob-hl-id', item.id);
+            mark.setAttribute('data-bob-category', cat);
+            mark.appendChild(frag);
+            range.insertNode(mark);
+          } catch {
+            // last resort: keep range for scroll-to without visual mark
+          }
         }
       }
 

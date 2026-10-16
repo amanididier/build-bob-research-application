@@ -353,11 +353,11 @@ Profile response style: ${profileStyle}. Priorities: ${Object.entries(savedProfi
         ref={scrollRef}
         className="flex-1 overflow-y-auto px-4 sm:px-12 md:px-24 py-6 space-y-2.5"
       >
-        {/* Subtle WhatsApp-style Security & Casual Notice Pill */}
+        {/* Privacy notice — chats stay on this device only */}
         <div className="flex justify-center my-3">
-          <div className="px-3.5 py-1.5 rounded-lg bg-[#fff7d8] dark:bg-[#292516] border border-[#f5c842]/30 shadow-xs text-center max-w-md">
-            <span className="text-[11px] text-[#765d08] dark:text-[#f5d56b] font-medium leading-relaxed block">
-              ☕ Casual Chat Lounge · Bob is here to unwind and chat casually with you without technical project pressure.
+          <div className="px-3.5 py-1.5 rounded-lg bg-black/[0.04] dark:bg-white/[0.06] border border-black/5 dark:border-white/10 shadow-xs text-center max-w-md">
+            <span className="text-[11px] text-[#54656f] dark:text-[#8696a0] font-medium leading-relaxed block">
+              {userName || 'Friend'}, don’t worry — our chat is saved only on this device.
             </span>
           </div>
         </div>

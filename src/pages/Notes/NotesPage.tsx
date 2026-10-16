@@ -27,7 +27,16 @@ export const NotesPage: React.FC = () => {
   } = useApp();
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedProject, setSelectedProject] = useState<string>(activeResearchId || 'all');
+  const [selectedProject, setSelectedProject] = useState<string>(() => {
+    try {
+      const fromResearch = localStorage.getItem('bob_notes_project_filter');
+      if (fromResearch) {
+        localStorage.removeItem('bob_notes_project_filter');
+        return fromResearch;
+      }
+    } catch {}
+    return activeResearchId || 'all';
+  });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editText, setEditText] = useState('');
@@ -114,10 +123,14 @@ export const NotesPage: React.FC = () => {
           </div>
 
           <h1 className="text-[31px] tracking-[-1px] font-extrabold my-2 text-[var(--t)]">
-            Saved Notes & Evidence
+            {selectedProject !== 'all'
+              ? `${projects.find((p) => p.id === selectedProject)?.title || 'Project'} Notes`
+              : 'Saved Notes & Evidence'}
           </h1>
           <p className="text-[var(--m)] text-[13px] leading-relaxed max-w-[620px] m-0">
-            Passages, quotes, and AI synthesis stored directly on your computer. Bob uses this local memory to answer questions without cloud token costs.
+            {selectedProject !== 'all'
+              ? 'Notes for this project only — each card keeps its source, date, and edit history on this device.'
+              : 'Passages, quotes, and AI synthesis stored on your computer. Each note stays attached to its project.'}
           </p>
         </div>
 
@@ -229,12 +242,15 @@ export const NotesPage: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filteredNotes.map((note, index) => {
+            const palette = ['emerald', 'blue', 'yellow', 'red', 'purple', 'pink'] as const;
             const colorClass = {
               emerald: 'bg-[#e9f7ec] border-[#c9e9d0] dark:bg-[#1b3025] dark:border-[#31543f]',
               blue: 'bg-[#eaf3ff] border-[#cbdfff] dark:bg-[#1b293b] dark:border-[#2d4565]',
               yellow: 'bg-[#fff7d9] border-[#f1e3a8] dark:bg-[#352e19] dark:border-[#5a4c25]',
-              red: 'bg-[#fff0eb] border-[#f2d0c5] dark:bg-[#38251f] dark:border-[#674035]'
-            }[note.color || (index % 4 === 0 ? 'yellow' : index % 3 === 0 ? 'blue' : 'emerald')];
+              red: 'bg-[#fff0eb] border-[#f2d0c5] dark:bg-[#38251f] dark:border-[#674035]',
+              purple: 'bg-[#f3eaff] border-[#e0d0f5] dark:bg-[#2a1f3d] dark:border-[#4a3a65]',
+              pink: 'bg-[#ffeaf3] border-[#f5cfe0] dark:bg-[#3a1f2d] dark:border-[#65405a]'
+            }[note.color || palette[index % palette.length]];
             const projectName = projects.find((project) => project.id === note.projectId)?.title || 'Unassigned project';
             const isEditing = editingId === note.id;
             return (

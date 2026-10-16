@@ -100,31 +100,31 @@ export const DashboardPage: React.FC = () => {
 
   return (
     <div className="w-full min-h-full pb-36 bg-[var(--bg)] animate-in fade-in duration-300">
-      {/* 1. Full-Width 100% Sunflower Garden Hero Banner (Spans whole screen, not in a card) */}
-      <div className="relative w-[calc(100%-2.5rem)] md:w-[calc(100%-4rem)] max-w-[1140px] mx-auto mt-5 min-h-[180px] md:min-h-[210px] rounded-[28px] flex items-center justify-center overflow-hidden text-white group shadow-md">
+      {/* 1. Full-bleed hero — spans the entire top of the page, no card wrapper */}
+      <div className="relative w-full min-h-[220px] md:min-h-[280px] flex items-center justify-center overflow-hidden text-white group">
         {/* Background Image spanning 100% */}
-        <div 
-          className="absolute inset-0 bg-cover bg-center transition-all duration-700 transform scale-100 group-hover:scale-[1.01]"
+        <div
+          className="absolute inset-0 bg-cover bg-center transition-all duration-700 transform scale-100 group-hover:scale-[1.02]"
           style={{ backgroundImage: `url(${heroImage})` }}
         />
         {/* Ambient gradient overlay */}
-        <div 
+        <div
           className={`absolute inset-0 transition-opacity duration-500 ${
-            isMorning 
-              ? 'bg-gradient-to-t from-black/85 via-black/45 to-black/35' 
-              : 'bg-gradient-to-t from-black/90 via-black/55 to-black/45'
+            isMorning
+              ? 'bg-gradient-to-t from-black/80 via-black/40 to-black/25'
+              : 'bg-gradient-to-t from-black/85 via-black/50 to-black/35'
           }`}
         />
 
-        {/* Center of the Hero: ONLY Greetings in the center */}
-        <div className="relative z-10 max-w-3xl mx-auto px-6 py-8 sm:py-10 text-center animate-in fade-in zoom-in-95 duration-500">
+        {/* Center of the Hero: ONLY greeting question with user name */}
+        <div className="relative z-10 max-w-3xl mx-auto px-6 py-10 sm:py-14 text-center animate-in fade-in zoom-in-95 duration-500">
           <h1 className="text-2xl sm:text-3xl md:text-4xl font-black tracking-tight drop-shadow-md text-white mb-2">
-            {isMorning ? `Good morning, ${userName}.` : `Good evening, ${userName}.`}
+            {isMorning ? `Good morning, ${userName || 'friend'}.` : `Good evening, ${userName || 'friend'}.`}
           </h1>
           <p className="text-sm sm:text-base text-white/90 max-w-2xl mx-auto font-normal leading-relaxed drop-shadow-sm">
             {isMorning
-              ? 'The garden is bright and clear. What would you like to investigate, synthesize, or finish today?'
-              : 'The stars are out over the sunflowers. Let’s distill today’s reading into clear, actionable outcomes.'}
+              ? 'What is the one thing you want to move forward today?'
+              : 'What would you like to finish or clarify before the day ends?'}
           </p>
         </div>
       </div>
@@ -352,7 +352,7 @@ export const DashboardPage: React.FC = () => {
       {isSetFocusModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="relative w-full max-w-md bg-[var(--s)] border border-[var(--line)] rounded-[24px] shadow-2xl p-6">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <Target className="w-4 h-4 text-[var(--y)]" />
                 <h3 className="text-base font-extrabold text-[var(--t)]">Set Today's Focus</h3>
@@ -364,6 +364,11 @@ export const DashboardPage: React.FC = () => {
               >
                 <X className="w-4 h-4" />
               </button>
+            </div>
+
+            {/* Yellow accent bar — this info customizes the experience */}
+            <div className="mb-4 px-3 py-2 rounded-xl bg-[var(--y)]/15 border border-[var(--y)]/40 text-[11px] text-[var(--t)]">
+              This focus is always used to customize your experience with Bob.
             </div>
 
             <p className="text-xs text-[var(--m)] mb-3">

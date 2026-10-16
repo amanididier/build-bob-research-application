@@ -32,10 +32,13 @@ export const ResearchPage: React.FC = () => {
   const project = projects.find((p) => p.id === activeResearchId) || projects[0];
   const [dismissedPlanFor, setDismissedPlanFor] = useState<string | null>(null);
   useEffect(() => setDismissedPlanFor(null), [activeResearchId]);
-  const recentConversation = messages.slice(-8);
-  const recentUserText = recentConversation.filter((message) => message.role === 'user').map((message) => message.text).join(' ');
-  const planSignal = /\b(build|create|prepare|exam|deadline|study plan|launch|project|goal|practice|organize|learn|essay|assignment|business|app|website|finish|improve|deliver|research plan)\b/i.test(recentUserText);
-  const showPlanSuggestion = recentConversation.length >= 4 && planSignal && dismissedPlanFor !== activeResearchId;
+  const recentConversation = messages.slice(-12);
+  const userTurns = recentConversation.filter((message) => message.role === 'user');
+  const recentUserText = userTurns.map((message) => message.text).join(' ');
+  const planSignal = /\b(build|create|prepare|exam|deadline|study plan|launch|project|goal|practice|organize|learn|essay|assignment|business|app|website|finish|improve|deliver|research plan|roadmap|plan)\b/i.test(recentUserText);
+  // Dynamic threshold: after enough substance (not a fixed turn count). Varies by project complexity.
+  const hasEnoughContext = userTurns.length >= 3 && planSignal && recentUserText.length > 80;
+  const showPlanSuggestion = hasEnoughContext && dismissedPlanFor !== activeResearchId;
 
   const handleSubtopicSend = () => {
     if (!subtopicPrompt.trim()) return;
@@ -73,9 +76,12 @@ export const ResearchPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Notes Action */}
+          {/* Notes Action — always opens this project's notes */}
           <button
-            onClick={() => navigateTo('notes')}
+            onClick={() => {
+              try { localStorage.setItem('bob_notes_project_filter', activeResearchId || ''); } catch {}
+              navigateTo('notes');
+            }}
             className="h-8 px-3 rounded-xl border border-[var(--line)] bg-[var(--s)] hover:bg-[var(--s2)] text-[var(--t)] text-[11px] font-medium flex items-center gap-1.5 transition-colors shadow-sm"
           >
             <BookOpen className="w-3.5 h-3.5 text-[var(--m)]" />

@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { ArrowUp, Menu, Sparkles, Search, BookOpen, GitCompare, Map } from 'lucide-react';
+import { ArrowUp, Menu, Sparkles, Search, BookOpen, GitCompare, Map, LayoutDashboard, MessageCircle, Settings } from 'lucide-react';
 import sunflowerMorning from '../../assets/images/sunflower_garden_morning_user.png';
 import sunflowerNight from '../../assets/images/sunflower_garden_night_1791540711934.jpg';
 import bobOrb from '../../assets/images/bob_mascot_orb_1791540734514.jpg';
@@ -35,17 +35,68 @@ export const HomePage: React.FC = () => {
     <div className="relative isolate min-h-full pb-14 overflow-hidden">
       <img src={sunflowerMorning} alt="" aria-hidden="true" className="pointer-events-none absolute inset-0 -z-20 h-full min-h-[1000px] w-full object-cover object-center" />
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b from-black/35 via-black/30 to-white/95 dark:to-[#111722]/95" />
+
+      {/* Top navigation pill — Dashboard / Chat / Settings */}
+      <nav className="absolute top-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1 p-1.5 rounded-full bg-black/25 border border-white/25 backdrop-blur-xl shadow-lg">
+        <button
+          type="button"
+          onClick={() => navigateTo('dashboard')}
+          className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[12px] font-semibold text-white/90 hover:bg-white/15 hover:text-white transition-colors"
+        >
+          <LayoutDashboard className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Dashboard</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => navigateTo('chat')}
+          className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[12px] font-semibold text-white/90 hover:bg-white/15 hover:text-white transition-colors"
+        >
+          <MessageCircle className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Chat</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => navigateTo('settings')}
+          className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[12px] font-semibold text-white/90 hover:bg-white/15 hover:text-white transition-colors"
+        >
+          <Settings className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Settings</span>
+        </button>
+      </nav>
+
       <button type="button" onClick={toggleSidebar} aria-label="Open navigation" title="Open navigation" className="absolute left-4 top-4 z-20 grid h-10 w-10 place-items-center rounded-xl border border-white/40 bg-black/20 text-white backdrop-blur-md transition hover:bg-black/35">
         <Menu className="h-5 w-5" />
       </button>
+
       <section className="relative min-h-[58vh] md:min-h-[64vh] flex items-center justify-center overflow-hidden">
         <div className="relative z-10 w-full max-w-3xl mx-auto px-5 py-12 text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 border border-white/20 text-white/90 text-[10px] font-bold tracking-[0.16em] uppercase mb-5 backdrop-blur-md"><Sparkles className="w-3.5 h-3.5 text-[#f5c842]" />Your research companion</div>
-          <h1 className="text-3xl sm:text-5xl font-black tracking-tight text-white drop-shadow-md leading-tight">What would you like to explore{userName ? `, ${userName}` : ''}?</h1>
-          <p className="mt-3 text-[14px] sm:text-[16px] leading-relaxed text-white/95 max-w-xl mx-auto">Start with a question, a source, or an idea that you have not figured out yet. We’ll work through it together.</p>
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 border border-white/20 text-white/90 text-[10px] font-bold tracking-[0.16em] uppercase mb-5 backdrop-blur-md">
+            <Sparkles className="w-3.5 h-3.5 text-[#f5c842]" />
+            Your research companion
+          </div>
+          <h1 className="text-3xl sm:text-5xl font-black tracking-tight text-white drop-shadow-md leading-tight">
+            What would you like to explore{userName ? `, ${userName}` : ''}?
+          </h1>
+          <p className="mt-3 text-[14px] sm:text-[16px] leading-relaxed text-white/95 max-w-xl mx-auto">
+            Start with a question, a source, or an idea that you have not figured out yet. We’ll work through it together.
+          </p>
           <form onSubmit={submit} className="mt-7 max-w-2xl mx-auto flex items-center gap-2 p-2 pl-4 rounded-[22px] bg-white/95 dark:bg-[#171717]/95 border border-white/40 shadow-2xl backdrop-blur-xl">
-            <input ref={composerRef} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Ask Bob anything you want to understand…" className="flex-1 min-w-0 h-11 bg-transparent outline-none text-[13px] text-neutral-900 dark:text-white placeholder:text-neutral-500 dark:placeholder:text-neutral-400" aria-label="Message Bob" />
-            <button type="submit" disabled={!draft.trim()} className="w-11 h-11 rounded-[15px] bg-[#f5c842] text-[#171717] grid place-items-center hover:bg-[#edbd29] disabled:opacity-40 transition-all" aria-label="Start with Bob"><ArrowUp className="w-5 h-5" /></button>
+            <input
+              ref={composerRef}
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder="Ask Bob anything you want to understand…"
+              className="flex-1 min-w-0 h-11 bg-transparent outline-none text-[13px] text-neutral-900 dark:text-white placeholder:text-neutral-500 dark:placeholder:text-neutral-400"
+              aria-label="Message Bob"
+            />
+            <button
+              type="submit"
+              disabled={!draft.trim()}
+              className="w-11 h-11 rounded-[15px] bg-[#f5c842] text-[#171717] grid place-items-center hover:bg-[#edbd29] disabled:opacity-40 transition-all"
+              aria-label="Start with Bob"
+            >
+              <ArrowUp className="w-5 h-5" />
+            </button>
           </form>
           <p className="mt-3 text-[10.5px] text-white/85">You can start small. Bob will ask only for the details that matter.</p>
         </div>
