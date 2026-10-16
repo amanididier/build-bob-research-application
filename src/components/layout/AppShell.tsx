@@ -29,7 +29,7 @@ import { NotificationsPage } from '../../pages/Notifications/NotificationsPage';
 import { DiagnosticsPage } from '../../pages/Diagnostics/DiagnosticsPage';
 
 export const AppShell: React.FC = () => {
-  const { currentPage, isAuthModalOpen, setIsAuthModalOpen, triggerThinking, activeResearchId, researchSubView } = useApp();
+  const { currentPage, isAuthModalOpen, setIsAuthModalOpen, setUserEmail, setUserName, triggerThinking, activeResearchId, researchSubView } = useApp();
 
   useEffect(() => {
     const onRoadmapFinished = () => {
@@ -85,7 +85,9 @@ export const AppShell: React.FC = () => {
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
-        onSuccess={() => {
+        onSuccess={(user) => {
+          setUserEmail(user.email);
+          setUserName(user.name);
           setIsAuthModalOpen(false);
           triggerThinking('Account Synced', 'You are signed in.', 'Ready');
         }}
