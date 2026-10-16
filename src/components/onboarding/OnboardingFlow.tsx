@@ -211,6 +211,16 @@ export const OnboardingFlow: React.FC = () => {
         }
         return;
       }
+      if (authMode === 'email-signup' && !result.session) {
+        setAuthInfo('Check your inbox for Supabase’s confirmation email. Once you confirm your address, return here and sign in.');
+        setAuthMode('email-signin');
+        setAuthPassword('');
+        return;
+      }
+      if (!result.session) {
+        setAuthError('Supabase did not return an active session. Please confirm your email or try signing in again.');
+        return;
+      }
       const displayName = String(result.user.user_metadata?.full_name || result.user.user_metadata?.display_name || localName.trim() || cleanEmail.split('@')[0]);
       completeAuth({ email: result.user.email || cleanEmail, name: displayName });
     } catch (error: any) {
