@@ -327,6 +327,46 @@ export const DashboardPage: React.FC = () => {
         </div>
       )}
 
+      {/* Pinned projects — quick access from research pin */}
+      {projects.some((p) => p.pinned) && (
+        <div className="max-w-[1120px] mx-auto px-5 md:px-8 mb-5">
+          <h2 className="text-[13px] font-extrabold uppercase tracking-[0.12em] text-neutral-400 m-0 mb-3">Pinned</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+            {projects
+              .filter((p) => p.pinned)
+              .map((proj) => {
+                const pTasks = tasks.filter((t) => t.projectId === proj.id);
+                const done = pTasks.filter((t) => t.completed).length;
+                const open = pTasks.filter((t) => !t.completed).length;
+                const pct = pTasks.length ? Math.round((done / pTasks.length) * 100) : 0;
+                return (
+                  <button
+                    key={proj.id}
+                    type="button"
+                    onClick={() => navigateTo('research', 'chat', proj.id)}
+                    className="text-left rounded-[18px] border border-neutral-200/80 dark:border-[var(--line)] bg-white dark:bg-[var(--s)] p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all"
+                  >
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: proj.dotColor || '#f5c842' }} />
+                      <b className="text-[13px] text-neutral-900 dark:text-white truncate">{proj.title}</b>
+                    </div>
+                    <p className="text-[11px] text-neutral-500 m-0 line-clamp-2 min-h-[2.4em]">{proj.summary || 'Pinned project'}</p>
+                    <div className="mt-3 flex items-center justify-between gap-2 text-[10px] font-semibold text-neutral-400">
+                      <span>
+                        {done} done · {open} open
+                      </span>
+                      <span>{pct}%</span>
+                    </div>
+                    <div className="mt-1.5 h-1.5 rounded-full bg-neutral-100 dark:bg-white/10 overflow-hidden">
+                      <div className="h-full rounded-full bg-[#f5c842]" style={{ width: `${pct}%` }} />
+                    </div>
+                  </button>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
       {/* Card grid */}
       <div className="max-w-[1120px] mx-auto px-5 md:px-8 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
         {/* Streak / stars — Duolingo-inspired */}

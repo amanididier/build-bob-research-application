@@ -316,58 +316,64 @@ export const ChatView: React.FC = () => {
     return elements;
   };
 
-  const starterPrompts = [
-    'Help me understand the core problems in my research',
-    'Compare the evidence across my tabs into a table',
-    'What are the strongest next steps I should take?',
-  ];
+  const formatDayLabel = (ts: string | undefined, index: number) => {
+    const raw = ts || '';
+    const parsed = Date.parse(raw);
+    const d = Number.isFinite(parsed) ? new Date(parsed) : null;
+    const today = new Date();
+    const yesterday = new Date(today.getTime() - 86400000);
+    if (!d) return index === 0 ? 'Today' : null;
+    if (d.toDateString() === today.toDateString()) return 'Today';
+    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+    return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+  };
 
   return (
-    <div className="max-w-[850px] mx-auto py-2">
-      {/* Introduction Hero - Clean & Zero Data Initial State */}
-      <div className="py-4 pb-6">
-        <div className="text-[10px] tracking-[0.08em] text-[#999] uppercase font-semibold">
-          TODAY · FOCUSED RESEARCH
-        </div>
-        <h1 className="text-[31px] tracking-[-1px] font-extrabold my-2 text-[var(--t)]">
-          What are you trying to understand?
-        </h1>
-        <p className="text-[var(--m)] leading-relaxed max-w-[640px] text-[13px]">
-          Bob connects what you are reading, what you have saved, and turns it into clear answers.
-        </p>
-
-        {/* Suggestion Starter Pills */}
+    <div className="max-w-[850px] mx-auto py-2 min-h-[40vh]">
+      {/* Messages only — WhatsApp-style day labels; no starter suggestion cards */}
+      <div className="space-y-5">
         {messages.length === 0 && (
-          <div className="flex flex-wrap gap-2 mt-5">
-            {starterPrompts.map((p, idx) => (
-              <button
-                key={idx}
-                onClick={() => sendMessage(p)}
-                className="px-3.5 py-2 rounded-xl bg-[var(--s)] border border-[var(--line)] hover:border-[#bbb] dark:hover:border-[#555] text-[12px] text-[var(--t)] font-medium transition-all shadow-sm hover:shadow"
-              >
-                {p}
-              </button>
-            ))}
+          <div className="flex justify-center py-8">
+            <span className="px-3 py-1 rounded-md bg-[var(--s2)] border border-[var(--line)] text-[11px] font-semibold text-[var(--m)]">
+              Today
+            </span>
           </div>
         )}
-      </div>
 
-      {/* Messages Feed */}
-      <div className="space-y-6">
-        {messages.map((msg) => {
+        {messages.map((msg, index) => {
+          const dayLabel = formatDayLabel(msg.timestamp, index);
+          const prevLabel = index > 0 ? formatDayLabel(messages[index - 1].timestamp, index - 1) : null;
+          const showDay = Boolean(dayLabel && dayLabel !== prevLabel);
+
           if (msg.role === 'user') {
             return (
-              <div key={msg.id} className="flex gap-3 items-start justify-end">
-                <div className="max-w-[80%] bg-[var(--bs)] text-[#1e3a8a] dark:text-[#bfdbfe] px-4 py-3 rounded-[18px] text-[13px] leading-relaxed shadow-sm">
-                  {msg.text}
+              <React.Fragment key={msg.id}>
+                {showDay && (
+                  <div className="flex justify-center my-2">
+                    <span className="px-3 py-1 rounded-md bg-[var(--s2)] border border-[var(--line)] text-[11px] font-semibold text-[var(--m)] shadow-sm">
+                      {dayLabel}
+                    </span>
+                  </div>
+                )}
+                <div className="flex gap-3 items-start justify-end">
+                  <div className="max-w-[80%] bg-[var(--bs)] text-[#1e3a8a] dark:text-[#bfdbfe] px-4 py-3 rounded-[18px] text-[13px] leading-relaxed shadow-sm">
+                    {msg.text}
+                  </div>
                 </div>
-              </div>
+              </React.Fragment>
             );
           }
 
           // ChatGPT-Style Assistant Response
           return (
             <div key={msg.id} className="space-y-2">
+              {showDay && (
+                <div className="flex justify-center my-2">
+                  <span className="px-3 py-1 rounded-md bg-[var(--s2)] border border-[var(--line)] text-[11px] font-semibold text-[var(--m)] shadow-sm">
+                    {dayLabel}
+                  </span>
+                </div>
+              )}
               <div className="flex gap-3.5 items-start">
                 <BobAvatar size={28} />
 

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Plus, Sparkles, Mic, MicOff, Send, Volume2, Square, Chrome, Phone, AlertCircle, Check, Hand } from 'lucide-react';
+import { Plus, Sparkles, Mic, MicOff, CircleArrowUp, Volume2, Square, Chrome, Phone, AlertCircle, Check, Hand, Cable } from 'lucide-react';
 import { useVoiceStore } from '../../store/useVoiceStore';
 import { voiceController } from '../../lib/voice/voiceController';
 import { VoiceCallOverlay, VoiceWaveform } from '../voice/VoiceCallOverlay';
@@ -17,6 +17,8 @@ export const BottomComposer: React.FC = () => {
     navigateTo,
     isSidebarClosed,
     setIsChromeModalOpen,
+    setIsBridgeOpen,
+    openChromeBridge,
   } = useApp();
 
   const [prompt, setPrompt] = useState('');
@@ -212,16 +214,28 @@ export const BottomComposer: React.FC = () => {
         />
 
         <div className="flex items-center gap-1.5 pt-1">
-          {/* Add context button */}
+          {/* Add files */}
           <button
             onClick={() => setIsAddFilesOpen(true)}
-            title="Add research files"
+            title="Attach files"
             className="w-8 h-8 rounded-full hover:bg-[var(--s2)] grid place-items-center text-[var(--m)] hover:text-[var(--t)] transition-colors cursor-pointer"
           >
-            <Plus className="w-4 h-4" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+            <Plus className="w-4 h-4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
           </button>
 
-          {/* Tools menu button */}
+          {/* Context bridge — same action as extension bridge */}
+          <button
+            onClick={() => {
+              setIsBridgeOpen?.(true);
+              openChromeBridge?.();
+            }}
+            title="Bridge browser context"
+            className="w-8 h-8 rounded-full hover:bg-[var(--s2)] grid place-items-center text-[var(--m)] hover:text-[var(--t)] transition-colors cursor-pointer"
+          >
+            <Cable className="w-4 h-4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+          </button>
+
+          {/* Tools menu */}
           <button
             onClick={() => setIsToolsMenuOpen(!isToolsMenuOpen)}
             title="Bob tools"
@@ -301,15 +315,14 @@ export const BottomComposer: React.FC = () => {
             </div>
           )}
 
-          {/* Send Button */}
-
+          {/* Send */}
           <button
             onClick={() => handleSend()}
             disabled={!prompt.trim() || isAiGenerating}
-            title="Send prompt"
+            title="Send"
             className="w-8 h-8 rounded-full bg-[#171717] dark:bg-[#f2eee7] text-white dark:text-[#171717] grid place-items-center hover:opacity-90 active:scale-95 transition-all shadow-xs disabled:opacity-30 cursor-pointer"
           >
-            <Send className="w-3.5 h-3.5" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+            <CircleArrowUp className="w-4 h-4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
           </button>
         </div>
       </div>

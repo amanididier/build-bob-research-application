@@ -73,7 +73,12 @@ export const NotesPage: React.FC = () => {
   };
 
   const filteredNotes = notes.filter((n) => {
-    const matchesProj = selectedProject === 'all' || n.projectId === selectedProject;
+    // 'general' = notes from browser when no active research project was selected
+    const matchesProj =
+      selectedProject === 'all' ||
+      (selectedProject === 'general' &&
+        (!n.projectId || n.projectId === 'general' || n.projectId === 'all')) ||
+      n.projectId === selectedProject;
     const matchesQuery =
       n.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       n.selectedText.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -160,7 +165,8 @@ export const NotesPage: React.FC = () => {
             onChange={(e) => setSelectedProject(e.target.value)}
             className="h-9 px-3 text-[12px] rounded-xl bg-[var(--s)] border border-[var(--line)] text-[var(--t)] outline-none cursor-pointer"
           >
-            <option value="all">All Projects</option>
+            <option value="all">All notes</option>
+            <option value="general">General (browser / no project)</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.title}

@@ -28,6 +28,7 @@ export interface ResearchProjectItem {
   status: string;
   dotColor: string;
   summary: string;
+  pinned?: boolean;
 }
 
 export interface ResearchTaskItem {
@@ -147,6 +148,8 @@ interface AppContextType {
   projects: ResearchProjectItem[];
   createNewResearchSession: () => string;
   deleteResearchSession: (id: string) => void;
+  renameProject: (id: string, title: string) => void;
+  togglePinProject: (id: string) => void;
   tasks: ResearchTaskItem[];
   notes: ResearchNoteItem[];
   toggleTask: (id: string) => void;
@@ -414,6 +417,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       return updated;
     });
+  };
+
+  const persistProjects = (updated: ResearchProjectItem[]) => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('bob_research_sessions_v3', JSON.stringify(updated));
+      } catch {}
+    }
+    return updated;
+  };
+
+  const renameProject = (id: string, title: string) => {
+    const clean = title.trim();
+    if (!clean) return;
+    setProjects((prev) => persistProjects(prev.map((p) => (p.id === id ? { ...p, title: clean } : p))));
+  };
+
+  const togglePinProject = (id: string) => {
+    setProjects((prev) =>
+      persistProjects(prev.map((p) => (p.id === id ? { ...p, pinned: !p.pinned } : p)))
+    );
   };
 
   // Dynamic interactive chat send with automatic title and priority color assignment
@@ -1083,6 +1107,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         projects,
         createNewResearchSession,
         deleteResearchSession,
+        renameProject,
+        togglePinProject,
         tasks,
         notes,
         toggleTask,
