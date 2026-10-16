@@ -51,6 +51,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
             email: res.user.email || cleanEmail,
             name: res.user.user_metadata?.full_name || res.user.user_metadata?.display_name || displayName,
           };
+          localStorage.removeItem('bob_guest_mode');
+          localStorage.removeItem('bob_guest_chat_count');
+          localStorage.removeItem('bob_guest_auth_prompted');
           localStorage.setItem('bob_auth_user', JSON.stringify(authUser));
           setInfoMsg('Account created successfully! Connecting your workspace…');
           setTimeout(() => {
@@ -90,6 +93,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
 
   const handleGuestContinue = () => {
     const guest = { email: 'guest@bob.local', name: 'Guest Researcher' };
+    localStorage.setItem('bob_guest_mode', 'true');
     localStorage.setItem('bob_auth_user', JSON.stringify(guest));
     onSuccess(guest);
     onClose();
