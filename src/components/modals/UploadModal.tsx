@@ -4,10 +4,7 @@ import { X, UploadCloud, FileText, Check, Plus } from 'lucide-react';
 
 export const UploadModal: React.FC = () => {
   const { isAddFilesOpen, setIsAddFilesOpen, triggerThinking } = useApp();
-  const [files, setFiles] = useState<Array<{ name: string; size: string }>>([
-    { name: 'passenger_survey_kigali_2026.pdf', size: '245 KB' },
-    { name: 'competitor_fare_matrix.csv', size: '38 KB' },
-  ]);
+  const [files, setFiles] = useState<Array<{ name: string; size: string }>>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isAddFilesOpen) return null;
@@ -31,16 +28,16 @@ export const UploadModal: React.FC = () => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="w-full max-w-[520px] bg-[var(--s)] border border-[var(--line)] shadow-2xl rounded-2xl p-6 space-y-4">
+      <div className="w-full max-w-[440px] bg-white dark:bg-[var(--s)] border border-black/5 dark:border-[var(--line)] shadow-2xl rounded-[24px] p-6 space-y-4">
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>
-            <b className="text-[16px] text-[var(--t)] block">Add research files</b>
-            <p className="text-[11px] text-[var(--m)] m-0">Give Bob another piece of context to ground synthesis.</p>
+            <b className="text-[16px] text-[var(--t)] block tracking-tight">Add files</b>
+            <p className="text-[12px] text-[var(--m)] m-0 mt-0.5">Attach sources for Bob to use in this session.</p>
           </div>
           <button
             onClick={() => setIsAddFilesOpen(false)}
-            className="w-7 h-7 rounded-full bg-[var(--s2)] text-[var(--m)] hover:text-[var(--t)] grid place-items-center transition-colors"
+            className="w-8 h-8 rounded-full bg-neutral-100 dark:bg-[var(--s2)] text-[var(--m)] hover:text-[var(--t)] grid place-items-center transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -49,13 +46,13 @@ export const UploadModal: React.FC = () => {
         {/* Drop zone */}
         <div
           onClick={() => fileInputRef.current?.click()}
-          className="border-2 border-dashed border-[#ccc] dark:border-[#44382f] rounded-2xl text-center py-8 px-4 cursor-pointer hover:border-[var(--y)] hover:bg-[var(--s2)]/40 transition-all"
+          className="border border-dashed border-neutral-300 dark:border-[var(--line)] rounded-[18px] text-center py-10 px-4 cursor-pointer hover:border-[#f5c842] hover:bg-[#fff8df]/40 dark:hover:bg-[var(--s2)]/40 transition-all"
         >
-          <div className="w-12 h-12 rounded-2xl bg-[var(--ys)] text-[#765700] grid place-items-center mx-auto mb-3 text-xl shadow-sm">
-            <UploadCloud className="w-6 h-6 text-[var(--y)]" />
+          <div className="w-11 h-11 rounded-2xl bg-neutral-100 dark:bg-[var(--s2)] text-neutral-600 dark:text-[var(--m)] grid place-items-center mx-auto mb-3">
+            <UploadCloud className="w-5 h-5" />
           </div>
-          <b className="text-[13px] text-[var(--t)] block">Drop files here or click to browse</b>
-          <p className="text-[10px] text-[var(--m)] m-0 mt-1">PDF, DOCX, TXT, CSV, images</p>
+          <b className="text-[13px] text-[var(--t)] block font-semibold">Drop files or browse</b>
+          <p className="text-[11px] text-[var(--m)] m-0 mt-1">PDF, DOCX, TXT, CSV, images</p>
           <input
             ref={fileInputRef}
             type="file"
