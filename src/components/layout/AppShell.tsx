@@ -86,6 +86,12 @@ export const AppShell: React.FC = () => {
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
         onSuccess={(user) => {
+          try {
+            localStorage.removeItem('bob_guest_mode');
+            localStorage.removeItem('bob_guest_chat_count');
+            localStorage.removeItem('bob_guest_auth_prompted');
+            localStorage.setItem('bob_auth_user', JSON.stringify(user));
+          } catch {}
           setUserEmail(user.email);
           setUserName(user.name);
           setIsAuthModalOpen(false);

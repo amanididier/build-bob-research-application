@@ -40,7 +40,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
 
   if (!isOpen) return null;
 
+  const clearGuestMarkers = () => {
+    localStorage.removeItem('bob_guest_mode');
+    localStorage.removeItem('bob_guest_chat_count');
+    localStorage.removeItem('bob_guest_auth_prompted');
+  };
+
   const persistUser = (authUser: { email: string; name: string }) => {
+    clearGuestMarkers();
     localStorage.setItem('bob_auth_user', JSON.stringify(authUser));
     localStorage.setItem('bob_user_email', authUser.email);
     if (authUser.name) localStorage.setItem('bob_user_name', authUser.name);
@@ -95,29 +102,38 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
     try {
       if (tab === 'signup') {
         const res = await signUpWithEmail(cleanEmail, password, displayName);
-        if (res.success) {
-          if (res.session) {
-            const authUser = { email: cleanEmail, name: displayName };
-            persistUser(authUser);
-            setInfoMsg('Account created. Welcome!');
-            setTimeout(() => {
-              onSuccess(authUser);
-              onClose();
-            }, 500);
-          } else {
-            setInfoMsg('Check your email to confirm, then sign in.');
-          }
-        } else {
+        if (!res.success) {
           setErrorMsg(res.error || 'Failed to create account.');
+        } else if (!res.session || !res.user) {
+          // Align with PR #7: never mark signed-in without an active Supabase session
+          setInfoMsg('Check your email to confirm your account, then sign in.');
+        } else {
+          const authUser = {
+            email: res.user.email || cleanEmail,
+            name:
+              res.user.user_metadata?.full_name ||
+              res.user.user_metadata?.display_name ||
+              displayName,
+          };
+          persistUser(authUser);
+          setInfoMsg('Account created. Welcome!');
+          setTimeout(() => {
+            onSuccess(authUser);
+            onClose();
+          }, 500);
         }
       } else {
         const res = await signInWithEmail(cleanEmail, password);
-        if (res.success) {
+        if (!res.success) {
+          setErrorMsg(res.error || 'Invalid email or password.');
+        } else if (!res.session || !res.user) {
+          setErrorMsg('Supabase did not return an active session. Confirm your email or try again.');
+        } else {
           const authUser = {
-            email: cleanEmail,
+            email: res.user.email || cleanEmail,
             name:
-              res.user?.user_metadata?.full_name ||
-              res.user?.user_metadata?.display_name ||
+              res.user.user_metadata?.full_name ||
+              res.user.user_metadata?.display_name ||
               displayName,
           };
           persistUser(authUser);
@@ -126,8 +142,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
             onSuccess(authUser);
             onClose();
           }, 500);
-        } else {
-          setErrorMsg(res.error || 'Invalid email or password.');
         }
       }
     } catch (err: any) {
