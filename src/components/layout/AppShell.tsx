@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { DesktopWindowHeader } from './DesktopWindowHeader';
 import { Sidebar } from './Sidebar';
@@ -30,6 +30,17 @@ import { DiagnosticsPage } from '../../pages/Diagnostics/DiagnosticsPage';
 
 export const AppShell: React.FC = () => {
   const { currentPage, isAuthModalOpen, setIsAuthModalOpen, triggerThinking, activeResearchId, researchSubView } = useApp();
+
+  useEffect(() => {
+    const onRoadmapFinished = () => {
+      if (localStorage.getItem('bob_guest_mode') !== 'true' ||
+          localStorage.getItem('bob_guest_auth_prompted') === 'true') return;
+      localStorage.setItem('bob_guest_auth_prompted', 'true');
+      setIsAuthModalOpen(true);
+    };
+    window.addEventListener('bob:roadmap-finished', onRoadmapFinished);
+    return () => window.removeEventListener('bob:roadmap-finished', onRoadmapFinished);
+  }, [setIsAuthModalOpen]);
 
   const renderCurrentPage = () => {
     switch (currentPage) {
