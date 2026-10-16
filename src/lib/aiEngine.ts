@@ -301,6 +301,19 @@ Response style (strict):
 
 ${dailyFocus ? `User's active focus for today: "${dailyFocus}". Keep this in mind when relevant.` : ''}
 ${tastePreference ? `User tone preference: "${tastePreference}".` : ''}
+${(() => {
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('bob_system_personalization') : null;
+    if (!raw) return '';
+    const p = JSON.parse(raw);
+    const bits = [];
+    if (p.tone) bits.push(`Tone style: ${p.tone}`);
+    if (p.assistantName) bits.push(`User calls you: ${p.assistantName}`);
+    if (p.userNickname) bits.push(`Call the user: ${p.userNickname}`);
+    if (p.taste) bits.push(`Extra preference: ${p.taste}`);
+    return bits.length ? bits.join('. ') + '.' : '';
+  } catch { return ''; }
+})()}
 Available context:
 ${memory.contextText}`;
 

@@ -1,537 +1,742 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { 
-  Cpu, 
-  ShieldCheck, 
-  Globe, 
-  Sparkles,
+import {
+  User,
   Key,
-  CheckCircle2,
-  Database,
-  ClipboardCheck,
-  ExternalLink,
-  Trash2,
-  RefreshCw,
-  AlertCircle,
+  Sparkles,
   HardDrive,
-  Mic,
-  Volume2,
-  Download,
+  Shield,
+  ChevronRight,
   Check,
-  User
+  Eye,
+  EyeOff,
+  Lock,
+  RefreshCw,
+  Download,
+  Trash2,
 } from 'lucide-react';
-import { detectSystemHardware, MODEL_CATALOG } from '../../lib/hardware';
+import {
+  getGeminiKey,
+  setGeminiKey,
+  isKeyLocked,
+  isKeySessionUnlocked,
+  lockApiKeyWithPassword,
+  unlockApiKeyWithPassword,
+  clearKeyLock,
+  maskKey,
+  setKeyProvider,
+  getKeyProvider,
+  getUsageSnapshot,
+  setGroqKey,
+  getGroqKey,
+} from '../../lib/ai/keyManager';
 import { bobAi } from '../../lib/aiEngine';
-import { VoiceSelectorCards } from '../../components/voice/VoiceSelectorCards';
-import { localVoiceManager } from '../../lib/voice/localVoiceManager';
-import { micManager } from '../../lib/voice/microphoneManager';
-import { useVoiceStore } from '../../store/useVoiceStore';
-import { ProfilePage } from '../Profile/ProfilePage';
+
+type TabId = 'profile' | 'keys' | 'personalization' | 'memory' | 'privacy';
+
+const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
+  { id: 'profile', label: 'Profile', icon: User },
+  { id: 'keys', label: 'Usage & keys', icon: Key },
+  { id: 'personalization', label: 'Personalization', icon: Sparkles },
+  { id: 'memory', label: 'Memory', icon: HardDrive },
+  { id: 'privacy', label: 'Privacy & updates', icon: Shield },
+];
+
+const TONE_OPTIONS = [
+  { id: 'warm', label: 'Warm & friendly', hint: 'Like a supportive teammate' },
+  { id: 'clear', label: 'Clear & direct', hint: 'Short answers, no fluff' },
+  { id: 'curious', label: 'Curious coach', hint: 'Asks good follow-ups' },
+  { id: 'formal', label: 'Calm & formal', hint: 'Professional, measured' },
+];
 
 export const SettingsPage: React.FC = () => {
-  const { 
-    openChromeBridge, 
-    aiDownloadStatus, 
-    memoryStats,
+  const {
+    userName,
+    setUserName,
     bobTastePreference,
     setBobTastePreference,
-    triggerThinking
+    memoryStats,
+    triggerThinking,
+    projects,
+    notes,
+    tasks,
   } = useApp();
 
-  useEffect(() => {
-    window.scrollTo({ top: 0, behavior: 'instant' });
-  }, []);
+  const [tab, setTab] = useState<TabId>('profile');
 
-  const [activeTab, setActiveTab] = useState<'ai' | 'voice' | 'updates' | 'memory' | 'browser' | 'privacy' | 'personalization' | 'profile'>('ai');
-  const [tasteDraft, setTasteDraft] = useState<string>(bobTastePreference);
-  const [openChromeByDefault, setOpenChromeByDefault] = useState(true);
-  const [localOnlyMode, setLocalOnlyMode] = useState(true);
-  const [testMicState, setTestMicState] = useState<'idle' | 'recording' | 'success' | 'error'>('idle');
-  const [testMicMessage, setTestMicMessage] = useState<string>('');
+  // Profile
+  const [name, setName] = useState(userName || '');
+  const [nickname, setNickname] = useState(() => localStorage.getItem('bob_user_nickname') || '');
+  const [bobCallName, setBobCallName] = useState(() => localStorage.getItem('bob_assistant_name') || 'Bob');
 
-  const [geminiKeyInput, setGeminiKeyInput] = useState(() => bobAi.getGeminiKey() || '');
-  const [hasKey, setHasKey] = useState(() => bobAi.hasGeminiKey());
-  const [saveToast, setSaveToast] = useState(false);
-  const [isTestingKey, setIsTestingKey] = useState(false);
-  const [keyTestFeedback, setKeyTestFeedback] = useState<{ ok: boolean; message: string } | null>(null);
+  // Keys
+  const [provider, setProvider] = useState(getKeyProvider());
+  const [keyInput, setKeyInput] = useState('');
+  const [showKey, setShowKey] = useState(false);
+  const [hasKey, setHasKey] = useState(() => !!getGeminiKey() || !!getGroqKey());
+  const [locked, setLocked] = useState(() => isKeyLocked());
+  const [sessionOpen, setSessionOpen] = useState(() => isKeySessionUnlocked());
+  const [showLockModal, setShowLockModal] = useState(false);
+  const [showUnlockModal, setShowUnlockModal] = useState(false);
+  const [pw1, setPw1] = useState('');
+  const [pw2, setPw2] = useState('');
+  const [unlockPw, setUnlockPw] = useState('');
+  const [keyError, setKeyError] = useState('');
+  const [usage, setUsage] = useState(getUsageSnapshot());
 
-  const [installedVersion, setInstalledVersion] = useState<string>('1.0.74');
+  // Personalization
+  const [tone, setTone] = useState(() => localStorage.getItem('bob_tone_v1') || 'warm');
+  const [tasteDraft, setTasteDraft] = useState(bobTastePreference || '');
 
+  // Privacy toggles
+  const [proactive, setProactive] = useState(() => localStorage.getItem('bob_proactive_msgs') !== '0');
+  const [localOnly, setLocalOnly] = useState(() => localStorage.getItem('bob_local_only') !== '0');
+  const [saveChats, setSaveChats] = useState(() => localStorage.getItem('bob_save_chats') !== '0');
+
+  // Updates
+  const [installedVersion] = useState('1.0.95');
   const [updaterState, setUpdaterState] = useState<{
-    status: 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'latest' | 'error';
+    status: string;
     version?: string;
-    percent?: number;
     message?: string;
-  }>({
-    status: 'idle',
-    version: '1.0.74',
-    message: 'Ready to check for updates'
-  });
-
-  const [hardware] = useState(() => detectSystemHardware());
-  const activeProfile = MODEL_CATALOG[aiDownloadStatus.tier];
-
-  const [extensionConnected, setExtensionConnected] = useState<boolean>(false);
-  const [bridgePort] = useState<number>(54321);
+  }>({ status: 'idle', version: '1.0.95' });
 
   useEffect(() => {
-    const checkExt = async () => {
-      let connected = false;
-      if (typeof window !== 'undefined' && (window as any).bob?.extensionAlive) {
-        try {
-          const res = await (window as any).bob.extensionAlive();
-          if (res?.alive) connected = true;
-        } catch {}
-      }
-      if (!connected) {
-        try {
-          const res = await fetch('http://127.0.0.1:54321/events/health');
-          if (res.ok) {
-            const data = await res.json();
-            if (data.extensionConnected) connected = true;
-          }
-        } catch {}
-      }
-      setExtensionConnected(connected);
-    };
-    checkExt();
-    const t = setInterval(checkExt, 2000);
-    return () => clearInterval(t);
+    window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
   }, []);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && (window as any).bob) {
-      if ((window as any).bob.info) {
-        (window as any).bob.info().then((info: any) => {
-          if (info && info.version) {
-            setInstalledVersion(info.version);
-            setUpdaterState((prev) => ({ ...prev, version: info.version }));
-          }
-        }).catch(() => {});
-      }
-      if ((window as any).bob.getUpdateStatus) {
-        (window as any).bob.getUpdateStatus().then((st: any) => {
-          if (st && st.status) setUpdaterState(st);
-        }).catch(() => {});
-      }
-      if ((window as any).bob.onUpdateStatus) {
-        const unsub = (window as any).bob.onUpdateStatus((status: any) => {
-          if (status) setUpdaterState(status);
-        });
-        return unsub;
-      }
-    }
-  }, []);
-
-  const handleSaveGeminiKey = async (key: string) => {
-    const trimmed = key.trim();
-    bobAi.setGeminiKey(trimmed);
-    setGeminiKeyInput(trimmed);
-    setHasKey(Boolean(trimmed));
-    setSaveToast(true);
-    setKeyTestFeedback(null);
-    setTimeout(() => setSaveToast(false), 2500);
-    if (typeof window !== 'undefined' && (window as any).bob?.setGeminiKey) {
-      await (window as any).bob.setGeminiKey(trimmed);
-    } else {
-      await fetch('http://127.0.0.1:54321/events/settings', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-bob-token': 'development-token' },
-        body: JSON.stringify({ geminiKey: trimmed })
+    if (typeof window !== 'undefined' && (window as any).bob?.getAppInfo) {
+      (window as any).bob.getAppInfo().then((info: any) => {
+        if (info?.version) setUpdaterState((p) => ({ ...p, version: info.version }));
       }).catch(() => {});
     }
-    if (trimmed) {
-      const res = await bobAi.testGeminiConnection(trimmed);
-      if (res && res.ok && res.model) {
-        if (typeof window !== 'undefined' && (window as any).bob?.setVerifiedModel) {
-          await (window as any).bob.setVerifiedModel(res.model);
-        }
-      }
+  }, []);
+
+  const saveProfile = () => {
+    if (name.trim()) {
+      setUserName(name.trim());
+      localStorage.setItem('bob_user_name', name.trim());
     }
-    triggerThinking('Key Saved', 'Google Gemini API key updated and verified.', 'Configured');
+    localStorage.setItem('bob_user_nickname', nickname.trim());
+    localStorage.setItem('bob_assistant_name', bobCallName.trim() || 'Bob');
+    triggerThinking('Profile saved', 'Greetings will use your name and nickname.', 'Saved');
   };
 
-  const handleTestGeminiKey = async () => {
-    if (!geminiKeyInput.trim()) return;
-    setIsTestingKey(true);
-    setKeyTestFeedback(null);
-    try {
-      const res = await bobAi.testGeminiConnection(geminiKeyInput);
-      setKeyTestFeedback(res);
-      if (res.ok) {
-        const trimmed = geminiKeyInput.trim();
-        bobAi.setGeminiKey(trimmed);
-        setHasKey(true);
-        if (typeof window !== 'undefined' && (window as any).bob?.setGeminiKey) {
-          await (window as any).bob.setGeminiKey(trimmed);
-        }
-      }
-    } catch (err: any) {
-      setKeyTestFeedback({ ok: false, message: err?.message || 'Verification error' });
-    } finally {
-      setIsTestingKey(false);
-    }
+  const savePersonalization = () => {
+    localStorage.setItem('bob_tone_v1', tone);
+    setBobTastePreference(tasteDraft);
+    localStorage.setItem('bob_taste_preference', tasteDraft);
+    // Applied system rule for models
+    localStorage.setItem(
+      'bob_system_personalization',
+      JSON.stringify({
+        tone,
+        assistantName: bobCallName || 'Bob',
+        userNickname: nickname,
+        taste: tasteDraft,
+        updatedAt: new Date().toISOString(),
+      })
+    );
+    triggerThinking('Personalization applied', 'Bob will follow these preferences in replies.', 'Applied');
   };
 
-  const handlePasteClipboard = async () => {
-    try {
-      const text = await navigator.clipboard?.readText();
-      if (text && text.trim()) handleSaveGeminiKey(text.trim());
-    } catch {}
-  };
-
-  const handleRemoveKey = () => {
-    bobAi.setGeminiKey('');
-    setGeminiKeyInput('');
-    setHasKey(false);
-    setKeyTestFeedback(null);
-    triggerThinking('Key Removed', 'Reverted to local on-device model.', 'Ready');
-  };
-
-  const handleCheckForUpdates = async () => {
-    setUpdaterState((prev) => ({ ...prev, status: 'checking', message: 'Checking for latest releases...' }));
-    if (typeof window !== 'undefined' && (window as any).bob?.checkForUpdates) {
-      try {
-        const res = await (window as any).bob.checkForUpdates();
-        setUpdaterState(res || { status: 'error', version: installedVersion, message: 'The desktop updater returned no status. Please try again.' });
-      } catch (err: any) {
-        setUpdaterState({ status: 'error', message: err?.message || 'Update check failed.' });
-      }
-    } else {
-      try {
-        const response = await fetch('https://api.github.com/repos/amanididier/build-bob-research-application/releases/latest', {
-          headers: { Accept: 'application/vnd.github+json' },
-        });
-        if (!response.ok) throw new Error('GitHub release check returned HTTP ' + response.status);
-        const release = await response.json();
-        const latestVersion = String(release.tag_name || '').replace(/^v/, '');
-        if (!latestVersion) throw new Error('Latest release did not include a version tag.');
-        const compare = (a: string, b: string) => {
-          const aa = a.split('.').map(Number), bb = b.split('.').map(Number);
-          for (let i = 0; i < Math.max(aa.length, bb.length); i++) {
-            const diff = (aa[i] || 0) - (bb[i] || 0);
-            if (diff !== 0) return diff;
-          }
-          return 0;
-        };
-        const isNewer = compare(latestVersion, installedVersion) > 0;
-        setUpdaterState({
-          status: isNewer ? 'available' : 'latest',
-          version: latestVersion,
-          message: isNewer
-            ? 'Bob v' + latestVersion + ' is available. Download the installer from GitHub Releases.'
-            : 'You are running the latest published release (v' + installedVersion + ').',
-        });
-      } catch (err: any) {
-        setUpdaterState({ status: 'error', version: installedVersion, message: err?.message || 'Could not verify the latest release.' });
-      }
-    }
-  };
-
-  const handleDownloadUpdate = async () => {
-    const bob = typeof window !== 'undefined' ? (window as any).bob : null;
-    if (!bob?.downloadUpdate) {
-      window.open('https://github.com/amanididier/build-bob-research-application/releases/latest', '_blank', 'noopener,noreferrer');
+  const handleSaveKey = async () => {
+    const trimmed = keyInput.trim();
+    if (!trimmed) {
+      setKeyError('Paste a valid API key first.');
       return;
     }
-    setUpdaterState((prev) => ({ ...prev, status: 'downloading', percent: 0, message: 'Downloading the update securely…' }));
+    setKeyError('');
+    if (provider === 'groq') setGroqKey(trimmed);
+    else setGeminiKey(trimmed);
+    setKeyProvider(provider);
+    setHasKey(true);
+    setKeyInput('');
+    setShowLockModal(true);
     try {
-      const result = await bob.downloadUpdate();
-      if (result?.status === 'error') {
-        setUpdaterState({ status: 'error', version: updaterState.version, message: result.message || 'The update download failed.' });
-      } else if (result?.status) {
-        setUpdaterState((prev) => ({ ...prev, ...result, status: result.status === 'downloading' ? 'downloading' : result.status }));
+      if (provider === 'gemini' && bobAi.testGeminiConnection) {
+        await bobAi.testGeminiConnection(trimmed);
       }
-    } catch (err: any) {
-      setUpdaterState({ status: 'error', version: updaterState.version, message: err?.message || 'The update download failed.' });
-    }
+    } catch {}
+    setUsage(getUsageSnapshot());
   };
 
-  const handleInstallUpdate = async () => {
-    setUpdaterState((prev) => ({ ...prev, message: 'Restarting Bob to finish update…' }));
-    if (typeof window !== 'undefined' && (window as any).bob?.installUpdate) {
+  const confirmLock = async () => {
+    if (pw1.length < 4) {
+      setKeyError('Password should be at least 4 characters.');
+      return;
+    }
+    if (pw1 !== pw2) {
+      setKeyError('Passwords do not match.');
+      return;
+    }
+    await lockApiKeyWithPassword(pw1);
+    setLocked(true);
+    setSessionOpen(true);
+    setShowLockModal(false);
+    setPw1('');
+    setPw2('');
+    setKeyError('');
+    triggerThinking('Key locked', 'You’ll need this password to view or change the key.', 'Secured');
+  };
+
+  const confirmUnlock = async () => {
+    const ok = await unlockApiKeyWithPassword(unlockPw);
+    if (!ok) {
+      setKeyError('Wrong password.');
+      return;
+    }
+    setSessionOpen(true);
+    setShowUnlockModal(false);
+    setUnlockPw('');
+    setKeyError('');
+    // Reveal masked key into input only after unlock
+    const k = getGeminiKey() || getGroqKey() || '';
+    setKeyInput(k);
+  };
+
+  const removeKey = async () => {
+    if (locked && !sessionOpen) {
+      setShowUnlockModal(true);
+      return;
+    }
+    setGeminiKey('');
+    setGroqKey('');
+    clearKeyLock();
+    setHasKey(false);
+    setLocked(false);
+    setSessionOpen(false);
+    setKeyInput('');
+    triggerThinking('Key removed', 'Cloud models need a key again.', 'Ready');
+  };
+
+  const checkUpdates = async () => {
+    setUpdaterState({ status: 'checking', message: 'Checking…' });
+    if ((window as any).bob?.checkForUpdates) {
       try {
-        await (window as any).bob.installUpdate();
-      } catch (err) {
-        window.location.reload();
+        const res = await (window as any).bob.checkForUpdates();
+        setUpdaterState(res || { status: 'latest', message: 'You’re up to date.' });
+      } catch {
+        setUpdaterState({ status: 'error', message: 'Could not check for updates.' });
       }
-    } else {
-      setTimeout(() => window.location.reload(), 600);
+      return;
     }
-  };
-
-  const {
-    modelProgress,
-    isWhisperInstalled,
-    downloadWhisperModel,
-    isKokoroInstalled,
-    kokoroProgress,
-    downloadKokoroModel,
-    deleteKokoroModel,
-    activeVoiceId,
-    previewVoice,
-  } = useVoiceStore();
-
-  const handleDownloadModel = async () => {
-    await downloadWhisperModel();
-  };
-
-  const handleDeleteModel = () => {
-    localVoiceManager.clearModel();
-  };
-
-  const handleTestMic = async () => {
-    setTestMicState('recording');
-    setTestMicMessage('Listening for 2 seconds to verify microphone audio…');
     try {
-      await micManager.startCapture();
-      setTimeout(() => {
-        micManager.stopCapture();
-        setTestMicState('success');
-        setTestMicMessage('Microphone works perfectly! Clean audio stream verified ✓');
-        setTimeout(() => setTestMicMessage(''), 5000);
-      }, 2000);
-    } catch (err: any) {
-      setTestMicState('error');
-      setTestMicMessage(`Microphone error: ${err?.message || 'Access denied'}`);
-      setTimeout(() => setTestMicMessage(''), 6000);
+      const response = await fetch(
+        'https://api.github.com/repos/amanididier/build-bob-research-application/releases/latest',
+        { headers: { Accept: 'application/vnd.github+json' } }
+      );
+      const release = await response.json();
+      const latest = String(release.tag_name || '').replace(/^v/, '');
+      if (!latest) throw new Error('No version');
+      setUpdaterState({
+        status: latest === installedVersion ? 'latest' : 'available',
+        version: latest,
+        message: latest === installedVersion ? 'You’re on the latest version.' : `Version ${latest} is available.`,
+      });
+    } catch {
+      setUpdaterState({ status: 'error', message: 'Could not reach update server.' });
     }
   };
+
+  const storedKey = getGeminiKey() || getGroqKey();
+  const canRevealKey = !locked || sessionOpen;
 
   return (
-    <div className="max-w-[1100px] mx-auto px-6 md:px-12 py-8 pb-36">
-      <div className="pb-7 border-b border-[var(--line)] mb-8">
-        <div className="text-[10px] tracking-[0.09em] text-[#999] uppercase font-semibold">
-          PREFERENCES & AI ENGINES
-        </div>
-        <h1 className="text-[32px] tracking-tight font-extrabold my-2 text-[var(--t)]">
+    <div className="min-h-full bg-[#f7f7f8] dark:bg-[var(--bg)] pb-24">
+      <div className="max-w-[960px] mx-auto px-5 md:px-8 pt-10">
+        <h1 className="text-[28px] font-semibold tracking-tight text-neutral-900 dark:text-white m-0 mb-8">
           Settings
         </h1>
-        <p className="text-[var(--m)] text-[13.5px] leading-relaxed max-w-[650px] m-0">
-          Configure your AI reasoning engines, Google Gemini API keys, desktop auto-updates, and privacy settings.
-        </p>
-      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-10">
-        <div className="space-y-1.5">
-          {([
-            ['ai', Cpu, 'AI Models & Keys', 'text-[var(--y)]'],
-            ['profile', User, 'Profile', 'text-[#3474db]'],
-            ['personalization', Sparkles, 'Personalization', 'text-[#ec4899]'],
-            ['voice', Mic, 'Voice Models', 'text-amber-500'],
-            ['updates', RefreshCw, 'App Updates', 'text-emerald-500'],
-            ['memory', Database, 'Research Memory', 'text-[#8b5cf6]'],
-            ['browser', Globe, 'Chrome Bridge', 'text-[var(--b)]'],
-            ['privacy', ShieldCheck, 'Privacy', 'text-[var(--g)]'],
-          ] as const).map(([id, Icon, label, color]) => (
-            <button
-              key={id}
-              onClick={() => setActiveTab(id as any)}
-              className={`w-full text-left px-4 py-3 rounded-2xl text-[12.5px] font-semibold flex items-center gap-3 transition-colors ${                activeTab === id
-                  ? 'bg-[var(--s)] text-[var(--t)] shadow-sm border border-[var(--line)]'
-                  : 'text-[var(--m)] hover:text-[var(--t)] hover:bg-[var(--s2)]'
-              }`}
-            >
-              <Icon className={`w-4 h-4 ${color}`} />
-              <span>{label}</span>
-            </button>
-          ))}
-        </div>
+        <div className="flex flex-col md:flex-row gap-8 md:gap-10">
+          {/* Left nav — ChatGPT / Airbnb minimal */}
+          <nav className="md:w-[200px] shrink-0 space-y-0.5">
+            {TABS.map((t) => {
+              const Icon = t.icon;
+              const active = tab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setTab(t.id)}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[13.5px] font-medium transition-colors text-left ${
+                    active
+                      ? 'bg-white dark:bg-[var(--s)] text-neutral-900 dark:text-white shadow-sm border border-neutral-200/80 dark:border-[var(--line)]'
+                      : 'text-neutral-600 dark:text-[var(--m)] hover:bg-white/70 dark:hover:bg-[var(--s2)]'
+                  }`}
+                >
+                  <Icon className="w-4 h-4 opacity-70" />
+                  {t.label}
+                </button>
+              );
+            })}
+          </nav>
 
-        <div className="md:col-span-3">
-          {activeTab === 'updates' && (
-            <div className="space-y-5">
-              <section className="rounded-[26px] border border-[var(--line)] bg-[var(--s)] p-6 md:p-7 shadow-sm">
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-5">
-                  <div className="flex items-start gap-4">
-                    <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[#eaf2ff] dark:bg-[#1a2b43] text-[#3474db]">
-                      <RefreshCw className="h-5 w-5" />
+          {/* Content panel */}
+          <div className="flex-1 min-w-0">
+            <div className="bg-white dark:bg-[var(--s)] rounded-[20px] border border-neutral-200/80 dark:border-[var(--line)] shadow-sm p-6 md:p-8">
+              {/* PROFILE */}
+              {tab === 'profile' && (
+                <div className="space-y-6 max-w-lg">
+                  <div>
+                    <h2 className="text-[17px] font-semibold text-neutral-900 dark:text-white m-0">Profile</h2>
+                    <p className="text-[13px] text-neutral-500 mt-1 m-0">
+                      How Bob addresses you. Saved only on this device.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#dbeafe] to-[#fde68a] grid place-items-center text-[20px] font-bold text-neutral-800">
+                      {(name || userName || 'B').slice(0, 1).toUpperCase()}
                     </div>
                     <div>
-                      <p className="m-0 text-[10px] uppercase tracking-[0.16em] font-extrabold text-[var(--m)]">BOB DESKTOP</p>
-                      <h3 className="mt-1 mb-0 text-xl font-extrabold text-[var(--t)]">App updates</h3>
-                      <p className="mt-1 mb-0 text-sm text-[var(--m)]">Check the published release before installing anything.</p>
+                      <p className="text-[15px] font-semibold m-0 text-neutral-900 dark:text-white">
+                        {name || userName || 'Your name'}
+                      </p>
+                      <p className="text-[12px] text-neutral-500 m-0">Local profile</p>
                     </div>
                   </div>
-                  <div className="rounded-2xl border border-[var(--line)] bg-[var(--s2)] px-4 py-3 min-w-[150px]">
-                    <p className="m-0 text-[10px] uppercase tracking-wider text-[var(--m)] font-bold">Current version</p>
-                    <p className="m-0 mt-1 text-2xl font-extrabold text-[var(--t)]">v{installedVersion}</p>
-                  </div>
-                </div>
-
-                <div className="mt-6 rounded-2xl border border-[var(--line)] bg-[var(--s2)] p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 text-[13px] font-bold text-[var(--t)]">
-                      {updaterState.status === 'error' ? <AlertCircle className="h-4 w-4 text-red-500" /> :
-                       updaterState.status === 'latest' ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> :
-                       updaterState.status === 'available' || updaterState.status === 'ready' ? <Download className="h-4 w-4 text-[#3474db]" /> :
-                       <RefreshCw className={`h-4 w-4 ${updaterState.status === 'checking' || updaterState.status === 'downloading' ? 'animate-spin' : ''}`} />}
-                      <span>{updaterState.status === 'idle' ? 'Ready to check' : updaterState.status === 'checking' ? 'Checking for updates…' : updaterState.status === 'downloading' ? 'Downloading update…' : updaterState.status === 'ready' ? 'Update ready to install' : updaterState.status === 'available' ? 'New version available' : updaterState.status === 'latest' ? 'You’re up to date' : updaterState.status === 'error' ? 'Could not check updates' : updaterState.message || 'Update status'}</span>
-                    </div>
-                    {updaterState.version && <span className="text-[11px] font-mono text-[var(--m)]">Latest: v{updaterState.version}</span>}
-                  </div>
-                  <p className="mt-2 mb-0 text-[12px] leading-relaxed text-[var(--m)]">{updaterState.message || 'Check for the latest published Bob release.'}</p>
-                  {(updaterState.status === 'checking' || updaterState.status === 'downloading') && (
-                    <div className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--line)]">
-                      <div className="h-full rounded-full bg-[#3474db] transition-all duration-300" style={{ width: updaterState.status === 'checking' ? '35%' : Math.max(4, Math.min(100, updaterState.percent || 0)) + '%' }} />
-                    </div>
-                  )}
-                  {updaterState.status === 'downloading' && typeof updaterState.percent === 'number' && (
-                    <p className="mt-2 mb-0 text-right text-[11px] font-semibold text-[var(--m)]">{Math.round(updaterState.percent)}%</p>
-                  )}
-                </div>
-
-                <div className="mt-5 flex flex-wrap items-center gap-3">
+                  <label className="block">
+                    <span className="text-[12px] font-medium text-neutral-600 dark:text-[var(--m)]">Your name</span>
+                    <input
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="mt-1.5 w-full h-11 px-3.5 rounded-xl border border-neutral-200 dark:border-[var(--line)] bg-neutral-50 dark:bg-[var(--s2)] text-[14px] outline-none focus:ring-2 focus:ring-[#f5c842]/40"
+                      placeholder="e.g. Didier"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-[12px] font-medium text-neutral-600 dark:text-[var(--m)]">
+                      Nickname Bob can use
+                    </span>
+                    <input
+                      value={nickname}
+                      onChange={(e) => setNickname(e.target.value)}
+                      className="mt-1.5 w-full h-11 px-3.5 rounded-xl border border-neutral-200 dark:border-[var(--line)] bg-neutral-50 dark:bg-[var(--s2)] text-[14px] outline-none focus:ring-2 focus:ring-[#f5c842]/40"
+                      placeholder="e.g. buddy, captain"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-[12px] font-medium text-neutral-600 dark:text-[var(--m)]">
+                      What you call your assistant
+                    </span>
+                    <input
+                      value={bobCallName}
+                      onChange={(e) => setBobCallName(e.target.value)}
+                      className="mt-1.5 w-full h-11 px-3.5 rounded-xl border border-neutral-200 dark:border-[var(--line)] bg-neutral-50 dark:bg-[var(--s2)] text-[14px] outline-none focus:ring-2 focus:ring-[#f5c842]/40"
+                      placeholder="Bob"
+                    />
+                  </label>
                   <button
-                    onClick={handleCheckForUpdates}
-                    disabled={updaterState.status === 'checking' || updaterState.status === 'downloading'}
-                    className="inline-flex items-center gap-2 rounded-xl bg-[var(--y)] px-5 py-3 text-[12px] font-extrabold text-[#171717] hover:bg-[#ebd200] disabled:opacity-50 transition-all"
+                    type="button"
+                    onClick={saveProfile}
+                    className="h-10 px-5 rounded-full bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-[13px] font-semibold"
                   >
-                    <RefreshCw className={`h-4 w-4 ${updaterState.status === 'checking' ? 'animate-spin' : ''}`} />
-                    {updaterState.status === 'checking' ? 'Checking…' : 'Check for updates'}
-                  </button>
-                  {updaterState.status === 'available' && (
-                    typeof window !== 'undefined' && (window as any).bob?.downloadUpdate
-                      ? <button onClick={handleDownloadUpdate} className="inline-flex items-center gap-2 rounded-xl bg-[#3474db] px-5 py-3 text-[12px] font-bold text-white hover:bg-[#245fc0]"><Download className="h-4 w-4" /> Download v{updaterState.version}</button>
-                      : <a href="https://github.com/amanididier/build-bob-research-application/releases/latest" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-[#3474db] px-5 py-3 text-[12px] font-bold text-white hover:bg-[#245fc0]"><Download className="h-4 w-4" /> Get v{updaterState.version}</a>
-                  )}
-                  {updaterState.status === 'ready' && (
-                    <button onClick={handleInstallUpdate} className="rounded-xl border border-[var(--line)] px-4 py-3 text-[12px] font-bold text-[var(--t)]">Restart to update</button>
-                  )}
-                  <a href="https://github.com/amanididier/build-bob-research-application/releases" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-[var(--line)] px-4 py-3 text-[12px] font-semibold text-[var(--t)] hover:bg-[var(--s2)]">
-                    View release history <ExternalLink className="h-3.5 w-3.5" />
-                  </a>
-                </div>
-              </section>
-
-              <section className="rounded-[22px] border border-[var(--line)] bg-[var(--s)] p-5">
-                <h4 className="m-0 text-sm font-bold text-[var(--t)]">Chrome extension</h4>
-                <p className="mt-1 mb-4 text-[12px] text-[var(--m)]">Download the extension package separately and load it in Chrome’s Extensions page.</p>
-                <a href="https://github.com/amanididier/build-bob-research-application/releases/latest" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--s2)] px-4 py-2.5 text-[12px] font-semibold text-[var(--t)]">
-                  <Download className="h-4 w-4" /> Open latest downloads <ExternalLink className="h-3.5 w-3.5" />
-                </a>
-              </section>
-            </div>
-          )}
-
-          {activeTab === 'profile' && <ProfilePage />}
-
-          {activeTab === 'personalization' && (
-            <div className="space-y-6">
-              <div className="bg-[var(--s)] border border-[var(--line)] rounded-[24px] p-6 shadow-sm">
-                <div className="flex items-center gap-2 mb-1">
-                  <Sparkles className="w-4 h-4 text-[#ec4899]" />
-                  <h3 className="text-[16px] font-bold text-[var(--t)] m-0">Bob's Personality & Tone</h3>
-                </div>
-                <p className="text-[12px] text-[var(--m)] leading-relaxed mb-4 mt-1">
-                  Describe how you want Bob to sound and behave.
-                </p>
-                <textarea
-                  value={tasteDraft}
-                  onChange={(e) => setTasteDraft(e.target.value)}
-                  rows={4}
-                  placeholder="e.g. Warm and playful, short sentences..."
-                  className="w-full resize-none rounded-2xl border border-[var(--line)] bg-[var(--s2)] px-4 py-3 text-[13px] text-[var(--t)] outline-none focus:border-[var(--y)]"
-                />
-                <div className="flex items-center justify-between mt-5 pt-4 border-t border-[var(--line)]">
-                  <span className="text-[11.5px] text-[var(--m)]">
-                    {tasteDraft === bobTastePreference ? 'Saved preference is active.' : 'Unsaved changes.'}
-                  </span>
-                  <button
-                    onClick={() => {
-                      setBobTastePreference(tasteDraft.trim());
-                      triggerThinking('Preference Saved', 'Bob will adapt his tone to your taste.', 'Personalized');
-                    }}
-                    disabled={!tasteDraft.trim() || tasteDraft === bobTastePreference}
-                    className="px-4 py-2 rounded-xl bg-[var(--y)] hover:bg-[#ebd200] text-[#171717] text-[12px] font-bold disabled:opacity-40 cursor-pointer"
-                  >
-                    Save preference
+                    Save profile
                   </button>
                 </div>
-              </div>
-            </div>
-          )}
+              )}
 
-          {activeTab === 'ai' && (
-            <div className="space-y-7">
-              <div className="bg-[var(--s)] border border-[var(--line)] rounded-[24px] p-6 shadow-sm">
-                <div className="flex items-center gap-2 mb-3">
-                  <Key className="w-4 h-4 text-[var(--y)]" />
-                  <h3 className="text-[16px] font-bold text-[var(--t)] m-0">Google Gemini API Key</h3>
+              {/* USAGE & KEYS */}
+              {tab === 'keys' && (
+                <div className="space-y-6 max-w-lg">
+                  <div>
+                    <h2 className="text-[17px] font-semibold text-neutral-900 dark:text-white m-0">Usage & keys</h2>
+                    <p className="text-[13px] text-neutral-500 mt-1 m-0">
+                      Add any model key that powers Bob. Lock it with a password on this PC.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-2xl border border-neutral-200 dark:border-[var(--line)] p-4">
+                      <p className="text-[11px] font-medium text-neutral-500 m-0">Requests</p>
+                      <p className="text-[22px] font-semibold m-0 mt-1 tabular-nums">{usage.requests}</p>
+                    </div>
+                    <div className="rounded-2xl border border-neutral-200 dark:border-[var(--line)] p-4">
+                      <p className="text-[11px] font-medium text-neutral-500 m-0">Est. tokens</p>
+                      <p className="text-[22px] font-semibold m-0 mt-1 tabular-nums">
+                        {usage.estTokens.toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-[12px] font-medium text-neutral-600">Provider</span>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {['gemini', 'groq', 'openai', 'other'].map((p) => (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => setProvider(p)}
+                          className={`h-9 px-3.5 rounded-full text-[12px] font-semibold border transition-colors ${
+                            provider === p
+                              ? 'bg-neutral-900 text-white border-neutral-900 dark:bg-white dark:text-neutral-900'
+                              : 'bg-transparent border-neutral-200 dark:border-[var(--line)] text-neutral-600'
+                          }`}
+                        >
+                          {p.charAt(0).toUpperCase() + p.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {hasKey && locked && !sessionOpen && (
+                    <div className="rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-4 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 text-[13px] text-amber-900 dark:text-amber-100">
+                        <Lock className="w-4 h-4" />
+                        Key is locked. Enter password to view or change it.
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowUnlockModal(true)}
+                        className="h-8 px-3 rounded-full bg-amber-600 text-white text-[12px] font-semibold"
+                      >
+                        Unlock
+                      </button>
+                    </div>
+                  )}
+
+                  {hasKey && canRevealKey && (
+                    <p className="text-[12px] text-neutral-500 m-0 font-mono">
+                      Saved key: {maskKey(storedKey)}
+                    </p>
+                  )}
+
+                  <label className="block">
+                    <span className="text-[12px] font-medium text-neutral-600">API key</span>
+                    <div className="mt-1.5 flex gap-2">
+                      <div className="relative flex-1">
+                        <input
+                          type={showKey ? 'text' : 'password'}
+                          value={keyInput}
+                          onChange={(e) => setKeyInput(e.target.value)}
+                          disabled={hasKey && locked && !sessionOpen}
+                          placeholder={hasKey ? 'Enter new key to replace' : 'Paste your API key'}
+                          className="w-full h-11 px-3.5 pr-10 rounded-xl border border-neutral-200 dark:border-[var(--line)] bg-neutral-50 dark:bg-[var(--s2)] text-[13px] font-mono outline-none disabled:opacity-50"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowKey((s) => !s)}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-neutral-400"
+                        >
+                          {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                  </label>
+
+                  {keyError && <p className="text-[12px] text-red-600 m-0">{keyError}</p>}
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSaveKey}
+                      className="h-10 px-5 rounded-full bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-[13px] font-semibold"
+                    >
+                      Save key
+                    </button>
+                    {hasKey && (
+                      <button
+                        type="button"
+                        onClick={removeKey}
+                        className="h-10 px-4 rounded-full border border-neutral-200 dark:border-[var(--line)] text-[13px] font-semibold text-neutral-600 inline-flex items-center gap-1.5"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Remove
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <input
-                  type="password"
-                  value={geminiKeyInput}
-                  onChange={(e) => setGeminiKeyInput(e.target.value)}
-                  placeholder="Paste your Gemini API key"
-                  className="w-full rounded-2xl border border-[var(--line)] bg-[var(--s2)] px-4 py-3 text-[13px] text-[var(--t)] outline-none focus:border-[var(--y)]"
-                />
-                <div className="flex flex-wrap gap-2 mt-3">
-                  <button onClick={() => handleSaveGeminiKey(geminiKeyInput)} className="px-4 py-2 rounded-xl bg-[var(--y)] text-[#171717] text-[12px] font-bold cursor-pointer">Save key</button>
-                  <button onClick={handleTestGeminiKey} className="px-4 py-2 rounded-xl border border-[var(--line)] text-[12px] font-semibold cursor-pointer">Test</button>
-                  <button onClick={handlePasteClipboard} className="px-4 py-2 rounded-xl border border-[var(--line)] text-[12px] font-semibold cursor-pointer">Paste</button>
-                  {hasKey && <button onClick={handleRemoveKey} className="px-4 py-2 rounded-xl border border-red-300 text-red-600 text-[12px] font-semibold cursor-pointer">Remove</button>}
+              )}
+
+              {/* PERSONALIZATION */}
+              {tab === 'personalization' && (
+                <div className="space-y-6 max-w-lg">
+                  <div>
+                    <h2 className="text-[17px] font-semibold text-neutral-900 dark:text-white m-0">
+                      Personalization
+                    </h2>
+                    <p className="text-[13px] text-neutral-500 mt-1 m-0">
+                      Shape how Bob talks. Changes apply to research, chat, roadmaps, and summaries.
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-[12px] font-medium text-neutral-600 m-0 mb-2">Tone</p>
+                    <div className="space-y-2">
+                      {TONE_OPTIONS.map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => setTone(opt.id)}
+                          className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border text-left transition-all ${
+                            tone === opt.id
+                              ? 'border-[#f5c842] bg-[#fff8df] dark:bg-[#3a3218] dark:border-[#f5c842]/60'
+                              : 'border-neutral-200 dark:border-[var(--line)] hover:bg-neutral-50 dark:hover:bg-[var(--s2)]'
+                          }`}
+                        >
+                          <div>
+                            <p className="text-[14px] font-semibold m-0 text-neutral-900 dark:text-white">
+                              {opt.label}
+                            </p>
+                            <p className="text-[12px] text-neutral-500 m-0 mt-0.5">{opt.hint}</p>
+                          </div>
+                          {tone === opt.id && (
+                            <span className="w-5 h-5 rounded-full bg-[#f5c842] text-[#171717] grid place-items-center">
+                              <Check className="w-3 h-3" strokeWidth={3} />
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <label className="block">
+                    <span className="text-[12px] font-medium text-neutral-600">
+                      Extra notes for Bob (optional)
+                    </span>
+                    <textarea
+                      value={tasteDraft}
+                      onChange={(e) => setTasteDraft(e.target.value)}
+                      rows={3}
+                      placeholder="e.g. Prefer short bullet lists. I’m building for students in Rwanda."
+                      className="mt-1.5 w-full p-3 rounded-xl border border-neutral-200 dark:border-[var(--line)] bg-neutral-50 dark:bg-[var(--s2)] text-[13px] outline-none resize-none"
+                    />
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={savePersonalization}
+                    className="h-10 px-5 rounded-full bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-[13px] font-semibold"
+                  >
+                    Apply changes
+                  </button>
                 </div>
-                {keyTestFeedback && (
-                  <p className={`text-[12px] mt-3 mb-0 ${keyTestFeedback.ok ? 'text-emerald-600' : 'text-red-600'}`}>
-                    {keyTestFeedback.message}
-                  </p>
-                )}
-                {saveToast && <p className="text-[12px] text-emerald-600 mt-2 mb-0">Key saved.</p>}
-              </div>
-            </div>
-          )}
+              )}
 
-          {activeTab === 'voice' && (
-            <div className="space-y-6">
-              <div className="bg-[var(--s)] border border-[var(--line)] rounded-[24px] p-6 shadow-sm">
-                <h3 className="text-[16px] font-bold text-[var(--t)] m-0 mb-3">Voice models</h3>
-                <VoiceSelectorCards />
-                <div className="flex flex-wrap gap-2 mt-4">
-                  <button onClick={handleTestMic} className="px-4 py-2 rounded-xl border border-[var(--line)] text-[12px] font-semibold cursor-pointer">Test microphone</button>
+              {/* MEMORY */}
+              {tab === 'memory' && (
+                <div className="space-y-6 max-w-lg">
+                  <div>
+                    <h2 className="text-[17px] font-semibold text-neutral-900 dark:text-white m-0">Memory</h2>
+                    <p className="text-[13px] text-neutral-500 mt-1 m-0">
+                      Everything Bob keeps lives on your PC — not on our servers.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    {[
+                      { label: 'Projects', value: projects.length, hint: 'Research workspaces' },
+                      { label: 'Notes', value: notes.length, hint: 'Saved passages & cards' },
+                      { label: 'Tasks', value: tasks.length, hint: 'Checklist items' },
+                      {
+                        label: 'Local storage',
+                        value: `${memoryStats?.storageSizeKb ?? 0} KB`,
+                        hint: `${memoryStats?.totalNodes ?? 0} memory nodes`,
+                      },
+                    ].map((row) => (
+                      <div
+                        key={row.label}
+                        className="flex items-center justify-between px-4 py-3.5 rounded-2xl border border-neutral-200 dark:border-[var(--line)]"
+                      >
+                        <div>
+                          <p className="text-[14px] font-semibold m-0 text-neutral-900 dark:text-white">
+                            {row.label}
+                          </p>
+                          <p className="text-[12px] text-neutral-500 m-0">{row.hint}</p>
+                        </div>
+                        <span className="text-[15px] font-semibold tabular-nums text-neutral-800 dark:text-white">
+                          {row.value}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                {testMicMessage && <p className="text-[12px] text-[var(--m)] mt-3 mb-0">{testMicMessage}</p>}
-              </div>
-            </div>
-          )}
+              )}
 
-          {activeTab === 'browser' && (
-            <div className="space-y-6">
-              <div className="bg-[var(--s)] border border-[var(--line)] rounded-[24px] p-6 shadow-sm">
-                <h3 className="text-[16px] font-bold text-[var(--t)] m-0 mb-2">Chrome Bridge</h3>
-                <p className="text-[12px] text-[var(--m)] mb-3">
-                  Extension status: {extensionConnected ? 'Connected' : 'Not connected'}
-                </p>
-                <button onClick={() => openChromeBridge?.()} className="px-4 py-2 rounded-xl bg-[var(--y)] text-[#171717] text-[12px] font-bold cursor-pointer">
-                  Open Chrome bridge
-                </button>
-              </div>
-            </div>
-          )}
+              {/* PRIVACY & UPDATES */}
+              {tab === 'privacy' && (
+                <div className="space-y-8 max-w-lg">
+                  <div>
+                    <h2 className="text-[17px] font-semibold text-neutral-900 dark:text-white m-0">
+                      Privacy
+                    </h2>
+                    <p className="text-[13px] text-neutral-500 mt-1 m-0">
+                      Your chats, notes, and projects stay on this computer unless you export them.
+                    </p>
+                  </div>
 
-          {activeTab === 'memory' && (
-            <div className="space-y-6">
-              <div className="bg-[var(--s)] border border-[var(--line)] rounded-[24px] p-6 shadow-sm">
-                <h3 className="text-[16px] font-bold text-[var(--t)] m-0 mb-2">Research Memory</h3>
-                <p className="text-[12px] text-[var(--m)] mb-0">
-                  Notes and research memory stay on this device.
-                </p>
-              </div>
-            </div>
-          )}
+                  {[
+                    {
+                      key: 'proactive',
+                      label: 'Proactive messages',
+                      desc: 'Allow Bob to nudge you about focus and deadlines',
+                      value: proactive,
+                      set: (v: boolean) => {
+                        setProactive(v);
+                        localStorage.setItem('bob_proactive_msgs', v ? '1' : '0');
+                      },
+                    },
+                    {
+                      key: 'local',
+                      label: 'Local-only mode',
+                      desc: 'Prefer on-device data; avoid unnecessary cloud calls',
+                      value: localOnly,
+                      set: (v: boolean) => {
+                        setLocalOnly(v);
+                        localStorage.setItem('bob_local_only', v ? '1' : '0');
+                      },
+                    },
+                    {
+                      key: 'chats',
+                      label: 'Save chat history',
+                      desc: 'Keep research and companion chats on this device',
+                      value: saveChats,
+                      set: (v: boolean) => {
+                        setSaveChats(v);
+                        localStorage.setItem('bob_save_chats', v ? '1' : '0');
+                      },
+                    },
+                  ].map((item) => (
+                    <div key={item.key} className="flex items-center justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="text-[14px] font-semibold m-0 text-neutral-900 dark:text-white">
+                          {item.label}
+                        </p>
+                        <p className="text-[12px] text-neutral-500 m-0 mt-0.5">{item.desc}</p>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={item.value}
+                        onClick={() => item.set(!item.value)}
+                        className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
+                          item.value ? 'bg-[#f5c842]' : 'bg-neutral-300 dark:bg-neutral-600'
+                        }`}
+                      >
+                        <span
+                          className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                            item.value ? 'translate-x-5' : ''
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  ))}
 
-          {activeTab === 'privacy' && (
-            <div className="space-y-6">
-              <div className="bg-[var(--s)] border border-[var(--line)] rounded-[24px] p-6 shadow-sm">
-                <h3 className="text-[16px] font-bold text-[var(--t)] m-0 mb-2">Privacy</h3>
-                <p className="text-[12px] text-[var(--m)] mb-0">
-                  Local-only mode keeps research data on your machine when enabled.
-                </p>
-              </div>
+                  <div className="pt-6 border-t border-neutral-200 dark:border-[var(--line)]">
+                    <h3 className="text-[15px] font-semibold m-0 text-neutral-900 dark:text-white">Updates</h3>
+                    <p className="text-[13px] text-neutral-500 mt-1 m-0">
+                      Installed version{' '}
+                      <span className="font-semibold text-neutral-800 dark:text-white">
+                        {updaterState.version || installedVersion}
+                      </span>
+                    </p>
+                    {updaterState.message && (
+                      <p className="text-[12px] text-neutral-500 mt-2 m-0">{updaterState.message}</p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={checkUpdates}
+                      className="mt-4 h-10 px-4 rounded-full border border-neutral-200 dark:border-[var(--line)] text-[13px] font-semibold inline-flex items-center gap-2 hover:bg-neutral-50 dark:hover:bg-[var(--s2)]"
+                    >
+                      <RefreshCw
+                        className={`w-3.5 h-3.5 ${updaterState.status === 'checking' ? 'animate-spin' : ''}`}
+                      />
+                      Check for updates
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       </div>
+
+      {/* Lock key modal */}
+      {showLockModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="w-full max-w-sm bg-white dark:bg-[var(--s)] rounded-[24px] p-6 shadow-2xl border border-neutral-200 dark:border-[var(--line)]">
+            <div className="flex items-center gap-2 mb-2">
+              <Lock className="w-5 h-5 text-[#f5c842]" />
+              <h3 className="text-[16px] font-semibold m-0">Lock your key</h3>
+            </div>
+            <p className="text-[13px] text-neutral-500 m-0 mb-4">
+              Choose a password. You’ll need it to view or change this key later. Stored only on this PC.
+            </p>
+            <input
+              type="password"
+              value={pw1}
+              onChange={(e) => setPw1(e.target.value)}
+              placeholder="Password"
+              className="w-full h-11 px-3.5 rounded-xl border border-neutral-200 dark:border-[var(--line)] bg-neutral-50 dark:bg-[var(--s2)] text-[14px] mb-2 outline-none"
+            />
+            <input
+              type="password"
+              value={pw2}
+              onChange={(e) => setPw2(e.target.value)}
+              placeholder="Confirm password"
+              className="w-full h-11 px-3.5 rounded-xl border border-neutral-200 dark:border-[var(--line)] bg-neutral-50 dark:bg-[var(--s2)] text-[14px] mb-3 outline-none"
+            />
+            {keyError && <p className="text-[12px] text-red-600 mb-2 m-0">{keyError}</p>}
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLockModal(false);
+                  setKeyError('');
+                }}
+                className="h-10 px-4 rounded-full text-[13px] font-semibold text-neutral-500"
+              >
+                Skip for now
+              </button>
+              <button
+                type="button"
+                onClick={confirmLock}
+                className="h-10 px-5 rounded-full bg-neutral-900 text-white text-[13px] font-semibold"
+              >
+                Lock key
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Unlock modal */}
+      {showUnlockModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="w-full max-w-sm bg-white dark:bg-[var(--s)] rounded-[24px] p-6 shadow-2xl border border-neutral-200 dark:border-[var(--line)]">
+            <h3 className="text-[16px] font-semibold m-0 mb-1">Unlock key</h3>
+            <p className="text-[13px] text-neutral-500 m-0 mb-4">Enter the password you set on this device.</p>
+            <input
+              type="password"
+              value={unlockPw}
+              onChange={(e) => setUnlockPw(e.target.value)}
+              placeholder="Password"
+              className="w-full h-11 px-3.5 rounded-xl border border-neutral-200 dark:border-[var(--line)] bg-neutral-50 dark:bg-[var(--s2)] text-[14px] mb-3 outline-none"
+            />
+            {keyError && <p className="text-[12px] text-red-600 mb-2 m-0">{keyError}</p>}
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowUnlockModal(false);
+                  setKeyError('');
+                }}
+                className="h-10 px-4 rounded-full text-[13px] font-semibold text-neutral-500"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmUnlock}
+                className="h-10 px-5 rounded-full bg-neutral-900 text-white text-[13px] font-semibold"
+              >
+                Unlock
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
