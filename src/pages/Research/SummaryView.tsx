@@ -1,286 +1,318 @@
-import React, { useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { jsPDF } from 'jspdf';
-import { Download, Check, FileText, Quote, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { Download, Check, RefreshCw, ArrowRight } from 'lucide-react';
+import { resolveGeminiApiKey } from '../../lib/ai/keyManager';
+import { GoogleGenAI } from '@google/genai';
 
 interface SummaryViewProps {
   isSidePanel?: boolean;
 }
 
+interface SummaryState {
+  whereYouAre: string;
+  whereHeading: string;
+  highlights: string[];
+  nextMoves: string[];
+  generatedAt: string;
+  snapshotHash: string;
+}
+
+const SUMMARY_STORE = 'bob_summary_state_v1';
+
+function loadStored(projectId: string): SummaryState | null {
+  try {
+    const all = JSON.parse(localStorage.getItem(SUMMARY_STORE) || '{}');
+    return all[projectId] || null;
+  } catch {
+    return null;
+  }
+}
+
+function saveStored(projectId: string, state: SummaryState) {
+  try {
+    const all = JSON.parse(localStorage.getItem(SUMMARY_STORE) || '{}');
+    all[projectId] = state;
+    localStorage.setItem(SUMMARY_STORE, JSON.stringify(all));
+  } catch {}
+}
+
+function defaultSummary(projectTitle: string, openCount: number): SummaryState {
+  return {
+    whereYouAre:
+      `You’re mapping “${projectTitle}” with the sources and chats gathered so far. The picture is still forming, so treat this as a working snapshot rather than a final brief.`,
+    whereHeading:
+      openCount > 0
+        ? `Next, clear the ${openCount} open task${openCount === 1 ? '' : 's'} already on your list, then pull one stronger source if a claim still feels thin.`
+        : 'Next, capture one clear outcome you want from this study, then open or select the tabs that best support it.',
+    highlights: [
+      'Keep only claims that show up in more than one place.',
+      'Prefer concrete numbers and steps over vague advice.',
+      'Park side topics so the main question stays in focus.',
+    ],
+    nextMoves: [
+      'Re-read the highest-relevance tab and save one note.',
+      'Ask Bob one focused question about the open gap.',
+    ],
+    generatedAt: new Date().toISOString(),
+    snapshotHash: 'seed',
+  };
+}
+
 export const SummaryView: React.FC<SummaryViewProps> = ({ isSidePanel = false }) => {
-  const { activeResearchId, projects, tasks, triggerThinking } = useApp();
+  const { activeResearchId, projects, tasks, messages, triggerThinking, notes } = useApp();
   const [isExporting, setIsExporting] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const project = projects.find((p) => p.id === activeResearchId) || projects[0];
-  const openTasks = tasks.filter((t) => !t.completed);
+  const projectId = project?.id || 'default';
+  const openTasks = tasks.filter((t) => !t.completed && t.projectId === projectId);
+  const projectNotes = notes.filter((n) => n.projectId === projectId);
 
-  // Quotes from tabs with colored left bars as requested by user
-  const tabQuotes = [
-    {
-      id: 'q-1',
-      text: 'Users often abandon booking workflows when real-time seat availability and pickup points remain uncertain until step 4.',
-      source: 'research.example.com/transport-booking',
-      color: 'border-emerald-500 bg-emerald-500/5',
-      domain: 'research.example.com',
-    },
-    {
-      id: 'q-2',
-      text: 'Cross-verifying claims across multiple conversational tabs eliminates model hallucinations and isolates true operational bottlenecks.',
-      source: 'chatgpt.com/share/transport',
-      color: 'border-amber-500 bg-amber-500/5',
-      domain: 'chatgpt.com',
-    },
-    {
-      id: 'q-3',
-      text: 'Local cooperative drivers maintain paper registers alongside smartphone apps. Ground reality requires two-way offline syncing.',
-      source: 'docs.google.com/document/transport',
-      color: 'border-sky-500 bg-sky-500/5',
-      domain: 'docs.google.com',
-    },
-  ];
+  const [summary, setSummary] = useState<SummaryState>(
+    () => loadStored(projectId) || defaultSummary(project?.title || 'this study', openTasks.length)
+  );
 
-  // Best supporting sources with green relevance
-  const topSources = [
-    {
-      title: 'Why people abandon online transport booking',
-      url: 'https://research.example.com/transport-booking',
-      relevance: 96,
-      snippet: 'Key findings on price transparency, local carrier surcharges, and check-out friction.',
-    },
-    {
-      title: 'Rwanda transport booking workflow notes',
-      url: 'https://docs.google.com/document/transport',
-      relevance: 92,
-      snippet: 'Operational breakdown of ticket registers, station dispatching, and walk-up traffic.',
-    },
-    {
-      title: 'ChatGPT — transport research synthesis',
-      url: 'https://chatgpt.com/c/transport-flow',
-      relevance: 88,
-      snippet: 'Comparative analysis of 4 East African bus ticketing applications.',
-    },
-  ];
+  // Reload when switching projects
+  React.useEffect(() => {
+    setSummary(loadStored(projectId) || defaultSummary(project?.title || 'this study', openTasks.length));
+  }, [projectId]);
+
+  const contextSnapshot = useMemo(() => {
+    const recentMsgs = (messages || [])
+      .slice(-12)
+      .map((m) => `${m.role}: ${m.text}`)
+      .join('\n')
+      .slice(0, 4000);
+    const noteBits = projectNotes
+      .slice(0, 8)
+      .map((n) => `${n.title}: ${n.selectedText.slice(0, 160)}`)
+      .join('\n');
+    const taskBits = openTasks
+      .slice(0, 8)
+      .map((t) => t.title)
+      .join('; ');
+    return { recentMsgs, noteBits, taskBits };
+  }, [messages, projectNotes, openTasks]);
+
+  const handleRegenerate = useCallback(async () => {
+    setIsGenerating(true);
+    const key = resolveGeminiApiKey();
+    const previous = loadStored(projectId);
+
+    const prompt = `You are Bob. Write a short research status update for the user.
+
+Rules:
+- Plain language, no jargon titles like "Executive Synthesis".
+- whereYouAre: max 4 short lines (or ~60 words) on where the work stands NOW.
+- whereHeading: max 3 short lines on where they should go next.
+- highlights: 3 bullet strings, each under 14 words.
+- nextMoves: 2 bullet strings, concrete and small.
+- If a previous summary is provided, CONTINUE from it using mainly NEW chat/tabs/notes since then. Do not repeat the old summary as-is.
+
+Return JSON only:
+{"whereYouAre":"...","whereHeading":"...","highlights":["..."],"nextMoves":["..."]}
+
+Project: ${project?.title || 'Research'}
+Previous summary (continue from here): ${previous ? JSON.stringify(previous) : 'none — first summary'}
+Recent chat:
+${contextSnapshot.recentMsgs || 'No recent chat'}
+Notes:
+${contextSnapshot.noteBits || 'No notes yet'}
+Open tasks: ${contextSnapshot.taskBits || 'None'}
+`;
+
+    try {
+      if (!key) {
+        const fallback: SummaryState = {
+          ...defaultSummary(project?.title || 'this study', openTasks.length),
+          whereYouAre: previous
+            ? `Since your last summary, you’ve kept working on “${project?.title}”. New chat and notes are in play—use regenerate with a Gemini key for a precise update.`
+            : defaultSummary(project?.title || 'this study', openTasks.length).whereYouAre,
+          snapshotHash: String(Date.now()),
+        };
+        setSummary(fallback);
+        saveStored(projectId, fallback);
+        triggerThinking('Summary updated', 'Local snapshot (add Gemini key for live regeneration).', 'Ready');
+        return;
+      }
+
+      const ai = new GoogleGenAI({ apiKey: key });
+      const result = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        config: { responseMimeType: 'application/json', maxOutputTokens: 500, temperature: 0.4 },
+      });
+      const raw =
+        (result as { text?: string }).text ||
+        (result as any)?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join('') ||
+        '{}';
+      const parsed = JSON.parse(raw);
+      const next: SummaryState = {
+        whereYouAre: String(parsed.whereYouAre || '').slice(0, 420) || summary.whereYouAre,
+        whereHeading: String(parsed.whereHeading || '').slice(0, 320) || summary.whereHeading,
+        highlights: Array.isArray(parsed.highlights)
+          ? parsed.highlights.map((h: unknown) => String(h).slice(0, 80)).slice(0, 4)
+          : summary.highlights,
+        nextMoves: Array.isArray(parsed.nextMoves)
+          ? parsed.nextMoves.map((h: unknown) => String(h).slice(0, 90)).slice(0, 3)
+          : summary.nextMoves,
+        generatedAt: new Date().toISOString(),
+        snapshotHash: String(Date.now()),
+      };
+      setSummary(next);
+      saveStored(projectId, next);
+      triggerThinking('Summary refreshed', 'Built from where the last summary left off.', 'Ready');
+    } catch {
+      triggerThinking('Summary failed', 'Could not reach Gemini. Try again in a moment.', 'Ready');
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [projectId, project?.title, contextSnapshot, openTasks.length, summary, triggerThinking]);
 
   const handleExportPDF = () => {
     setIsExporting(true);
-    triggerThinking('Generating PDF', 'Formatting minimal executive brief...', 'Writing vector document', () => {
+    triggerThinking('Exporting', 'Writing a short PDF brief…', 'PDF', () => {
       try {
-        const doc = new jsPDF({
-          orientation: 'portrait',
-          unit: 'mm',
-          format: 'a4',
-        });
-
-        const pageWidth = 210;
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
         const margin = 20;
-        const maxLineWidth = pageWidth - margin * 2;
-        let y = 25;
-
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9);
-        doc.setTextColor(130, 130, 130);
-        doc.text('BOB RESEARCH COMPANION · EXECUTIVE BRIEFING', margin, y);
-        doc.text(new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }), pageWidth - margin - 25, y);
-        y += 8;
-
-        doc.setDrawColor(220, 220, 220);
-        doc.setLineWidth(0.3);
-        doc.line(margin, y, pageWidth - margin, y);
-        y += 12;
-
+        const maxW = 170;
+        let y = 24;
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(22);
-        doc.setTextColor(20, 20, 20);
-        const titleLines = doc.splitTextToSize(project.title, maxLineWidth);
-        doc.text(titleLines, margin, y);
-        y += titleLines.length * 8 + 4;
-
+        doc.setFontSize(16);
+        doc.text(project?.title || 'Research summary', margin, y);
+        y += 10;
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(10);
-        doc.setTextColor(110, 110, 110);
-        doc.text(`Scope: ${topSources.length} verified sources · ${openTasks.length} open roadmap tasks`, margin, y);
-        y += 14;
-
+        doc.setTextColor(80, 80, 80);
+        const whereLines = doc.splitTextToSize(summary.whereYouAre, maxW);
+        doc.text(whereLines, margin, y);
+        y += whereLines.length * 5 + 8;
+        doc.setTextColor(30, 30, 30);
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(13);
-        doc.setTextColor(25, 25, 25);
-        doc.text('1. Executive Summary', margin, y);
+        doc.text('Where next', margin, y);
         y += 6;
-
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(10);
-        doc.setTextColor(60, 60, 60);
-        const execSummary = `The collected evidence highlights an immediate imperative: resolve core booking and payment transparency before adding secondary application features. User abandonment across channels is primarily driven by unexpected mobile carrier surcharges and ambiguity regarding real-time seat fulfillment.`;
-        const execLines = doc.splitTextToSize(execSummary, maxLineWidth);
-        doc.text(execLines, margin, y);
-        y += execLines.length * 5 + 10;
-
+        const nextLines = doc.splitTextToSize(summary.whereHeading, maxW);
+        doc.text(nextLines, margin, y);
+        y += nextLines.length * 5 + 8;
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(13);
-        doc.setTextColor(25, 25, 25);
-        doc.text('2. Core Findings & Verified Quotes', margin, y);
-        y += 7;
-
-        tabQuotes.forEach((q) => {
-          doc.setFont('helvetica', 'italic');
-          doc.setFontSize(9);
-          doc.setTextColor(80, 80, 80);
-          const qLines = doc.splitTextToSize(`"${q.text}"`, maxLineWidth);
-          doc.text(qLines, margin, y);
-          y += qLines.length * 4.5;
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(8);
-          doc.setTextColor(140, 140, 140);
-          doc.text(`Source: ${q.source}`, margin, y);
-          y += 6;
-        });
-
-        y += 4;
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(13);
-        doc.setTextColor(25, 25, 25);
-        doc.text('3. Recommended Next Steps', margin, y);
-        y += 7;
-
+        doc.text('Highlights', margin, y);
+        y += 6;
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9.5);
-        doc.setTextColor(60, 60, 60);
-        openTasks.slice(0, 3).forEach((task) => {
-          doc.text(`• ${task.title} (${task.dueDate || 'Pending'})`, margin + 2, y);
-          y += 6;
+        summary.highlights.forEach((h) => {
+          const lines = doc.splitTextToSize(`• ${h}`, maxW);
+          doc.text(lines, margin, y);
+          y += lines.length * 5 + 2;
         });
-
-        doc.save(`Bob-${project.id}-research-summary.pdf`);
+        doc.save(`Bob-${projectId}-summary.pdf`);
         setExportSuccess(true);
-        setTimeout(() => setExportSuccess(false), 2500);
+        setTimeout(() => setExportSuccess(false), 2000);
       } catch (e) {
-        console.error('PDF generation error:', e);
+        console.error(e);
       } finally {
         setIsExporting(false);
       }
     });
   };
 
+  const generatedLabel = summary.generatedAt
+    ? new Date(summary.generatedAt).toLocaleString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : '';
+
   return (
-    <div className={`mx-auto ${isSidePanel ? 'max-w-none px-2 py-1' : 'max-w-[850px] py-2 pb-24'}`}>
-      {/* Header with Title and Export Button */}
-      <div className="flex items-start justify-between gap-4 mb-6 border-b border-[var(--line)] pb-5">
-        <div>
-          <div className="text-[10px] tracking-[0.08em] text-[var(--m)] uppercase font-semibold">
-            UNIFIED RESEARCH SUMMARY
-          </div>
-          <h1 className={`${isSidePanel ? 'text-xl' : 'text-3xl'} tracking-tight font-extrabold my-1 text-[var(--t)]`}>
-            {project.title}
-          </h1>
-          {/* Zero-Pill Metadata */}
-          <div className="flex items-center gap-2 text-xs text-[var(--m)] mt-2">
-            <span>{topSources.length} verified sources</span>
-            <span aria-hidden="true">·</span>
-            <span>All active tabs unified</span>
-            <span aria-hidden="true">·</span>
-            <span className="text-[var(--y)] font-semibold">{openTasks.length} pending roadmap steps</span>
-          </div>
+    <div className={`mx-auto ${isSidePanel ? 'max-w-none px-1 py-1' : 'max-w-[680px] py-4 pb-24'}`}>
+      {/* Top actions — no crowded meta titles */}
+      <div className="flex flex-col items-center gap-3 mb-8">
+        <button
+          type="button"
+          onClick={handleRegenerate}
+          disabled={isGenerating}
+          className="h-10 px-5 rounded-full bg-[#3474db] hover:bg-[#2a5fb8] text-white text-[13px] font-semibold inline-flex items-center gap-2 shadow-sm disabled:opacity-60 transition-colors"
+        >
+          <RefreshCw className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} />
+          {isGenerating ? 'Updating…' : summary.snapshotHash === 'seed' ? 'Generate summary' : 'Regenerate'}
+        </button>
+        <div className="w-full flex items-center justify-between gap-3">
+          <p className="text-[12px] text-[var(--m)] m-0">
+            {generatedLabel ? `Updated ${generatedLabel}` : 'No live summary yet'}
+          </p>
+          {!isSidePanel && (
+            <button
+              type="button"
+              onClick={handleExportPDF}
+              disabled={isExporting}
+              className="h-9 px-4 rounded-full bg-[var(--y)] hover:bg-[#e0ac15] text-[#171717] text-[12px] font-semibold inline-flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+            >
+              {exportSuccess ? <Check className="w-3.5 h-3.5" /> : <Download className="w-3.5 h-3.5" />}
+              {exportSuccess ? 'Saved' : isExporting ? 'Exporting…' : 'Export'}
+            </button>
+          )}
         </div>
-
-        {!isSidePanel && (
-          <button
-            onClick={handleExportPDF}
-            disabled={isExporting}
-            className="h-9 px-4 rounded-xl bg-[#171717] dark:bg-[#f2eee7] text-white dark:text-[#171717] font-bold text-xs flex items-center gap-2 shadow-sm hover:opacity-90 active:scale-95 transition-all shrink-0 disabled:opacity-50"
-          >
-            {exportSuccess ? <Check className="w-3.5 h-3.5 text-[var(--g)]" /> : <Download className="w-3.5 h-3.5" />}
-            <span>{exportSuccess ? 'Saved PDF' : isExporting ? 'Exporting...' : 'Export PDF'}</span>
-          </button>
-        )}
       </div>
 
-      <div className="space-y-6">
-        {/* 1. Executive Summary */}
-        <section className="space-y-2">
-          <h2 className="text-sm uppercase font-bold text-[var(--m)] tracking-wider">
-            1. Executive Synthesis
-          </h2>
-          <div className="p-4 rounded-2xl bg-[var(--s)] border border-[var(--line)] text-xs text-[var(--t)] leading-relaxed">
-            The collected evidence across all open tabs indicates a direct conclusion: resolve fundamental booking and payment transparency before adding secondary application features. Passenger drop-off is predominantly driven by unexpected carrier fees and lack of guaranteed seat assignment.
-          </div>
-        </section>
+      {/* Where you are — max ~4 lines */}
+      <section className="mb-8">
+        <h2 className="text-[13px] font-semibold text-[var(--m)] m-0 mb-2">Where you are</h2>
+        <p className="text-[15px] leading-relaxed text-[var(--t)] m-0 whitespace-pre-line">
+          {summary.whereYouAre}
+        </p>
+      </section>
 
-        {/* 2. Quotes with Colored Bars on the Left (User Request) */}
-        <section className="space-y-2.5">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm uppercase font-bold text-[var(--m)] tracking-wider">
-              2. Core Tab Quotes & Evidence
-            </h2>
-            <span className="text-[11px] text-[var(--m)]">Direct passages</span>
-          </div>
-          <div className="space-y-2.5">
-            {tabQuotes.map((q) => (
-              <div
-                key={q.id}
-                className={`p-3.5 rounded-r-2xl border-l-4 border-y border-r border-[var(--line)] ${q.color} transition-all`}
-              >
-                <div className="text-xs text-[var(--t)] leading-relaxed font-medium italic">
-                  "{q.text}"
-                </div>
-                <div className="flex items-center gap-2 text-[10px] text-[var(--m)] mt-2 font-mono">
-                  <span>{q.domain}</span>
-                  <span aria-hidden="true">·</span>
-                  <span>Verified highlight</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
+      {/* Where you’re heading */}
+      <section className="mb-8">
+        <h2 className="text-[13px] font-semibold text-[var(--m)] m-0 mb-2">Where you’re heading</h2>
+        <p className="text-[15px] leading-relaxed text-[var(--t)] m-0 whitespace-pre-line">
+          {summary.whereHeading}
+        </p>
+      </section>
 
-        {/* 3. Supporting Sources with Green Relevance Level */}
-        <section className="space-y-2.5">
-          <h2 className="text-sm uppercase font-bold text-[var(--m)] tracking-wider">
-            3. Supporting Sources (Top Priority)
-          </h2>
-          <div className="bg-[var(--s)] border border-[var(--line)] rounded-2xl divide-y divide-[var(--line)] overflow-hidden">
-            {topSources.map((source, idx) => (
-              <div key={idx} className="p-3.5 flex items-start justify-between gap-3">
-                <div className="space-y-1">
-                  <a
-                    href={source.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-xs font-bold text-[var(--t)] hover:text-[var(--y)] transition-colors line-clamp-1"
-                  >
-                    {source.title}
-                  </a>
-                  <p className="text-[11px] text-[var(--m)] line-clamp-1 leading-normal">
-                    {source.snippet}
-                  </p>
-                </div>
-                {/* Green level of relevance tag */}
-                <div className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-mono text-[11px] font-extrabold shrink-0">
-                  {source.relevance}% relevance
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
+      {/* Highlights */}
+      <section className="mb-8">
+        <h2 className="text-[13px] font-semibold text-[var(--m)] m-0 mb-3">Highlights</h2>
+        <ul className="m-0 p-0 list-none space-y-2">
+          {summary.highlights.map((h, i) => (
+            <li
+              key={i}
+              className="flex items-start gap-2.5 text-[14px] text-[var(--t)] leading-snug"
+            >
+              <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-[var(--y)] shrink-0" />
+              <span>{h}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
 
-        {/* 4. Recommended Next Steps Matching Tasks Page */}
-        <section className="space-y-2.5">
-          <h2 className="text-sm uppercase font-bold text-[var(--m)] tracking-wider">
-            4. Recommended Next Steps (Synchronized)
-          </h2>
-          <div className="p-4 rounded-2xl bg-[var(--s)] border border-[var(--line)] space-y-2.5">
-            {openTasks.slice(0, 3).map((task, idx) => (
-              <div key={task.id} className="flex items-center gap-3 text-xs text-[var(--t)]">
-                <span className="w-5 h-5 rounded-lg bg-[var(--y)] text-[#171717] font-extrabold text-[10px] flex items-center justify-center shrink-0">
-                  {idx + 1}
-                </span>
-                <span className="font-semibold flex-1 truncate">{task.title}</span>
-                <span className="text-[10px] text-[var(--m)] font-mono shrink-0">{task.dueDate}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
+      {/* Next moves */}
+      <section>
+        <h2 className="text-[13px] font-semibold text-[var(--m)] m-0 mb-3">Next moves</h2>
+        <div className="space-y-2">
+          {summary.nextMoves.map((m, i) => (
+            <div
+              key={i}
+              className="flex items-center gap-3 px-3.5 py-3 rounded-2xl border border-[var(--line)] bg-[var(--s)] text-[13.5px] text-[var(--t)]"
+            >
+              <ArrowRight className="w-4 h-4 text-[var(--y)] shrink-0" />
+              <span className="font-medium">{m}</span>
+            </div>
+          ))}
+          {openTasks.slice(0, 3).map((t) => (
+            <div
+              key={t.id}
+              className="flex items-center gap-3 px-3.5 py-3 rounded-2xl border border-dashed border-[var(--line)] text-[13px] text-[var(--m)]"
+            >
+              <span className="w-4 h-4 rounded-full border border-[var(--line)] shrink-0" />
+              <span>{t.title}</span>
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   );
 };
