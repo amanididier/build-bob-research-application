@@ -74,6 +74,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
             email: res.user.email || cleanEmail,
             name: res.user.user_metadata?.full_name || res.user.user_metadata?.display_name || displayName,
           };
+          localStorage.removeItem('bob_guest_mode');
+          localStorage.removeItem('bob_guest_chat_count');
+          localStorage.removeItem('bob_guest_auth_prompted');
           localStorage.setItem('bob_auth_user', JSON.stringify(authUser));
           setInfoMsg('Signed in successfully! Workspace synced.');
           setTimeout(() => {
