@@ -3,8 +3,8 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Bob — Think clearly. Remember everything.',
-  description: 'Bob brings your browser, notes, and AI conversations into one calm research workspace.',
+  title: 'Bob — your AI research friend',
+  description: 'Download Bob, the AI research companion that remembers your goals. Free for early users.',
   generator: 'v0.app',
   icons: {
     icon: [
