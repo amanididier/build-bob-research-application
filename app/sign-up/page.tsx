@@ -1,13 +1,12 @@
 import Link from 'next/link'
 import { Suspense } from 'react'
-import { AuthForm } from '../../components/auth-form'
+import { AuthForm } from '../../components/auth-form.tsx'
 
 export default function SignUpPage() {
   return (
     <main className="bob-login-page">
       <div className="bob-login-bg" aria-hidden="true" />
       <div className="bob-login-scrim" aria-hidden="true" />
-
       <section className="bob-login-card" aria-labelledby="signup-title">
         <div className="bob-login-brand">
           <span className="bob-login-mark">B</span>
