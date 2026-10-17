@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Suspense } from 'react'
-import { AuthForm } from '../../components/auth-form.tsx'
+import { AuthForm } from '../auth-form'
 
 export default function SignUpPage() {
   return (
