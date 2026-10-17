@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { getWebSupabase } from '@/lib/supabase-browser'
+import { getWebSupabase } from '../lib/supabase-browser'
 
 export function SiteAccount() {
   const [email, setEmail] = useState<string | null>(null)
