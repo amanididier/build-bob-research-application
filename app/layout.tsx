@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from 'next'
-import './globals.css'
 
 export const metadata: Metadata = {
   title: 'Bob — your AI research friend',
@@ -7,15 +6,15 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#fafaf8' },
-    { media: '(prefers-color-scheme: dark)', color: '#171717' },
-  ],
+  themeColor: '#fafaf8',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
+      <head>
+        <link rel="stylesheet" href="/bob-site.css" />
+      </head>
       <body className="antialiased">{children}</body>
     </html>
   )
