@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Suspense } from 'react'
-import { AuthForm } from '../auth-form'
+import { AuthForm } from '../_components/auth-form'
 
 export default function SignInPage() {
   return (

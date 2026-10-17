@@ -1,11 +1,5 @@
 {
   "framework": "nextjs",
-  "buildCommand": "npm run build:web",
-  "installCommand": "npm install --legacy-peer-deps",
-  "outputDirectory": ".next",
-  "git": {
-    "deploymentEnabled": {
-      "main": true
-    }
-  }
+  "buildCommand": "next build",
+  "installCommand": "npm install --legacy-peer-deps"
 }
