@@ -16,17 +16,17 @@ import { AuthModal } from '../modals/AuthModal';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { BobOverlayBubble } from '../companion/BobOverlayBubble';
 import { RoadmapSheet } from '../roadmap/RoadmapSheet';
-import { HomePage } from '../../pages/Home/HomePage';
-import { DashboardPage } from '../../pages/Home/DashboardPage';
-import { ResearchPage } from '../../pages/Research/ResearchPage';
-import { ChatPage } from '../../pages/Chat/ChatPage';
-import { NotesPage } from '../../pages/Notes/NotesPage';
-import { TasksPage } from '../../pages/Tasks/TasksPage';
-import { ChromeSidePanelPage } from '../../pages/Chrome/ChromeSidePanelPage';
-import { SettingsPage } from '../../pages/Settings/SettingsPage';
-import { ProfilePage } from '../../pages/Profile/ProfilePage';
-import { NotificationsPage } from '../../pages/Notifications/NotificationsPage';
-import { DiagnosticsPage } from '../../pages/Diagnostics/DiagnosticsPage';
+import { HomePage } from '../../views/Home/HomePage';
+import { DashboardPage } from '../../views/Home/DashboardPage';
+import { ResearchPage } from '../../views/Research/ResearchPage';
+import { ChatPage } from '../../views/Chat/ChatPage';
+import { NotesPage } from '../../views/Notes/NotesPage';
+import { TasksPage } from '../../views/Tasks/TasksPage';
+import { ChromeSidePanelPage } from '../../views/Chrome/ChromeSidePanelPage';
+import { SettingsPage } from '../../views/Settings/SettingsPage';
+import { ProfilePage } from '../../views/Profile/ProfilePage';
+import { NotificationsPage } from '../../views/Notifications/NotificationsPage';
+import { DiagnosticsPage } from '../../views/Diagnostics/DiagnosticsPage';
 
 export const AppShell: React.FC = () => {
   const { currentPage, isAuthModalOpen, setIsAuthModalOpen, setUserEmail, setUserName, triggerThinking, activeResearchId, researchSubView } = useApp();
