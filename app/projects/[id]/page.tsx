@@ -1,51 +1,31 @@
-import { redirect } from 'next/navigation'
-import { headers } from 'next/headers'
-import { auth } from '@/lib/auth'
-import { db } from '@/lib/db'
-import { researchProject, researchSession, researchHighlight } from '@/lib/db/schema'
-import { and, eq, desc } from 'drizzle-orm'
-import { getSessionTabs } from '@/app/actions/tabs'
-import { getProjectNotes } from '@/app/actions/notes'
-import { ProjectClient } from './client'
+import Link from 'next/link'
 
-export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) redirect('/sign-in')
-
-  const { id } = await params
-
-  const [project] = await db
-    .select()
-    .from(researchProject)
-    .where(and(eq(researchProject.id, id), eq(researchProject.userId, session.user.id)))
-    .limit(1)
-
-  if (!project) redirect('/')
-
-  const [researchSessionRow] = await db
-    .select()
-    .from(researchSession)
-    .where(and(eq(researchSession.projectId, id), eq(researchSession.userId, session.user.id)))
-    .orderBy(desc(researchSession.createdAt))
-    .limit(1)
-
-  const tabs = researchSessionRow ? await getSessionTabs(id, researchSessionRow.id) : []
-  const notes = researchSessionRow ? await getProjectNotes(id, researchSessionRow.id) : []
-  const highlights = researchSessionRow
-    ? await db
-        .select()
-        .from(researchHighlight)
-        .where(and(eq(researchHighlight.userId, session.user.id), eq(researchHighlight.sessionId, researchSessionRow.id)))
-        .orderBy(desc(researchHighlight.relevanceScore))
-    : []
-
+export default function ProjectPage() {
   return (
-    <ProjectClient
-      project={project}
-      session={researchSessionRow}
-      tabs={tabs}
-      notes={notes}
-      highlights={highlights}
-    />
+    <main className="bob-login-page">
+      <div className="bob-login-bg" aria-hidden />
+      <div className="bob-login-scrim" aria-hidden />
+      <section className="bob-login-card">
+        <h1>Research workspace</h1>
+        <p className="bob-login-lede">
+          Full project views live in the Bob desktop app. Sign in on the web, or download Bob for the complete workspace.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 16 }}>
+          <Link href="/sign-in" className="bob-login-primary" style={{ textAlign: 'center', textDecoration: 'none' }}>
+            Sign in
+          </Link>
+          <a
+            href="https://github.com/amanididier/build-bob-research-application/releases/latest/download/Bob-Research-Companion-Setup.exe"
+            className="bob-login-google"
+            style={{ textAlign: 'center', textDecoration: 'none' }}
+          >
+            Download for Windows
+          </a>
+          <Link href="/" className="bob-login-switch" style={{ textAlign: 'center' }}>
+            ← Back home
+          </Link>
+        </div>
+      </section>
+    </main>
   )
 }
