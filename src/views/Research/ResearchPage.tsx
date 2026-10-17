@@ -14,8 +14,6 @@ import {
   Pin,
   Check,
   PanelLeftClose,
-  Bell,
-  User,
 } from 'lucide-react';
 
 export const ResearchPage: React.FC = () => {
@@ -166,36 +164,13 @@ export const ResearchPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => {
-              markNotificationsRead();
-              navigateTo('notifications');
-            }}
-            className="relative grid h-9 w-9 place-items-center rounded-xl border border-[var(--line)] bg-[var(--s)] text-[var(--m)] hover:text-[var(--t)]"
-            title="Notifications"
-          >
-            <Bell className="w-4 h-4" />
-            {unreadNotifications > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-0.5 rounded-full bg-[var(--y)] text-[#171717] text-[9px] font-bold grid place-items-center">
-                {unreadNotifications > 9 ? '9+' : unreadNotifications}
-              </span>
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={() => navigateTo('profile')}
-            className="grid h-9 w-9 place-items-center rounded-xl border border-[var(--line)] bg-[var(--s)] text-[var(--m)] hover:text-[var(--t)]"
-            title="Profile"
-          >
-            <User className="w-4 h-4" />
-          </button>
-        </div>
+        {/* Right balance placeholder */}
+        <div className="w-9 shrink-0" aria-hidden="true" />
       </div>
 
       {/* Tabs moved up — Research / Summary / Tabs / Tasks / Project Notes */}
-      <div className="h-11 border-b border-[var(--line)] flex items-center gap-5 sm:gap-7 mb-4 overflow-x-auto">
+      <div className="h-11 border-b border-[var(--line)] flex items-center justify-between gap-4 mb-4">
+        <div className="flex items-center gap-5 sm:gap-7 overflow-x-auto no-scrollbar h-full">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -223,15 +198,18 @@ export const ResearchPage: React.FC = () => {
           <BookOpen className="w-3.5 h-3.5" />
           Project notes
         </button>
-        <div className="flex-1" />
-        <button
-          type="button"
-          onClick={() => openSubtopic('New focused subtopic')}
-          className="h-8 px-3 rounded-xl bg-[var(--y)] hover:bg-[#e0ac15] text-[#171717] text-[11px] font-bold flex items-center gap-1.5 shrink-0"
-        >
-          <GitFork className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">Subtopic</span>
-        </button>
+        </div>
+        <div className="shrink-0 flex items-center pr-1.5 pl-2">
+          <button
+            type="button"
+            onClick={() => openSubtopic('New focused subtopic')}
+            className="h-8 px-3.5 rounded-xl bg-[var(--y)] hover:bg-[#e0ac15] text-[#171717] text-[11.5px] font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer hover:shadow-sm active:scale-95"
+            title="Create a focused subtopic thread"
+          >
+            <GitFork className="w-3.5 h-3.5" />
+            <span>Subtopic</span>
+          </button>
+        </div>
       </div>
 
       {showPlanSuggestion && (

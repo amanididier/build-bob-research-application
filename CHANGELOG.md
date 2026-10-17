@@ -1,5 +1,17 @@
 # Changelog
 
+## Bob v1.1.1 — 2026-10-17
+
+### Research workspace UI refinement
+- Replaced the top sidebar toggle icon with the unified PanelLeftClose icon for consistent collapse navigation.
+- Removed duplicate notification bell and profile controls from the research sub-bar so the project title pill remains cleanly centered.
+- Repositioned the Subtopic button in its own anchored right container with dedicated padding and hover feedback, preventing horizontal collision with the scrollbar track.
+
+### Build and deployment fixes
+- Restored @tailwindcss/vite dependency to resolve the Vite client build pipeline.
+- Cleaned up next.config.mjs configuration options for seamless Next.js Vercel marketing landing deployments.
+- Synchronized Windows desktop installer assets for version 1.1.1.
+
 ## Bob v1.0.74 — 2026-10-15
 
 ### Adaptive companion workflow

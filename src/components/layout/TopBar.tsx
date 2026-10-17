@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { PanelLeft, Bell, Share2 } from 'lucide-react';
+import { PanelLeftClose, Bell, Share2 } from 'lucide-react';
 
 export const TopBar: React.FC = () => {
   const { 
@@ -80,7 +80,7 @@ export const TopBar: React.FC = () => {
           title="Toggle sidebar"
           className="w-7 h-7 rounded-lg border border-[var(--line)] bg-[var(--s)] grid place-items-center text-[var(--m)] hover:text-[var(--t)] hover:bg-[var(--s2)] transition-colors shadow-xs cursor-pointer"
         >
-          <PanelLeft className="w-3.5 h-3.5" />
+          <PanelLeftClose className="w-4 h-4" />
         </button>
 
         {/* Clean page title breadcrumb */}
