@@ -5,11 +5,6 @@ export const metadata: Metadata = {
   title: 'Bob — your AI research friend',
   description:
     'Download Bob, the AI research companion that remembers your goals and thinks deeply with you. Free for early users.',
-  openGraph: {
-    title: 'Bob — your AI research friend',
-    description: 'Download Bob for Windows or add the Chrome extension. Free for the first users.',
-    type: 'website',
-  },
 }
 
 const WINDOWS_DOWNLOAD =
@@ -18,51 +13,26 @@ const EXTENSION_ZIP = '/bob-chrome-extension.zip'
 const LOGO = '/bob-logo.png'
 const GARDEN = '/sunflower-login.png'
 
-function Btn({
-  href,
-  children,
-  tone = 'green',
-  download,
-}: {
-  href: string
-  children: React.ReactNode
-  tone?: 'green' | 'sun' | 'bow' | 'white'
-  download?: string | boolean
-}) {
-  const tones: Record<string, string> = {
-    green: 'bg-[#58cc02] text-white shadow-[0_5px_0_#46a302]',
-    sun: 'bg-[#f5c842] text-[#171717] shadow-[0_5px_0_#c9a020]',
-    bow: 'bg-[#3b7ddd] text-white shadow-[0_5px_0_#2a5fa8]',
-    white: 'bg-white text-[#171717] border border-[#e5e5df] shadow-[0_5px_0_#e5e5df]',
-  }
-  return (
-    <a
-      href={href}
-      download={download === true ? undefined : download || undefined}
-      className={`garden-btn inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full px-6 py-3.5 text-base font-semibold no-underline ${tones[tone]}`}
-    >
-      {children}
-    </a>
-  )
-}
-
 const features = [
   {
     title: 'Remembers you',
     text: 'Bob keeps your goals, tone and past research, so every session picks up where you left off.',
-    color: 'bg-[#f5c842] text-[#5c3d0a]',
+    color: '#f5c842',
+    colorText: '#5c3d0a',
     glyph: '✦',
   },
   {
     title: 'Deep research',
     text: 'Connects your sources and reasons over them for clear, cited answers.',
-    color: 'bg-[#3b7ddd] text-white',
+    color: '#3b7ddd',
+    colorText: '#fff',
     glyph: '⌕',
   },
   {
     title: 'Lives in your browser',
     text: 'The Chrome extension sends tabs and highlights straight to Bob.',
-    color: 'bg-[#58cc02] text-white',
+    color: '#58cc02',
+    colorText: '#fff',
     glyph: '⬚',
   },
 ]
@@ -76,159 +46,132 @@ const perks = [
 
 export default function Page() {
   return (
-    <div className="garden-site min-h-screen overflow-x-hidden bg-[#fafaf8] text-[#171717] antialiased">
-      <header className="sticky top-0 z-30 border-b border-[#e5e5df] bg-[#fafaf8]/85 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
-          <Link href="/" className="flex items-center gap-2 no-underline text-[#171717]">
+    <div className="garden-site">
+      <header className="garden-header">
+        <div className="garden-header-inner">
+          <Link href="/" className="garden-brand">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={LOGO} alt="Bob" className="h-8 w-8 rounded-lg object-cover" />
-            <span className="text-lg font-bold tracking-tight">Bob</span>
+            <img src={LOGO} alt="Bob" />
+            <span>Bob</span>
           </Link>
-          <nav className="flex items-center gap-1 text-sm font-medium">
-            <a href="#download" className="hidden rounded-full px-4 py-2 text-[#666] hover:text-[#171717] no-underline sm:inline-block">
+          <nav className="garden-nav">
+            <a href="#download" className="hide-sm">
               Download
             </a>
-            <Link href="/sign-in" className="rounded-full px-4 py-2 text-[#666] hover:text-[#171717] no-underline">
-              Log in
-            </Link>
-            <Link href="/sign-up" className="rounded-full bg-[#171717] px-4 py-2 text-white no-underline">
+            <Link href="/sign-in">Log in</Link>
+            <Link href="/sign-up" className="primary">
               Sign up
             </Link>
           </nav>
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="mx-auto max-w-6xl px-6 pb-24 pt-16 text-center md:pt-24">
-        <div className="relative mx-auto w-fit">
+      <section className="garden-hero">
+        <div className="garden-hero-bob">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={LOGO}
-            alt="Bob"
-            className="garden-bob-float mx-auto h-44 w-44 rounded-3xl object-cover md:h-56 md:w-56"
-          />
-          <div className="absolute -right-20 top-2 rotate-6 rounded-2xl rounded-bl-sm border-4 border-white bg-[#3b7ddd] px-4 py-2 text-left text-sm font-bold text-white shadow-lg md:-right-36 md:text-base">
+          <img src={LOGO} alt="Bob" className="garden-bob-float" />
+          <div className="garden-speech">
             Hi there!
             <br />
-            <span className="font-medium opacity-90">I&apos;m Bob.</span>
+            <span style={{ fontWeight: 500, opacity: 0.9 }}>I&apos;m Bob.</span>
           </div>
         </div>
-        <h1 className="mx-auto mt-10 max-w-3xl text-4xl font-extrabold tracking-tight md:text-6xl lg:text-7xl">
-          Your friendly <span className="text-[#3b7ddd]">AI research</span>{' '}
-          <span className="relative inline-block">
-            <span className="relative z-10">companion.</span>
-            <span className="absolute inset-x-0 bottom-1 -z-0 h-3 rounded bg-[#f5c842] md:h-4" />
+        <h1>
+          Your friendly <span className="bow">AI research</span>{' '}
+          <span className="underline">
+            <span className="z">companion.</span>
+            <span className="hl" aria-hidden />
           </span>
         </h1>
-        <p className="mx-auto mt-6 max-w-xl text-lg text-[#666] md:text-xl">
+        <p className="lede">
           Save sources, keep your goals in memory and get deep, thoughtful answers — all in one cheerful place.
         </p>
-        <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <Btn href={WINDOWS_DOWNLOAD}>
-            <span aria-hidden>↓</span> Download for free
-          </Btn>
-          <Btn href="/sign-up" tone="white">
-            Try on the web <span aria-hidden>→</span>
-          </Btn>
+        <div className="garden-cta">
+          <a className="garden-btn garden-btn-green" href={WINDOWS_DOWNLOAD}>
+            ↓ Download for free
+          </a>
+          <Link className="garden-btn garden-btn-white" href="/sign-up">
+            Try on the web →
+          </Link>
         </div>
-        <p className="mt-4 text-sm text-[#888]">Windows · Chrome extension · Web · v1.1.0+</p>
+        <p className="garden-note">Windows · Chrome extension · Web · v1.1.0+</p>
       </section>
 
-      {/* Features */}
-      <section className="mx-auto max-w-6xl px-6 pb-24">
-        <div className="grid gap-5 md:grid-cols-3">
+      <section className="garden-section">
+        <div className="garden-features">
           {features.map((f) => (
-            <div key={f.title} className="rounded-3xl bg-[#f3f3ef] p-8 transition-transform hover:-translate-y-1">
-              <div className={`flex h-12 w-12 items-center justify-center rounded-2xl text-xl font-bold ${f.color}`}>
+            <div key={f.title} className="garden-feature">
+              <div
+                className="garden-feature-icon"
+                style={{ background: f.color, color: f.colorText }}
+              >
                 {f.glyph}
               </div>
-              <h3 className="mt-6 text-xl font-semibold tracking-tight m-0">{f.title}</h3>
-              <p className="mt-2 leading-relaxed text-[#666] m-0">{f.text}</p>
+              <h3>{f.title}</h3>
+              <p>{f.text}</p>
             </div>
           ))}
         </div>
       </section>
 
-      {/* Sunflower garden */}
-      <section className="mx-auto max-w-6xl px-6 pb-24">
-        <div className="relative overflow-hidden rounded-[2rem]">
+      <section className="garden-section">
+        <div className="garden-band">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={GARDEN}
-            alt="Sunflower garden under a blue sky"
-            className="h-[22rem] w-full object-cover md:h-[26rem]"
-            loading="lazy"
-          />
-          <div className="absolute inset-0 bg-gradient-to-b from-white/70 via-white/20 to-transparent" />
-          <div className="absolute inset-x-0 top-0 p-8 text-center md:p-10">
-            <h2 className="text-3xl font-bold tracking-tight text-[#171717] md:text-5xl m-0">
-              A home that feels like sunshine.
-            </h2>
-            <p className="mx-auto mt-3 max-w-md font-medium text-[#171717]/70 m-0">
-              Bob greets you in a calm sunflower garden, ready to dig in.
-            </p>
+          <img src={GARDEN} alt="Sunflower garden under a blue sky" />
+          <div className="garden-band-scrim" />
+          <div className="garden-band-copy">
+            <h2>A home that feels like sunshine.</h2>
+            <p>Bob greets you in a calm sunflower garden, ready to dig in.</p>
           </div>
         </div>
       </section>
 
-      {/* Download */}
-      <section id="download" className="mx-auto max-w-6xl px-6 pb-24">
-        <div className="grid items-center gap-10 rounded-[2rem] bg-[#f3f3ef] p-8 md:grid-cols-2 md:p-12">
+      <section id="download" className="garden-section">
+        <div className="garden-download">
           <div>
-            <p className="text-sm font-bold uppercase tracking-wider text-[#58cc02] m-0">Early access</p>
-            <h2 className="mt-2 text-3xl font-bold tracking-tight md:text-4xl m-0">Get Bob on your machine</h2>
-            <p className="mt-3 text-[#666] leading-relaxed m-0">
-              The full desktop app with research, notes, tasks, roadmap, and the Chrome overlay — same features we shipped in v1.1.0.
+            <p className="eyebrow">Early access</p>
+            <h2>Get Bob on your machine</h2>
+            <p className="body">
+              The full desktop app with research, notes, tasks, roadmap, and the Chrome overlay — same features we
+              shipped in v1.1.0.
             </p>
-            <ul className="mt-6 space-y-3 list-none p-0 m-0">
+            <ul className="garden-perks">
               {perks.map((t) => (
-                <li key={t} className="flex items-start gap-3 text-[15px] text-[#333]">
-                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#58cc02] text-white text-xs font-bold">
-                    ✓
-                  </span>
+                <li key={t}>
+                  <span className="check">✓</span>
                   {t}
                 </li>
               ))}
             </ul>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Btn href={WINDOWS_DOWNLOAD} tone="sun">
-                <span aria-hidden>↓</span> Download for Windows
-              </Btn>
-              <Btn href={EXTENSION_ZIP} tone="bow" download="bob-chrome-extension.zip">
-                <span aria-hidden>◎</span> Chrome extension
-              </Btn>
+            <div className="garden-download-actions">
+              <a className="garden-btn garden-btn-sun" href={WINDOWS_DOWNLOAD}>
+                ↓ Download for Windows
+              </a>
+              <a className="garden-btn garden-btn-bow" href={EXTENSION_ZIP} download="bob-chrome-extension.zip">
+                ◎ Chrome extension
+              </a>
             </div>
-            <p className="mt-4 text-xs text-[#888] m-0">
-              Installer: Bob-Research-Companion-Setup.exe · Always the latest release on GitHub
-            </p>
+            <p className="garden-note">Installer: Bob-Research-Companion-Setup.exe · Latest GitHub release</p>
           </div>
-          <div className="relative mx-auto">
-            <div className="absolute inset-4 rounded-full bg-[#f5c842]/30 blur-3xl" />
+          <div className="garden-download-side">
+            <div className="glow" />
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={LOGO} alt="" className="garden-bob-float relative h-56 w-56 rounded-3xl object-cover md:h-72 md:w-72" />
+            <img src={LOGO} alt="" className="garden-bob-float" />
           </div>
         </div>
       </section>
 
-      <footer className="border-t border-[#e5e5df] py-8">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-6 text-sm text-[#888] sm:flex-row">
-          <div className="flex items-center gap-2">
+      <footer className="garden-footer">
+        <div className="garden-footer-inner">
+          <div className="garden-brand" style={{ fontWeight: 500, fontSize: 14, color: '#888' }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={LOGO} alt="" className="h-5 w-5 rounded object-cover" /> © 2026 Bob Research Companion
+            <img src={LOGO} alt="" style={{ width: 20, height: 20, borderRadius: 4 }} />
+            © 2026 Bob Research Companion
           </div>
-          <div className="flex gap-5">
-            <Link href="/sign-in" className="hover:text-[#171717] no-underline text-[#888]">
-              Log in
-            </Link>
-            <Link href="/sign-up" className="hover:text-[#171717] no-underline text-[#888]">
-              Sign up
-            </Link>
-            <a
-              href="https://github.com/amanididier/build-bob-research-application"
-              className="hover:text-[#171717] no-underline text-[#888]"
-              target="_blank"
-              rel="noreferrer"
-            >
+          <div className="garden-footer-links">
+            <Link href="/sign-in">Log in</Link>
+            <Link href="/sign-up">Sign up</Link>
+            <a href="https://github.com/amanididier/build-bob-research-application" target="_blank" rel="noreferrer">
               GitHub
             </a>
           </div>
