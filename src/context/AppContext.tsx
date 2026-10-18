@@ -745,6 +745,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
   }, [notes]);
 
+  // Keep React's in-memory workspace state in sync when Bob's explicit AI tools
+  // update the canonical localStorage records.
+  useEffect(() => {
+    const refreshWorkspaceFromStorage = (event?: Event) => {
+      const detail = (event as CustomEvent<{ kind?: string }> | undefined)?.detail;
+      const kind = detail?.kind;
+      try {
+        if (!kind || kind === 'tasks') {
+          const savedTasks = localStorage.getItem('bob_tasks_v2');
+          if (savedTasks) {
+            const parsed = JSON.parse(savedTasks);
+            if (Array.isArray(parsed)) setTasks(parsed);
+          }
+        }
+        if (!kind || kind === 'notes') {
+          const savedNotes = localStorage.getItem('bob_notes_v1');
+          if (savedNotes) {
+            const parsed = JSON.parse(savedNotes);
+            if (Array.isArray(parsed)) setNotes(parsed);
+          }
+        }
+      } catch (error) {
+        console.warn('[bob] workspace refresh failed:', error);
+      }
+    };
+    window.addEventListener('bob:workspace-updated', refreshWorkspaceFromStorage);
+    return () => window.removeEventListener('bob:workspace-updated', refreshWorkspaceFromStorage);
+  }, []);
+
   // Real-time synchronization with Bob Desktop bridge / Extension
   useEffect(() => {
     const syncFromDesktop = async () => {
