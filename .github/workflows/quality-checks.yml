@@ -5,6 +5,7 @@ name: Bob Quality Checks
 on:
   push:
     branches:
+      - fix/bob-context-roadmap-integration
       - fix/adaptive-roadmap-home-chat-v1.0.72
       - fix/bob-experience-polish-v1.0.73
       - feat/adaptive-bob-pathway-profile-updates-v1.0.74
@@ -43,6 +44,9 @@ jobs:
             fi
           done
           exit 1
+
+      - name: Test companion workspace tools
+        run: npm run test:companion-tools
 
       - name: TypeScript validation
         run: npm run lint
