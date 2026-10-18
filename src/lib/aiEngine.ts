@@ -10,7 +10,7 @@
 
 import { GoogleGenAI } from '@google/genai';
 import { localMemoryBank, MemoryNode } from './researchMemory';
-import { detectSystemHardware, MODEL_CATALOG, SystemHardwareInfo } from './hardware';
+import { detectSystemHardware, SystemHardwareInfo } from './hardware';
 import { ModelTier } from '../types';
 import { resolveGeminiApiKey } from './ai/keyManager';
 import { loadRoadmapForProject } from './roadmap/roadmapStorage';
@@ -822,68 +822,19 @@ ${workspaceContext || 'No additional workspace records are available for this pr
       }
     } catch {}
 
-    // 3. Local Built-in Synthesis Fallback with clean ChatGPT-style markdown & tables
-    const modelProfile = MODEL_CATALOG[this.downloadStatus.tier];
-    const latency = this.downloadStatus.tier === 'ultra-light-4gb' ? 450 : 700;
-    await new Promise((r) => setTimeout(r, latency));
+    // 3. Honest fallback when neither Gemini nor a local Ollama provider is available.
+    // Never fabricate project findings just to make the assistant appear responsive.
+    const answer = memory.citedNodes.length
+      ? `I found ${memory.citedNodes.length} relevant saved research item${memory.citedNodes.length === 1 ? '' : 's'}, but I don't have a connected AI provider to synthesize them reliably. Connect Gemini in Settings or start Ollama locally, and I'll continue from your actual research.`
+      : "I can't generate a reliable answer right now because no AI provider is connected. Connect Gemini in Settings or start Ollama locally, and I'll use your actual project context instead of guessing.";
 
-    let answer = '';
-    const qLower = query.toLowerCase();
-
-    if (qLower.includes('compare') || qLower.includes('vs') || qLower.includes('table') || qLower.includes('competitor')) {
-      answer = `Here is a clear breakdown of the core patterns and differences observed in your research:
-
-| Dimension | Observation | Research Signal | Next Validation Step |
-| :--- | :--- | :--- | :--- |
-| **Pricing Transparency** | 45% drop-off at checkout | Mobile carrier fees revealed too late | Run A/B test with upfront total fare |
-| **Seat Availability** | Station walk-ups prioritized | Lack of real-time seat lock creates anxiety | Test instant SMS ticket confirmation |
-| **Operator Integration** | Cash reconciliation friction | Operators open to 2.5% fee if payouts automated | Interview 2 regional cooperative leads |
-
-### Key Takeaway
-The strongest evidence points to reducing checkout surprises before expanding new features. Users abandon because of pricing ambiguity rather than lack of bus routes.`;
-    } else if (qLower.includes('friction') || qLower.includes('abandon') || qLower.includes('booking') || qLower.includes('problem')) {
-      answer = `Looking through your notes and findings, the main issue isn't the booking interface itself—it's **surprise costs and uncertain fulfillment**.
-
-Here are the key factors driving abandonment:
-
-1. **Unexpected Surcharges at Checkout**:
-   Over 45% of users drop out when mobile carrier fees and convenience surcharges appear on the final confirmation screen.
-
-2. **Fear of Double-Booking**:
-   Unlike standard ride-hailing apps, inter-city transport passengers worry that their digital seat won't be respected at the terminal, where ticket counter walk-ups often take precedence.
-
-3. **Missing Dispatch Details**:
-   Passengers want to see the physical station location and vehicle plate before committing payment.
-
-**Recommended Action**: Show the total all-inclusive fare immediately on the search results screen and validate whether SMS reservation guarantees ease passenger hesitation.`;
-    } else if (qLower.includes('task') || qLower.includes('plan') || qLower.includes('next')) {
-      answer = `Here is a prioritized, step-by-step plan based on your current findings:
-
-* **1. Audit checkout fee transparency (High Priority)**  
-  Document the exact operator and mobile carrier surcharge breakdown so users see the full price upfront.
-* **2. Interview 2 cooperative managers (High Priority)**  
-  Understand how bus operators balance cash walk-up tickets with online app reservations.
-* **3. Draft a 1-page hypothesis brief (Medium Priority)**  
-  Summarize the core problem and outline 2 user test scenarios for next week.`;
-    } else {
-      answer = `Based on your research context, here is what stands out:
-
-* **Primary Signal**: Your evidence highlights that simplifying the core workflow and making pricing crystal clear yields much higher impact than adding complex secondary features.
-* **Consensus Across Sources**: Both user interviews and document notes corroborate that clarity around booking fulfillment is the main deciding factor for adoption.
-
-Would you like me to turn these insights into concrete tasks or format them for your summary report?`;
-    }
-
-    const elapsed = Math.round(performance.now() - startTime);
     onChunk?.(answer);
-
     return {
       answer,
       sources: citations,
-      tokensPerSec: modelProfile.tokensPerSec,
-      latencyMs: elapsed,
-      modelTier: this.downloadStatus.tier,
-      modelName: modelProfile.name,
+      latencyMs: Math.round(performance.now() - startTime),
+      modelTier: 'provider-unavailable',
+      modelName: 'No AI provider connected',
       memoryNodesUsed: memory.citedNodes.length,
       provider: 'local',
     };
@@ -891,50 +842,119 @@ Would you like me to turn these insights into concrete tasks or format them for 
 
   public async extractTasksFromContext(projectId: string = 'urugendo'): Promise<AiTaskSuggestion[]> {
     const memories = localMemoryBank.getAllMemories(projectId);
-    await new Promise((r) => setTimeout(r, 500));
+    const workspaceContext = buildBobWorkspaceContext(projectId);
+    const hasProjectEvidence = memories.length > 0 ||
+      /SAVED PROJECT NOTES|PROJECT TASKS|ACTIVE ROADMAP|SELECTED RESEARCH TABS|RECENT PROJECT CONVERSATION/.test(workspaceContext);
+    const apiKey = this.getGeminiKey();
 
-    return [
-      {
-        title: 'Audit mobile carrier checkout surcharges with local operators',
-        dueDate: 'Due in 2 days',
-        sourceConnection: `${memories.length} notes analyzed`,
-        priority: 'high',
-      },
-      {
-        title: 'Interview 2 station dispatchers on walk-up vs digital ticket holds',
-        dueDate: 'Due Friday',
-        sourceConnection: 'Field evidence · Rwanda notes',
-        priority: 'high',
-      },
-      {
-        title: 'Review offline SMS webhook fallback for seat allocation',
-        dueDate: 'Next week',
-        sourceConnection: 'Technical spec · doc',
-        priority: 'medium',
-      },
-      {
-        title: 'Validate upfront all-inclusive pricing with 3 test users',
-        dueDate: 'Next sprint',
-        sourceConnection: 'Checkout friction hypothesis',
-        priority: 'low',
-      },
-    ];
+    // With no real project evidence or model provider, return no suggestions
+    // instead of inventing tasks from an unrelated sample project.
+    if (!hasProjectEvidence || !apiKey) return [];
+
+    const memoryEvidence = memories.slice(0, 12)
+      .map((memory) => `- ${memory.title}: ${memory.content.slice(0, 500)}`)
+      .join('\n');
+    const evidence = [
+      workspaceContext ? `WORKSPACE CONTEXT:\n${workspaceContext}` : '',
+      memoryEvidence ? `SAVED RESEARCH:\n${memoryEvidence}` : '',
+    ].filter(Boolean).join('\n\n');
+    const prompt = `You extract actionable tasks from the user's real project evidence. Use only tasks clearly supported by the evidence; do not invent research findings, interviews, sources, milestones, or deadlines. Return 0–5 useful tasks, and return [] if the evidence does not justify any. Due dates must be "Flexible" unless an exact due date or deadline is explicitly present in the evidence; never invent dates. The sourceConnection must be an exact saved research title from the evidence when available, otherwise "Saved project context". Return strict JSON only as an array of objects with title, dueDate, sourceConnection, priority ("high"|"medium"|"low").\n\n${evidence}`;
+
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model: this.getVerifiedModel(),
+        contents: prompt,
+        config: { responseMimeType: 'application/json' } as any,
+      });
+      const raw = (response.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+
+      const knownSources = new Set(memories.map((memory) => memory.title));
+      const evidenceText = evidence.toLowerCase();
+      return parsed.slice(0, 5)
+        .filter((item: any) => typeof item?.title === 'string' && item.title.trim())
+        .map((item: any): AiTaskSuggestion => {
+          const requestedDueDate = String(item.dueDate || 'Flexible').trim();
+          const dueDate = requestedDueDate === 'Flexible' || evidenceText.includes(requestedDueDate.toLowerCase())
+            ? requestedDueDate
+            : 'Flexible';
+          const source = String(item.sourceConnection || '');
+          return {
+            title: String(item.title).trim().slice(0, 180),
+            dueDate,
+            sourceConnection: knownSources.has(source) ? source : 'Saved project context',
+            priority: ['high', 'medium', 'low'].includes(item.priority) ? item.priority : 'medium',
+          };
+        });
+    } catch (error) {
+      console.warn('[Bob AI] Could not extract tasks from current project evidence:', error);
+      return [];
+    }
   }
-
   public async polishResearchNote(title: string, rawContent: string): Promise<{
     polishedTitle: string;
     polishedContent: string;
     keyTakeaway: string;
     suggestedTags: string[];
   }> {
-    await new Promise((r) => setTimeout(r, 450));
+    const content = rawContent.trim();
+    const safeTitle = title.trim() || (content.split(/\s+/).slice(0, 7).join(' ') || 'Untitled note');
+    const firstSentence = content.match(/^[\s\S]*?[.!?](?:\s|$)/)?.[0]?.trim() || content.slice(0, 220);
+    const tagStopwords = new Set([
+      'about', 'after', 'also', 'because', 'been', 'being', 'could', 'from', 'have',
+      'into', 'just', 'more', 'most', 'other', 'over', 'such', 'than', 'that', 'their',
+      'there', 'these', 'they', 'this', 'through', 'under', 'very', 'what', 'when',
+      'where', 'which', 'while', 'with', 'would', 'your',
+    ]);
+    const frequencies = new Map<string, number>();
+    for (const word of content.toLowerCase().match(/[a-z][a-z0-9-]{3,}/g) || []) {
+      if (!tagStopwords.has(word)) frequencies.set(word, (frequencies.get(word) || 0) + 1);
+    }
+    const fallbackTags = [...frequencies.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4)
+      .map(([word]) => word);
 
-    return {
-      polishedTitle: title.startsWith('Note') || title.length < 5 ? `Finding: ${rawContent.slice(0, 32)}...` : title,
-      polishedContent: `${rawContent.trim()}\n\n**Takeaway:** Corroborates core user drop-off pattern. Highlighted as a primary priority for next sprint validation.`,
-      keyTakeaway: 'Prioritize addressing core user friction before building complex features.',
-      suggestedTags: ['research-insight', 'verified', 'actionable'],
+    const fallback = {
+      polishedTitle: safeTitle,
+      // Without a model, preserve the user's original words rather than adding claims.
+      polishedContent: content,
+      keyTakeaway: firstSentence,
+      suggestedTags: fallbackTags,
     };
+    if (!content) return fallback;
+
+    const apiKey = this.getGeminiKey();
+    if (!apiKey) return fallback;
+
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+      const prompt = `Polish this research note while preserving its meaning and uncertainty. Do not add facts, statistics, conclusions, or verification claims that are not in the original text. Improve clarity and structure only. Return strict JSON with polishedTitle, polishedContent, keyTakeaway, and suggestedTags (an array of 2–5 short topical tags).\n\nOriginal title: ${safeTitle}\nOriginal note:\n${content.slice(0, 12000)}`;
+      const response = await ai.models.generateContent({
+        model: this.getVerifiedModel(),
+        contents: prompt,
+        config: { responseMimeType: 'application/json' } as any,
+      });
+      const raw = (response.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return fallback;
+      return {
+        polishedTitle: typeof parsed.polishedTitle === 'string' && parsed.polishedTitle.trim()
+          ? parsed.polishedTitle.trim().slice(0, 180) : fallback.polishedTitle,
+        polishedContent: typeof parsed.polishedContent === 'string' && parsed.polishedContent.trim()
+          ? parsed.polishedContent.trim().slice(0, 14000) : fallback.polishedContent,
+        keyTakeaway: typeof parsed.keyTakeaway === 'string' && parsed.keyTakeaway.trim()
+          ? parsed.keyTakeaway.trim().slice(0, 500) : fallback.keyTakeaway,
+        suggestedTags: Array.isArray(parsed.suggestedTags)
+          ? parsed.suggestedTags.filter((tag: unknown): tag is string => typeof tag === 'string' && tag.trim()).slice(0, 5).map((tag: string) => tag.trim().slice(0, 40))
+          : fallback.suggestedTags,
+      };
+    } catch (error) {
+      console.warn('[Bob AI] Could not polish note with Gemini; preserving source text:', error);
+      return fallback;
+    }
   }
 }
 
