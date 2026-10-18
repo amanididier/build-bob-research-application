@@ -154,13 +154,6 @@ export function buildBobWorkspaceContext(projectId: string): string {
     if (preferences.length) sections.push('USER RESPONSE PREFERENCES\n' + preferences.join('\n'));
   }
 
-  const companionMemory = readJson('bob_companion_memory_v1');
-  if (Array.isArray(companionMemory) && companionMemory.length) {
-    sections.push('EXPLICITLY SHARED USER PREFERENCES\n' + companionMemory.slice(-8)
-      .filter((fact: any) => typeof fact === 'string')
-      .map((fact: string) => `- ${fact.slice(0, 220)}`).join('\n'));
-  }
-
   try {
     const focus = localStorage.getItem('bob_custom_focus_goal');
     const focusProjectId = localStorage.getItem('bob_focus_project_id');
@@ -488,6 +481,21 @@ class BobAiManager {
           : summaryItems.slice(-2).reverse())
       : [];
 
+    // Explicitly shared interests are global, but only matching interests should
+    // influence ordinary replies. A direct recall request may retrieve a few.
+    const explicitCompanionPreferences: string[] = (() => {
+      try {
+        const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('bob_companion_memory_v1') : null;
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string').slice(-12) : [];
+      } catch { return []; }
+    })();
+    const preferenceStopwords = new Set(['about', 'after', 'also', 'and', 'are', 'can', 'did', 'for', 'from', 'have', 'how', 'into', 'like', 'me', 'more', 'my', 'the', 'that', 'this', 'what', 'when', 'where', 'with', 'you', 'your', 'remember', 'memory']);
+    const preferenceTerms = query.toLowerCase().split(/\\W+/).filter((word: string) => word.length > 3 && !preferenceStopwords.has(word));
+    const relevantCompanionPreferences = recallRequested
+      ? explicitCompanionPreferences.slice(-4)
+      : explicitCompanionPreferences.filter((fact) => preferenceTerms.some((term) => fact.toLowerCase().includes(term))).slice(-3);
+
     let dailyFocus = '';
     try { dailyFocus = localStorage.getItem('bob_custom_focus_goal') || ''; } catch {}
     const citations = memory.citedNodes.map((m) => ({
@@ -562,6 +570,7 @@ ${conversationContext ? `Recent conversation context (use only to resolve refere
 
 ${relevantUserFacts.length ? `Relevant long-term user facts (quiet context; apply only when useful, do not recite them):\n- ${relevantUserFacts.join('\n- ')}` : ''}
 ${relevantConversationSummaries.length ? `Earlier conversation summaries (use only because the user asked to recall or continue prior work):\n- ${relevantConversationSummaries.join('\n- ')}` : ''}
+${relevantCompanionPreferences.length ? `Relevant explicitly shared interests (quiet context; use only when useful):\n- ${relevantCompanionPreferences.join('\n- ')}` : ''}
 
 Relevant local research memory (only use when it matches the current question):
 ${memory.contextText}
