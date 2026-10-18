@@ -1,11 +1,12 @@
 /**
- * Bob AI Engine Architecture
- * 
- * Multi-Provider Hybrid Reasoning Engine:
- * 1. Cloud Provider: Google Gemini API (when user provides key or clipboard auto-detected)
- * 2. Local Fallback: Tiered on-device local brain (100% free, 0s latency, offline)
- * 
- * Responds naturally in ChatGPT-style tone with rich markdown and clean tables.
+ * Bob AI Engine
+ *
+ * Provider order:
+ * 1. Google Gemini when the user has connected an API key.
+ * 2. A configured local Ollama model when available.
+ * 3. Honest, source-preserving fallbacks when no model can answer.
+ *
+ * Deterministic fallbacks must never fabricate research findings or task lists.
  */
 
 import { GoogleGenAI } from '@google/genai';
