@@ -184,6 +184,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
   const [researchSubView, setResearchSubView] = useState<ResearchSubView>('chat');
   const [activeResearchId, setActiveResearchId] = useState<string>('urugendo');
+  useEffect(() => {
+    try {
+      localStorage.setItem('bob_active_research_id', activeResearchId);
+    } catch {}
+  }, [activeResearchId]);
   const [isSidebarClosed, setIsSidebarClosed] = useState<boolean>(() => currentPage === 'home');
 
   // Modals
