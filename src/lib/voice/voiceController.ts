@@ -153,7 +153,14 @@ export class VoiceController {
     voiceDiagnostics.set({ provider: 'Fallback Secondary Agent', connection: 'active' });
     this.startVad(stream);
     this.armCallIdleTimer();
-    await this.startLegacySTT();
+    try {
+      await this.startLegacySTT();
+    } catch (err: any) {
+      voiceDiagnostics.event(`Fallback voice engine failed to start: ${String(err?.message || err).slice(0, 160)}`);
+      this.stopVoiceMode();
+      this.setState('ERROR', 'The fallback voice engine could not start. Check your microphone and Gemini settings.');
+      return;
+    }
     if (!this.isVoiceModeActive) stt.stop();
   }
 
