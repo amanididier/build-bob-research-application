@@ -306,7 +306,7 @@ export class GeminiLiveProvider {
       if (part?.text) turnText += part.text;
     }
 
-    if (turnText) this.callbacks?.onModelText(turnText, false);
+    if (turnText && !outText) this.callbacks?.onModelText(turnText, false);
     if (outText) this.callbacks?.onModelText(outText, Boolean(content.turnComplete));
 
     if (content.turnComplete) {
