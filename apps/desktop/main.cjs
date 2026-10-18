@@ -40,14 +40,9 @@ let updateState = {
 }
 let store = {
   projects: [{ id: 'default', name: 'AI research companion', color: 'violet' }],
-  notes: [
-    { id: '1', title: 'Transport booking friction', body: 'Users abandon booking when price or seat is not transparent.', url: 'research.example.com', at: Date.now() - 3600000 },
-    { id: '2', title: 'Attention mechanisms', body: 'Sub-400MB RAM footprints enable responsive local LLMs on 4GB PCs.', url: 'arxiv.org/abs/1706.03762', at: Date.now() - 7200000 }
-  ],
-  sources: [
-    { id: 's1', title: 'Transport booking research', url: 'research.example.com/transport-booking', at: Date.now() },
-    { id: 's2', title: 'Attention Is All You Need', url: 'https://arxiv.org/abs/1706.03762', at: Date.now() }
-  ],
+  // A fresh install must start with real user content, not sample research.
+  notes: [],
+  sources: [],
   captures: [],
   tabs: {},
   messages: []
@@ -68,6 +63,27 @@ function loadStore() {
       const data = JSON.parse(fs.readFileSync(storePath, 'utf8'))
       store = { ...store, ...data }
     }
+
+    // Migrate only unchanged, known sample records from older desktop installs.
+    // If a user edited one of these records, keep it rather than deleting by ID.
+    const demoNoteSignatures = new Set([
+      '1|Transport booking friction|Users abandon booking when price or seat is not transparent.|research.example.com',
+      '2|Attention mechanisms|Sub-400MB RAM footprints enable responsive local LLMs on 4GB PCs.|arxiv.org/abs/1706.03762'
+    ])
+    const demoSourceSignatures = new Set([
+      's1|Transport booking research|research.example.com/transport-booking',
+      's2|Attention Is All You Need|https://arxiv.org/abs/1706.03762'
+    ])
+    const notesBefore = Array.isArray(store.notes) ? store.notes : []
+    const sourcesBefore = Array.isArray(store.sources) ? store.sources : []
+    store.notes = notesBefore.filter((note) => !demoNoteSignatures.has(
+      [note.id, note.title, note.body, note.url].map((part) => String(part || '')).join('|')
+    ))
+    store.sources = sourcesBefore.filter((source) => !demoSourceSignatures.has(
+      [source.id, source.title, source.url].map((part) => String(part || '')).join('|')
+    ))
+    const removedSampleData = store.notes.length !== notesBefore.length || store.sources.length !== sourcesBefore.length
+
     if (!store.geminiKey && (process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY)) {
       store.geminiKey = (process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '').trim()
     }
@@ -75,6 +91,7 @@ function loadStore() {
     if (!store.settingsVersion) store.settingsVersion = 1
     if (typeof store.activeGoal !== 'string') store.activeGoal = ''
     if (!store.theme) store.theme = 'light'
+    if (removedSampleData) saveStore()
   } catch (err) {
     log('Load store failed:', err.message)
   }
