@@ -191,6 +191,7 @@ export class VoiceController {
         this.setState('ERROR', errMsg);
       }
     );
+    if (!this.isVoiceModeActive) stt.stop();
   }
 
   public isLiveModeActive(): boolean {
