@@ -257,6 +257,7 @@ Selected tools: "${toolLabels}".
 Target cadence: "${dueDateLabel}".
 Weekly commitment: "${selectedTimeOption}".
 Saved user profile and explicitly shared interests (use only when relevant): ${profileContext}.
+Shared current Bob workspace context (background facts; prioritize the active goal and project scope): ${sharedWorkspaceContext || 'No additional workspace context available.'}.
 Additional answers collected from the user's previous roadmap pages: ${JSON.stringify(extraAnswers)}.
 Use these answers to customize milestone names, order, scope, and tools. Do not add unrelated generic software tasks unless the goal actually requires them.
 
