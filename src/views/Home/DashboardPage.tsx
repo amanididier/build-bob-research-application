@@ -93,25 +93,28 @@ export const DashboardPage: React.FC = () => {
 
   const openTasks = tasks.filter((t) => !t.completed);
   const doneTasks = tasks.filter((t) => t.completed);
-  const doneToday = doneTasks.filter((t) => {
-    const d = (t as { completedAt?: string }).completedAt || t.dueDate || '';
-    return String(d).toLowerCase().includes('today') || t.completed;
+  const doneTodayCount = doneTasks.filter((task) => {
+    const completedAt = (task as { completedAt?: string }).completedAt;
+    if (!completedAt) return false;
+    const completedDate = new Date(completedAt);
+    return !Number.isNaN(completedDate.getTime()) && completedDate.toDateString() === new Date().toDateString();
   }).length;
-  // Prefer counting completed tasks as today's progress when timestamps missing
-  const doneTodayCount = Math.max(
-    doneToday,
-    doneTasks.filter((t) => t.completed).length > 0
-      ? Math.min(doneTasks.length, goals.daily)
-      : 0
-  );
 
   const focusProject = projects.find((p) => p.id === selectedFocusProjectId) || projects[0] || null;
   const projectTasks = focusProject ? tasks.filter((t) => t.projectId === focusProject.id) : [];
   const projectOpenTasks = projectTasks.filter((t) => !t.completed);
   const dueSoon = openTasks
-    .filter((t) => {
-      const d = (t.dueDate || '').toLowerCase();
-      return d.includes('today') || d.includes('tomorrow') || d.includes('week') || !d;
+    .filter((task) => {
+      const due = String(task.dueDate || '').toLowerCase().trim();
+      if (!due || due === 'flexible' || due === 'not set') return false;
+      if (/today|tomorrow|this week|next few days|overdue/.test(due)) return true;
+      const timestamp = Date.parse(due);
+      if (Number.isNaN(timestamp)) return false;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const date = new Date(timestamp);
+      date.setHours(0, 0, 0, 0);
+      return (date.getTime() - today.getTime()) / 86400000 <= 7;
     })
     .slice(0, 5);
   const focusTask =
