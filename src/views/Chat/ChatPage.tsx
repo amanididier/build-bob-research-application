@@ -21,6 +21,7 @@ import {
 import bobOrb from '../../assets/images/bob_mascot_orb_1791540734514.jpg';
 import { resolveGeminiApiKey } from '../../lib/ai/keyManager';
 import { GoogleGenAI } from '@google/genai';
+import { buildSharedCompanionContext } from '../../lib/companionContext';
 import { RoadmapSheet } from '../../components/roadmap/RoadmapSheet';
 
 interface MessengerMsg {
@@ -176,6 +177,7 @@ export const ChatPage: React.FC = () => {
           try { return JSON.parse(localStorage.getItem('bob_profile_preferences_v1') || '{}'); } catch { return {}; }
         })();
         const profileStyle = savedProfile.style === 'detailed' ? 'detailed explanations' : savedProfile.style === 'explain' ? 'explain concepts first' : 'concise answers';
+        const sharedWorkspaceContext = buildSharedCompanionContext(activeResearchId);
         const systemPrompt = `You are Bob, a warm, emotionally intelligent conversational AI companion speaking directly with ${userName || 'the user'}.
 Treat this like a real ongoing conversation, not a search box: respond to what the person actually said, acknowledge feelings or details, and sometimes ask one natural follow-up question rather than ending every turn with a generic line.
 You can discuss everyday life, interests, music, celebrities, films, hobbies, friendships, culture, learning, creativity, decisions, emotions, technology, and practical questions.
