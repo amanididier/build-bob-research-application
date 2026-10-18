@@ -460,6 +460,7 @@ ${workspaceContext || 'No additional workspace records are available for this pr
         { role: 'user', parts: [{ text: `${systemPrompt}\n\nUser Question: ${query}` }] }
       ];
 
+      let workspaceWriteExecuted = false;
       for (const model of uniqueModels) {
         try {
           const ai = new GoogleGenAI({ apiKey: geminiKey });
@@ -523,6 +524,7 @@ ${workspaceContext || 'No additional workspace records are available for this pr
               executedWorkspaceTool = true;
               if (toolResult?.ok && ['note_saved', 'task_added', 'task_completed'].includes(String(toolResult.action))) {
                 executedWorkspaceWrite = true;
+                workspaceWriteExecuted = true;
               }
               return {
                 functionResponse: {
@@ -576,6 +578,19 @@ ${workspaceContext || 'No additional workspace records are available for this pr
           }
         } catch (err: any) {
           console.warn(`Gemini SDK call (${model}) failed:`, err?.message || err);
+          if (workspaceWriteExecuted) {
+            const answer = 'I updated your workspace, but I could not finish the explanation. Please check the relevant Tasks or Notes page.';
+            onChunk?.(answer);
+            return {
+              answer,
+              sources: citations,
+              latencyMs: Math.round(performance.now() - startTime),
+              modelTier: 'cloud-gemini',
+              modelName: model,
+              memoryNodesUsed: memory.citedNodes.length,
+              provider: 'gemini',
+            };
+          }
         }
       }
 
