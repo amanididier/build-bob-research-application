@@ -25,7 +25,6 @@ const MIN_ROLL_SAMPLES = Math.round(SAMPLE_RATE * 0.9);
  */
 const MIN_FINAL_SAMPLES = Math.round(SAMPLE_RATE * 0.3);
 /** Hard ceiling so transcription can never hang "forever". */
-const FLUSH_TIMEOUT_MS = 20000;
 const CHUNK_TIMEOUT_MS = 12000;
 
 export class DualEngineSTTProvider implements STTProvider {
@@ -176,22 +175,6 @@ export class DualEngineSTTProvider implements STTProvider {
       this.isProcessingChunk = false;
       this.transcribing = false;
     }
-  }
-
-  private withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('timeout')), ms);
-      promise.then(
-        (value) => {
-          clearTimeout(timer);
-          resolve(value);
-        },
-        (err) => {
-          clearTimeout(timer);
-          reject(err);
-        }
-      );
-    });
   }
 
   private setupRecognitionListeners() {
