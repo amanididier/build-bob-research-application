@@ -702,8 +702,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
   }, [tasks]);
 
-  // Seed Notes
-  const [notes, setNotes] = useState<ResearchNoteItem[]>([
+  // Notes persist locally so Bob and the Notes page share the same saved workspace.
+  const [notes, setNotes] = useState<ResearchNoteItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('bob_notes_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [
     {
       id: 'n-1',
       title: 'Booking abandonment friction',
@@ -728,7 +736,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       color: 'emerald',
       createdAt: 'Yesterday, 3:20 PM',
     },
-  ]);
+    ];
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('bob_notes_v1', JSON.stringify(notes));
+    } catch {}
+  }, [notes]);
 
   // Real-time synchronization with Bob Desktop bridge / Extension
   useEffect(() => {
