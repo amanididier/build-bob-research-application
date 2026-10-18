@@ -406,7 +406,7 @@ export class GeminiLiveService {
     if (Array.isArray(parts)) {
       for (const part of parts) {
         // Model Text Chunk
-        if (part.text) {
+        if (part.text && !outputText) {
           this.callbacks.onModelText?.(part.text, false);
         }
 
