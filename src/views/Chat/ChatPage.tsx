@@ -93,7 +93,7 @@ const CASUAL_FOLLOWUPS = [
 ];
 
 export const ChatPage: React.FC = () => {
-  const { userName, tasks, toggleSidebar, navigateTo, activeResearchId, projects } = useApp();
+  const { userName, tasks, toggleSidebar, navigateTo, activeResearchId } = useApp();
   const [messages, setMessages] = useState<MessengerMsg[]>(loadMessages);
   const [draft, setDraft] = useState('');
   const [isBobTyping, setIsBobTyping] = useState(false);
@@ -101,7 +101,6 @@ export const ChatPage: React.FC = () => {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const sendingRef = useRef(false);
 
-  const activeProject = projects.find(p => p.id === activeResearchId) || projects[0];
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -163,7 +162,7 @@ export const ChatPage: React.FC = () => {
       ].join('\n').slice(-4500);
       window.dispatchEvent(new CustomEvent('bob-open-roadmap', {
         detail: {
-          title: goalFromRequest || activeProject?.title || '',
+          title: goalFromRequest || '',
           origin: 'chat',
           context: recentContext,
           projectId: activeResearchId,
