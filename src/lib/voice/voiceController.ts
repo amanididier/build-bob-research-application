@@ -454,6 +454,33 @@ export class VoiceController {
     }
   }
 
+  /**
+   * End manual prompt dictation, flush the last audio slice, and leave the
+   * transcript in the editable composer. Unlike Call mode, this never submits.
+   */
+  public async finishPromptDictation(): Promise<string> {
+    if (!this.isVoiceModeActive || this.mode !== 'prompt') return '';
+
+    this.setState('TRANSCRIBING');
+    let text = '';
+    try {
+      text = (await stt.flush('release')).trim();
+    } catch (err) {
+      console.warn('[VoiceController] Dictation finalization failed:', err);
+    }
+
+    if (text) {
+      this.currentTranscript = text;
+      this.onTranscriptUpdate?.(text, true);
+      this.stopVoiceMode();
+      return text;
+    }
+
+    this.stopVoiceMode();
+    this.setState('ERROR', 'No speech was detected. Try again and speak a little closer to the microphone.');
+    return '';
+  }
+
   public stopVoiceMode(): void {
     this.isVoiceModeActive = false;
     this.setState('STOPPING');
