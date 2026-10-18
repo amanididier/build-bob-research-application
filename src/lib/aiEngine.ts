@@ -14,6 +14,7 @@ import { detectSystemHardware, MODEL_CATALOG, SystemHardwareInfo } from './hardw
 import { ModelTier } from '../types';
 import { resolveGeminiApiKey } from './ai/keyManager';
 import { buildSharedCompanionContext } from './companionContext';
+import { generateCompanionResponse } from './companionToolRunner';
 
 export interface ModelDownloadStatus {
   tier: ModelTier;
@@ -300,6 +301,9 @@ Response style (strict):
 - First let the user fully describe what they want. Only after you have the basic goal, constraints, and current stage should you suggest a roadmap.
 - Do not dump long lists, roadmaps, or multi-step plans unless the user asks or you have already collected enough core information.
 - Never repeat the user's prompt back to them. Never invent unnecessary detail.
+- When the user clearly asks you to create, complete, or save a task/note, use the matching workspace tool rather than merely saying you did it.
+- Use list_tasks or get_workspace_overview before referring to specific existing items. Do not claim an action succeeded unless the tool result confirms it.
+- When the user asks for a roadmap, open the interactive roadmap builder; do not claim it is saved until the user finishes it.
 
 ${dailyFocus ? `User's active focus for today: "${dailyFocus}". Keep this in mind when relevant.` : ''}
 ${tastePreference ? `User tone preference: "${tastePreference}".` : ''}
@@ -360,12 +364,24 @@ ${sharedContext || 'No additional shared workspace context available.'}`;
             }
           }
 
-          const result = await ai.models.generateContent({
-            model,
-            contents: [
-              { role: 'user', parts: [{ text: `${systemPrompt}\n\nUser Question: ${query}` }] }
-            ]
-          });
+          const result = onChunk
+            ? await ai.models.generateContent({
+                model,
+                contents: [
+                  { role: 'user', parts: [{ text: `${systemPrompt}\n\nUser Question: ${query}` }] }
+                ]
+              })
+            : {
+                text: (await generateCompanionResponse({
+                  ai,
+                  model,
+                  contents: [
+                    { role: 'user', parts: [{ text: `User Question: ${query}` }] }
+                  ],
+                  systemInstruction: systemPrompt,
+                  maxOutputTokens: 700,
+                })).text,
+              };
 
           if (result && result.text) {
             onChunk?.(result.text);
