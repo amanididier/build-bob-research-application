@@ -1107,9 +1107,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       if (detail.type === 'complete_task' && typeof detail.taskId === 'string') {
+        const completedAt = new Date().toISOString();
         setTasks((prev) => prev.map((task) =>
           task.id === detail.taskId && (!detail.projectId || task.projectId === detail.projectId)
-            ? { ...task, completed: true }
+            ? { ...task, completed: true, completedAt }
             : task
         ));
         return;
