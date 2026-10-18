@@ -19,6 +19,15 @@ function readJson(key: string): unknown {
   }
 }
 
+function readString(key: string): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    return window.localStorage.getItem(key) || '';
+  } catch {
+    return '';
+  }
+}
+
 function record(value: unknown): JsonRecord | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as JsonRecord
@@ -52,8 +61,8 @@ export function buildSharedCompanionContext(projectId?: string): string {
   const interests = list(readJson('bob_companion_memory_v1'))
     .filter((item): item is string => typeof item === 'string')
     .slice(-8);
-  const focus = text(readJson('bob_custom_focus_goal'), 180);
-  const focusProjectId = text(readJson('bob_focus_project_id'), 100);
+  const focus = text(readString('bob_custom_focus_goal'), 180);
+  const focusProjectId = text(readString('bob_focus_project_id'), 100);
   const roadmap = record(readJson('bob_phased_roadmap_v2'));
   const tabs = list(readJson('bob_tabs_catalog_v2'))
     .map(record)
