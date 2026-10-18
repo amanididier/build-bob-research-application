@@ -77,7 +77,7 @@ function buildWorkspaceContext(projectId: string): string {
       `Title: ${String(project.title || 'Untitled project')}`,
       project.summary ? `Summary: ${String(project.summary).slice(0, 900)}` : '',
       `Status: ${String(project.status || 'unknown')}; sources: ${Number(project.sourceCount) || 0}`,
-    ].filter(Boolean).join('\\n'));
+    ].filter(Boolean).join('\n'));
   }
 
   const allMessages = readJson('bob_session_messages_v3');
@@ -90,16 +90,16 @@ function buildWorkspaceContext(projectId: string): string {
       const text = String(message?.text || '').trim().slice(0, 700);
       return text ? `${role}: ${text}` : '';
     }).filter(Boolean);
-    if (recent.length) sections.push('RECENT PROJECT CONVERSATION\\n' + recent.join('\\n'));
+    if (recent.length) sections.push('RECENT PROJECT CONVERSATION\n' + recent.join('\n'));
   }
 
   const allTasks = readJson('bob_tasks_v2');
   if (Array.isArray(allTasks)) {
     const projectTasks = allTasks.filter((task: any) => task?.projectId === projectId).slice(0, 12);
     if (projectTasks.length) {
-      sections.push('PROJECT TASKS\\n' + projectTasks.map((task: any) =>
+      sections.push('PROJECT TASKS\n' + projectTasks.map((task: any) =>
         `- [${task.completed ? 'done' : 'open'}] ${String(task.title || 'Untitled task').slice(0, 180)} (due: ${String(task.dueDate || 'not set')})`
-      ).join('\\n'));
+      ).join('\n'));
     }
   }
 
@@ -114,7 +114,7 @@ function buildWorkspaceContext(projectId: string): string {
         ...roadmapTasks.map((task: any, index: number) =>
           `${index + 1}. ${String(task.title || 'Untitled milestone').slice(0, 180)}`
         ),
-      ].filter(Boolean).join('\\n'));
+      ].filter(Boolean).join('\n'));
     }
   }
 
@@ -122,9 +122,9 @@ function buildWorkspaceContext(projectId: string): string {
   if (Array.isArray(tabs)) {
     const selectedTabs = tabs.filter((tab: any) => tab?.selected).slice(0, 8);
     if (selectedTabs.length) {
-      sections.push('SELECTED RESEARCH TABS\\n' + selectedTabs.map((tab: any) =>
-        `- ${String(tab.title || tab.url || 'Untitled tab').slice(0, 180)}${tab.url ? ` — ${String(tab.url).slice(0, 220)}` : ''}${tab.preview ? `\\n  Preview: ${String(tab.preview).slice(0, 240)}` : ''}`
-      ).join('\\n'));
+      sections.push('SELECTED RESEARCH TABS\n' + selectedTabs.map((tab: any) =>
+        `- ${String(tab.title || tab.url || 'Untitled tab').slice(0, 180)}${tab.url ? ` — ${String(tab.url).slice(0, 220)}` : ''}${tab.preview ? `\n  Preview: ${String(tab.preview).slice(0, 240)}` : ''}`
+      ).join('\n'));
     }
   }
 
@@ -136,21 +136,21 @@ function buildWorkspaceContext(projectId: string): string {
         ? `Priorities: ${Object.entries(profile.priorities).filter(([, enabled]) => Boolean(enabled)).map(([key]) => key).join(', ')}`
         : '',
     ].filter(Boolean);
-    if (preferences.length) sections.push('USER RESPONSE PREFERENCES\\n' + preferences.join('\\n'));
+    if (preferences.length) sections.push('USER RESPONSE PREFERENCES\n' + preferences.join('\n'));
   }
 
   const companionMemory = readJson('bob_companion_memory_v1');
   if (Array.isArray(companionMemory) && companionMemory.length) {
-    sections.push('EXPLICITLY SHARED USER PREFERENCES\\n' + companionMemory.slice(-8)
+    sections.push('EXPLICITLY SHARED USER PREFERENCES\n' + companionMemory.slice(-8)
       .filter((fact: any) => typeof fact === 'string')
-      .map((fact: string) => `- ${fact.slice(0, 220)}`).join('\\n'));
+      .map((fact: string) => `- ${fact.slice(0, 220)}`).join('\n'));
   }
 
   const focus = localStorage.getItem('bob_custom_focus_goal');
-  if (focus) sections.push('CURRENT FOCUS\\n' + focus.slice(0, 300));
+  if (focus) sections.push('CURRENT FOCUS\n' + focus.slice(0, 300));
 
   // A bounded workspace snapshot protects latency and prompt size.
-  return sections.join('\\n\\n').slice(0, 7500);
+  return sections.join('\n\n').slice(0, 7500);
 }
 
 class BobAiManager {
