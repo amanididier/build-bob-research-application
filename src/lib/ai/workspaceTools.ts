@@ -315,7 +315,7 @@ export async function executeBobWorkspaceTool(
 
     case 'add_task': {
       const title = safeText(args.title, 180);
-      const explicitDueDate = /\b(today|tomorrow|tonight|this week|next week|monday|tuesday|wednesday|thursday|friday|saturday|sunday|in \d+ days?|by [a-z]+|before [a-z]+|\d{4}-\d{2}-\d{2}|\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?)\b/i.test(userQuery);
+      const explicitDueDate = /\b(today|tomorrow|tonight|this week|next week|monday|tuesday|wednesday|thursday|friday|saturday|sunday|in \d+ days?|in \d+ weeks?|in \d+ months?|end of (the )?month|by [a-z]+|before [a-z]+|\d{4}-\d{2}-\d{2}|\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?)\b/i.test(userQuery);
       const dueDate = explicitDueDate ? (safeText(args.due_date, 80) || 'Flexible') : 'Flexible';
       if (!title) return { ok: false, needsClarification: true, error: 'A task needs a title.' };
       const task = {
