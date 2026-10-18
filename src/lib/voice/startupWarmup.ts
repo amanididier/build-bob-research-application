@@ -6,7 +6,6 @@
  * Never throws into the UI and does not request microphone permission during boot.
  */
 
-import { localVoiceManager } from './localVoiceManager';
 import { resolveGeminiApiKey } from '../ai/keyManager';
 import { bobAi } from '../aiEngine';
 
@@ -70,17 +69,6 @@ async function warmAudioSubsystems(): Promise<void> {
   }
 }
 
-async function warmStt(): Promise<void> {
-  try {
-    if (localVoiceManager.isReady()) return;
-    if (localVoiceManager.isModelInstalled()) {
-      await localVoiceManager.ensureReady();
-    }
-  } catch (err) {
-    console.warn('[startupWarmup] STT warmup skipped:', err);
-  }
-}
-
 /**
  * Warm Gemini AI and audio subsystems in the background. Safe to call multiple times.
  */
@@ -91,8 +79,7 @@ export async function warmupVoiceEngine(): Promise<void> {
   warmupPromise = (async () => {
     await Promise.allSettled([
       warmGeminiEngine(),
-      warmAudioSubsystems(),
-      warmStt()
+      warmAudioSubsystems()
     ]);
     warmed = true;
   })().finally(() => {
