@@ -290,7 +290,7 @@ No markdown codeblocks or prose, only valid JSON array.`;
             title: item.title || `Milestone ${idx + 1}`,
             why: item.why || 'Critical execution milestone.',
             tools: Array.isArray(item.tools) && item.tools.length > 0 ? item.tools : selectedTools.slice(0, 2),
-            dueDate: idx === 0 ? 'Today' : (item.dueDate || dueDateLabel),
+            dueDate: item.dueDate || (idx === 0 ? 'First milestone' : dueDateLabel),
             enabled: true,
           }));
           setArrangedSteps(mapped);
