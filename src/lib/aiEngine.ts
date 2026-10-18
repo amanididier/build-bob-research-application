@@ -71,7 +71,7 @@ export function buildBobWorkspaceContext(projectId: string): string {
 
   const sections: string[] = [];
   const currentPage = readString('bob_current_page');
-  if (currentPage) sections.push('CURRENT APP VIEW\\n' + currentPage);
+  if (currentPage) sections.push('CURRENT APP VIEW\n' + currentPage);
   const projects = readJson('bob_research_sessions_v3');
   const projectList = Array.isArray(projects) ? projects : [];
   const project = projectList.find((item: any) => item?.id === projectId);
