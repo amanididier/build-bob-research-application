@@ -111,8 +111,20 @@ export const TasksPage: React.FC = () => {
   };
 
   const openFullRoadmap = () => {
+    const projectTasks = tasks
+      .filter((task) => task.projectId === activeProjectId)
+      .slice(0, 10)
+      .map((task) => `- [${task.completed ? 'done' : 'open'}] ${task.title}`)
+      .join('\\n');
     window.dispatchEvent(new CustomEvent('bob-open-roadmap', {
-      detail: { title: activeProject?.title || 'Project Roadmap', origin: 'tasks' }
+      detail: {
+        context: [
+          activeProject?.title ? `Active project: ${activeProject.title}` : '',
+          projectTasks ? `Existing tasks:\\n${projectTasks}` : '',
+        ].filter(Boolean).join('\\n'),
+        origin: 'tasks',
+        projectId: activeProjectId,
+      }
     }));
   };
 
