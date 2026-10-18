@@ -702,8 +702,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
   }, [tasks]);
 
-  // Seed Notes
-  const [notes, setNotes] = useState<ResearchNoteItem[]>([
+  // Load notebook notes from local storage; use examples only for a brand-new workspace.
+  const [notes, setNotes] = useState<ResearchNoteItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('bob_notes_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [
     {
       id: 'n-1',
       title: 'Booking abandonment friction',
@@ -728,7 +736,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       color: 'emerald',
       createdAt: 'Yesterday, 3:20 PM',
     },
-  ]);
+  ];
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('bob_notes_v1', JSON.stringify(notes));
+    } catch {}
+  }, [notes]);
 
   // Real-time synchronization with Bob Desktop bridge / Extension
   useEffect(() => {
@@ -996,28 +1011,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return newTasks.length;
   };
 
+  const syncNoteToMemory = (note: ResearchNoteItem) => {
+    localMemoryBank.upsertNoteMemory(note.id, {
+      type: 'note',
+      title: note.title,
+      content: note.selectedText,
+      sourceUrl: note.sourceUrl,
+      projectId: note.projectId,
+      tags: ['notebook', note.color],
+      relevanceWeight: note.relevance / 100,
+    });
+  };
+
   const addNote = (noteData: Omit<ResearchNoteItem, 'id' | 'createdAt'>) => {
     const newNote: ResearchNoteItem = {
       ...noteData,
-      id: `n-${Date.now()}`,
-      createdAt: 'Just now',
+      id: `n-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      createdAt: new Date().toISOString(),
     };
     setNotes((prev) => [newNote, ...prev]);
-
-    localMemoryBank.addMemory({
-      type: 'note',
-      title: newNote.title,
-      content: newNote.selectedText,
-      sourceUrl: newNote.sourceUrl,
-      projectId: newNote.projectId,
-      tags: ['notebook', newNote.color],
-      relevanceWeight: newNote.relevance / 100,
-    });
+    syncNoteToMemory(newNote);
     refreshMemoryStats();
   };
 
   const updateNote = (noteId: string, updates: Partial<Pick<ResearchNoteItem, 'title' | 'selectedText' | 'sourceTitle' | 'sourceUrl' | 'color'>>) => {
-    setNotes((prev) => prev.map((note) => note.id === noteId ? { ...note, ...updates } : note));
+    const current = notes.find((note) => note.id === noteId);
+    if (!current) return;
+    const updatedNote = { ...current, ...updates };
+    setNotes((prev) => prev.map((note) => note.id === noteId ? updatedNote : note));
+    syncNoteToMemory(updatedNote);
+    refreshMemoryStats();
   };
 
   const polishNote = async (noteId: string) => {
@@ -1027,19 +1050,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     triggerThinking('Polishing Note', 'Structuring takeaways and findings...', 'Formatting');
     const polished = await bobAi.polishResearchNote(target.title, target.selectedText);
 
-    setNotes((prev) =>
-      prev.map((n) =>
-        n.id === noteId
-          ? {
-              ...n,
-              title: polished.polishedTitle,
-              selectedText: polished.polishedContent,
-              relevance: 98,
-              isPolished: true,
-            }
-          : n
-      )
-    );
+    const updatedNote: ResearchNoteItem = {
+      ...target,
+      title: polished.polishedTitle,
+      selectedText: polished.polishedContent,
+      relevance: 98,
+      isPolished: true,
+    };
+    setNotes((prev) => prev.map((note) => note.id === noteId ? updatedNote : note));
+    syncNoteToMemory(updatedNote);
+    refreshMemoryStats();
   };
 
   const markNotificationsRead = () => {
