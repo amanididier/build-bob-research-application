@@ -66,7 +66,7 @@ export const TasksPage: React.FC = () => {
   const [projectFilter, setProjectFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [newTitle, setNewTitle] = useState('');
-  const [newDueDate, setNewDueDate] = useState('Tomorrow');
+  const [newDueDate, setNewDueDate] = useState('');
   const [isExtracting, setIsExtracting] = useState(false);
   const [taskExtractNotice, setTaskExtractNotice] = useState<string | null>(null);
   const [activeRoadmap, setActiveRoadmap] = useState<PhasedRoadmapData | null>(() =>
@@ -135,7 +135,7 @@ export const TasksPage: React.FC = () => {
     e.preventDefault();
     if (!newTitle.trim()) return;
     const destinationProjectId = projectFilter === 'all' ? activeProjectId : projectFilter;
-    addTask(newTitle.trim(), newDueDate, destinationProjectId);
+    addTask(newTitle.trim(), newDueDate.trim() || 'Flexible', destinationProjectId);
     setNewTitle('');
   };
 
