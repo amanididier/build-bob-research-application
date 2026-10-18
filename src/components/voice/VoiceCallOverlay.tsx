@@ -76,7 +76,7 @@ export const VoiceCallOverlay: React.FC<VoiceCallOverlayProps> = ({ onClose }) =
             <button
               onClick={() => setShowAgentsModal(true)}
               className="px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-[11px] font-semibold text-amber-300 flex items-center gap-1.5 hover:bg-amber-500/30 transition-colors cursor-pointer"
-              title="Primary Gemini Live quota reached / network interruption. Switched to fallback agent mode."
+              title="Gemini Live became unavailable; Bob switched to the fallback voice agent."
             >
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
               <span>{activeAgent.badge}</span>

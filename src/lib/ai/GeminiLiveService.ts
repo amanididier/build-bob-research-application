@@ -154,7 +154,7 @@ export class GeminiLiveService {
   ): Promise<boolean> {
     const resolvedKey = (apiKey || resolveGeminiApiKey() || '').trim();
     if (!resolvedKey) {
-      voiceDiagnostics.event('Primary Gemini Live quota reached / network interruption. Switched to fallback agent mode.');
+      voiceDiagnostics.event('Gemini Live connection unavailable; the controller will use its fallback path.');
       callbacks.onError?.('Missing Gemini API key');
       return false;
     }
@@ -299,7 +299,7 @@ export class GeminiLiveService {
           this.setupResolver = null;
           r?.(false);
         } else {
-          voiceDiagnostics.event('Primary Gemini Live quota reached / network interruption. Switched to fallback agent mode.');
+          voiceDiagnostics.event('Gemini Live connection unavailable; the controller will use its fallback path.');
           this.callbacks.onError?.('Gemini Live WebSocket error');
         }
       };
@@ -317,7 +317,7 @@ export class GeminiLiveService {
         } else {
           // Check for quota exhaustion / rate limits (e.g. 1008 policy violation, 429 code)
           const reason = event.reason || `Close code: ${event.code}`;
-          voiceDiagnostics.event('Primary Gemini Live quota reached / network interruption. Switched to fallback agent mode.');
+          voiceDiagnostics.event('Gemini Live connection closed unexpectedly; the controller will use its fallback path.');
           this.callbacks.onClosed?.(reason);
         }
       };
@@ -654,6 +654,9 @@ export class GeminiLiveService {
     this.isConnected = false;
     this.isConnecting = false;
     this.setupAcknowledged = false;
+    this.userSpeaking = false;
+    this.lastUserSpeechTimestamp = 0;
+    this.scheduledPlayTime = this.playbackAudioContext?.currentTime || 0;
     if (this.setupTimeout) {
       clearTimeout(this.setupTimeout);
       this.setupTimeout = null;
@@ -664,6 +667,7 @@ export class GeminiLiveService {
   public stop(): void {
     this.isStopped = true;
     this.cleanup();
+    this.callbacks = {};
   }
 }
 

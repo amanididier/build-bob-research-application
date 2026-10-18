@@ -9,7 +9,7 @@ import { SILENCE_TIMEOUT_MS, MAX_CALL_IDLE_MS, DEFAULT_VOICE_CONFIG } from './vo
 import { liveProvider } from './liveProvider';
 import { voiceDiagnostics } from './diagnostics';
 import { resolveGeminiApiKey } from '../ai/keyManager';
-import { geminiLiveService } from '../ai/GeminiLiveService';
+import { mergeStreamingText } from './transcriptMerge';
 
 const SILENCE_MS: Record<VoiceMode, number> = {
   // WhisperFlow dictation: finalize live words into composer after ~1.5s silence
@@ -27,6 +27,9 @@ export class VoiceController {
   private energyListeners: Set<(energy: number) => void> = new Set();
   private currentTranscript = '';
   private bobReply = '';
+  private liveInputTranscript = '';
+  private liveOutputTranscript = '';
+  private isUsingFallback = false;
   private isVoiceModeActive = false;
   private mode: VoiceMode = 'prompt';
   private chunker: ResponseTextChunker;
@@ -139,14 +142,26 @@ export class VoiceController {
   private isUsingLive = false;
 
   private async failoverToLegacyCall(stream: MediaStream): Promise<void> {
-    if (this.isUsingLive) {
-      liveProvider.stop();
-      this.isUsingLive = false;
-    }
+    // Live providers can emit both onerror and onclose for one failure. Start
+    // the fallback STT/VAD stack only once for this call session.
+    if (!this.isVoiceModeActive || this.mode !== 'call' || this.isUsingFallback) return;
+    this.isUsingFallback = true;
+    this.liveOutputTranscript = '';
+    this.bobReply = '';
+    liveProvider.stop();
+    this.isUsingLive = false;
     voiceDiagnostics.set({ provider: 'Fallback Secondary Agent', connection: 'active' });
     this.startVad(stream);
     this.armCallIdleTimer();
-    await this.startLegacySTT();
+    try {
+      await this.startLegacySTT();
+    } catch (err: any) {
+      voiceDiagnostics.event(`Fallback voice engine failed to start: ${String(err?.message || err).slice(0, 160)}`);
+      this.stopVoiceMode();
+      this.setState('ERROR', 'The fallback voice engine could not start. Check your microphone and Gemini settings.');
+      return;
+    }
+    if (!this.isVoiceModeActive) stt.stop();
   }
 
   private async startLegacySTT(): Promise<void> {
@@ -185,6 +200,7 @@ export class VoiceController {
         this.setState('ERROR', errMsg);
       }
     );
+    if (!this.isVoiceModeActive) stt.stop();
   }
 
   public isLiveModeActive(): boolean {
@@ -223,6 +239,12 @@ export class VoiceController {
     }
     if (this.isVoiceModeActive) return true;
 
+    this.isUsingLive = false;
+    this.isUsingFallback = false;
+    this.liveInputTranscript = '';
+    this.liveOutputTranscript = '';
+    this.currentTranscript = '';
+    this.bobReply = '';
     this.setState('REQUESTING_PERMISSION');
 
     try {
@@ -246,6 +268,10 @@ export class VoiceController {
                 voiceDiagnostics.event('Primary Gemini Live connected successfully');
               },
               onUserSpeechStart: () => {
+                this.liveInputTranscript = '';
+                this.liveOutputTranscript = '';
+                this.currentTranscript = '';
+                this.bobReply = '';
                 this.setState('USER_SPEAKING');
                 this.clearCallIdleTimer();
               },
@@ -255,11 +281,16 @@ export class VoiceController {
                 }
               },
               onUserTranscript: (text, _isFinal) => {
-                this.currentTranscript = text;
+                this.liveInputTranscript = mergeStreamingText(this.liveInputTranscript, text);
+                this.currentTranscript = this.liveInputTranscript;
                 this.notifyListeners();
               },
               onModelText: (text, _isFinal) => {
-                this.bobReply = text;
+                if (text) {
+                  this.liveOutputTranscript = mergeStreamingText(this.liveOutputTranscript, text);
+                  this.bobReply = this.liveOutputTranscript;
+                }
+                // Some providers send an empty final marker; preserve the accumulated reply.
                 this.notifyListeners();
               },
               onModelAudioStart: () => {
@@ -273,32 +304,40 @@ export class VoiceController {
               onInterrupted: () => {
                 this.setState('LISTENING');
               },
-              onError: (_err) => {
-                voiceDiagnostics.event('Primary Gemini Live quota reached / network interruption. Switched to fallback agent mode.');
+              onError: (err) => {
+                voiceDiagnostics.event(`Gemini Live error; switching to fallback agent mode: ${String(err || 'unknown error').slice(0, 160)}`);
                 void this.failoverToLegacyCall(stream);
               },
               onClosed: () => {
                 if (this.isVoiceModeActive && this.isUsingLive) {
-                  voiceDiagnostics.event('Primary Gemini Live quota reached / network interruption. Switched to fallback agent mode.');
+                  voiceDiagnostics.event('Gemini Live connection closed; switching to fallback agent mode.');
                   void this.failoverToLegacyCall(stream);
                 }
               },
             });
 
             if (connected) {
+              if (!this.isVoiceModeActive) {
+                liveProvider.stop();
+                return false;
+              }
+              if (this.isUsingFallback) return true;
               this.isUsingLive = true;
               return true;
             }
           } catch {
-            voiceDiagnostics.event('Primary Gemini Live quota reached / network interruption. Switched to fallback agent mode.');
+            voiceDiagnostics.event('Gemini Live connection attempt failed; checking fallback availability.');
           }
         } else {
-          voiceDiagnostics.event('Primary Gemini Live quota reached / network interruption. Switched to fallback agent mode.');
+          voiceDiagnostics.event('Gemini Live is unavailable or no API key is configured; checking fallback availability.');
         }
+
+        if (!this.isVoiceModeActive) return false;
+        if (this.isUsingFallback) return true;
 
         // Secondary legacy fallback
         await this.failoverToLegacyCall(stream);
-        return true;
+        return this.isVoiceModeActive;
       }
 
       // Prompt / Dictation mode: default live transcription pipeline with Gemini STT fallback
@@ -415,6 +454,33 @@ export class VoiceController {
     }
   }
 
+  /**
+   * End manual prompt dictation, flush the last audio slice, and leave the
+   * transcript in the editable composer. Unlike Call mode, this never submits.
+   */
+  public async finishPromptDictation(): Promise<string> {
+    if (!this.isVoiceModeActive || this.mode !== 'prompt') return '';
+
+    this.setState('TRANSCRIBING');
+    let text = '';
+    try {
+      text = (await stt.flush('release')).trim();
+    } catch (err) {
+      console.warn('[VoiceController] Dictation finalization failed:', err);
+    }
+
+    if (text) {
+      this.currentTranscript = text;
+      this.onTranscriptUpdate?.(text, true);
+      this.stopVoiceMode();
+      return text;
+    }
+
+    this.stopVoiceMode();
+    this.setState('ERROR', 'No speech was detected. Try again and speak a little closer to the microphone.');
+    return '';
+  }
+
   public stopVoiceMode(): void {
     this.isVoiceModeActive = false;
     this.setState('STOPPING');
@@ -439,6 +505,10 @@ export class VoiceController {
     micManager.stopCapture();
     this.chunker.reset();
     this.currentTranscript = '';
+    this.liveInputTranscript = '';
+    this.liveOutputTranscript = '';
+    this.bobReply = '';
+    this.isUsingFallback = false;
     this.isSubmitting = false;
 
     this.setState('IDLE');
