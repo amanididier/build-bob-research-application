@@ -463,7 +463,7 @@ class BobAiManager {
     // this answer. Earlier summaries are consulted only on explicit recall.
     const userMemory = loadUserMemory();
     const relevantUserFacts = selectRelevantFacts(userMemory.important_facts || [], query, { limit: 4 });
-    const recallRequested = /\b(remember|recall|previous|earlier|last time|last conversation|what did we|what were we|where did we stop|continue where|what did i say|what did i tell you|our last chat|we discussed|we decided)\b/i.test(query);
+    const recallRequested = /\b(what do you remember|what can you remember|what do you know about me|what have we discussed|what did we discuss|what did we decide|what did i say|what did i tell you|what were we working on|where did we stop|where were we|where did we leave off|continue where we left off|pick up where we left off|our last chat|our previous conversation|last conversation|previous conversation|earlier conversation)\b/i.test(query);
     const summaryItems = (userMemory.conversation_summaries || []).map((item: any) =>
       typeof item === 'string' ? item : String(item?.summary || '')
     ).filter((summary: string) => summary.trim());
