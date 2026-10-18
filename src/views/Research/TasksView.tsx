@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { Check, Lock, Sparkles, Star } from 'lucide-react';
 import { TaskStepExecutionView } from '../../components/roadmap/TaskStepExecutionView';
 import type { PhasedTask } from '../../components/roadmap/RoadmapWizardModal';
+import { loadRoadmapForProject } from '../../lib/roadmap/roadmapStorage';
 
 interface TasksViewProps {
   isSidePanel?: boolean;
@@ -13,20 +14,14 @@ const COMPLETED_KEY = 'bob_phased_completed_v1';
 const STARS_KEY = 'bob_roadmap_stars_v1';
 
 function loadPhased(projectId: string): PhasedTask[] | null {
+  // Prefer the canonical project-scoped roadmap so older execution-view saves
+  // cannot overwrite a newer roadmap for the same project.
+  const canonical = loadRoadmapForProject(projectId);
+  if (Array.isArray(canonical?.tasks)) return canonical.tasks as PhasedTask[];
+
   try {
     const all = JSON.parse(localStorage.getItem(PHASED_KEY) || '{}');
-    if (Array.isArray(all[projectId])) return all[projectId];
-
-    // Migrate/read the adaptive RoadmapSheet's canonical roadmap for this project.
-    const roadmap = JSON.parse(localStorage.getItem('bob_phased_roadmap_v2') || 'null');
-    if (
-      roadmap &&
-      (!roadmap.projectId || roadmap.projectId === projectId) &&
-      Array.isArray(roadmap.tasks)
-    ) {
-      return roadmap.tasks;
-    }
-    return null;
+    return Array.isArray(all[projectId]) ? all[projectId] : null;
   } catch {
     return null;
   }
@@ -195,10 +190,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ isSidePanel = false }) => 
   useEffect(() => {
     const syncRoadmap = () => {
       try {
-        const raw = localStorage.getItem('bob_phased_roadmap_v2');
-        if (!raw) return;
-        const roadmap = JSON.parse(raw);
-        if (roadmap?.projectId && roadmap.projectId !== projectId) return;
+        const roadmap = loadRoadmapForProject(projectId);
         if (!Array.isArray(roadmap?.tasks)) return;
 
         const loaded = roadmap.tasks as PhasedTask[];
