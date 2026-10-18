@@ -50,14 +50,14 @@ export class LocalResearchMemoryBank {
         // Remove those known demo IDs during migration so they are never cited
         // as if the user actually researched these topics.
         const knownDemoMemories = new Set([
-          'mem-1|Transport checkout abandonment rate',
-          'mem-2|Seat availability ambiguity',
-          'mem-3|Rwanda transport booking workflow notes',
-          'mem-4|Operator fee tolerance threshold',
-          'mem-5|Local AI quantization benchmark',
+          'mem-1|Transport checkout abandonment rate|https://research.example.com/transport-booking',
+          'mem-2|Seat availability ambiguity|https://research.example.com/transport-booking',
+          'mem-3|Rwanda transport booking workflow notes|https://docs.google.com/document/d/transport-rwanda',
+          'mem-4|Operator fee tolerance threshold|https://chatgpt.com/share/transport-economics',
+          'mem-5|Local AI quantization benchmark|https://arxiv.org/abs/2401.00001',
         ]);
         this.memoryCache = memories.filter((node: Partial<MemoryNode>) =>
-          !knownDemoMemories.has(`${String(node?.id || '')}|${String(node?.title || '')}`)
+          !knownDemoMemories.has(`${String(node?.id || '')}|${String(node?.title || '')}|${String(node?.sourceUrl || '')}`)
         );
         if (this.memoryCache.length !== memories.length) this.saveToDisk();
       } else {
