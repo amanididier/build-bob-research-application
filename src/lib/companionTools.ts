@@ -184,8 +184,10 @@ export async function executeCompanionTool(name: string, rawArgs: unknown): Prom
         'Project: ' + cleanString(project?.title, 160),
         cleanString(args.context, 1200),
       ].filter(Boolean).join('\n');
+      const currentPage = cleanString(localStorage.getItem('bob_current_page'), 40);
+      const origin = currentPage === 'research' ? 'research-tasks' : currentPage === 'chat' ? 'chat' : 'desktop';
       window.dispatchEvent(new CustomEvent('bob-open-roadmap', {
-        detail: { title: goal, context, origin: 'chat', projectId },
+        detail: { title: goal, context, origin, projectId },
       }));
       return { ok: true, opened: true, goal, message: 'The interactive roadmap builder has been opened. Do not claim the roadmap is saved until the user completes it.' };
     }
