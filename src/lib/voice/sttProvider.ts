@@ -1,6 +1,5 @@
 import { STTEvent } from './types';
 import { micManager } from './microphoneManager';
-import { localVoiceManager } from './localVoiceManager';
 import { pcmRecorder } from './pcmRecorder';
 import { geminiTranscriptionService } from '../ai/GeminiTranscriptionService';
 import { resolveGeminiApiKey } from '../ai/keyManager';
@@ -40,7 +39,6 @@ export class DualEngineSTTProvider implements STTProvider {
   private committedSampleCount = 0;
   private rollTimer: any = null;
   private webSpeechProducedText = false;
-  private hasWhisper = false;
 
   constructor() {
     this.initWebSpeech();
@@ -82,16 +80,10 @@ export class DualEngineSTTProvider implements STTProvider {
       pcmRecorder.start(stream);
     }
 
-    // Warm on-device model if present
-    this.hasWhisper = localVoiceManager.isReady();
-    if (!this.hasWhisper && localVoiceManager.isModelInstalled()) {
-      void localVoiceManager.ensureReady().then((ok) => {
-        this.hasWhisper = ok;
-      });
-    }
-
+    // Dictation uses Gemini transcription, with browser SpeechRecognition as
+    // the instant fallback. Never load a local Whisper model in the background.
     const apiKey = resolveGeminiApiKey();
-    if (!this.recognition && !localVoiceManager.isModelInstalled() && !apiKey) {
+    if (!this.recognition && !apiKey) {
       onError(
         'Gemini API key required for voice dictation. Add your key in Settings.'
       );
@@ -174,21 +166,8 @@ export class DualEngineSTTProvider implements STTProvider {
         }
       }
 
-      // Secondary: On-device Whisper if installed
-      if (this.hasWhisper || localVoiceManager.isModelInstalled()) {
-        const text = await this.withTimeout(
-          localVoiceManager.transcribeSamples(slice),
-          isFinal ? FLUSH_TIMEOUT_MS : CHUNK_TIMEOUT_MS
-        );
-        this.committedSampleCount += slice.length;
-        const clean = (text || '').trim();
-        if (clean) {
-          this.fullTranscript += (this.fullTranscript ? ' ' : '') + clean;
-          this.onTranscriptCallback?.({ transcript: this.fullTranscript, isFinal });
-        }
-        return clean;
-      }
-
+      // No local model fallback: if Gemini fails, browser SpeechRecognition
+      // remains the only alternate path and flush() reports a clear error otherwise.
       return '';
     } catch (e: any) {
       console.warn('[DualEngineSTT] Transcription warning:', e);
@@ -269,7 +248,7 @@ export class DualEngineSTTProvider implements STTProvider {
 
   /**
    * Finalizes the current turn: transcribes whatever is recorded and returns
-   * the complete transcript. Never silently hangs.
+   * the complete transcript. Gemini is the audio transcription engine; no local model is loaded.
    */
   public async flush(reason: 'release' | 'vad' = 'release'): Promise<string> {
     if (!this.active) return this.fullTranscript.trim();
