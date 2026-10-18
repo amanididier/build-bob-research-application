@@ -56,6 +56,9 @@ export function buildSharedCompanionContext(projectId?: string): string {
   const tasks = list(readJson('bob_tasks_v2'))
     .map(record)
     .filter((item): item is JsonRecord => Boolean(item));
+  const notes = list(readJson('bob_notes_v1'))
+    .map(record)
+    .filter((item): item is JsonRecord => Boolean(item));
   const profile = record(readJson('bob_profile_preferences_v1')) || {};
   const personalization = record(readJson('bob_system_personalization')) || {};
   const interests = list(readJson('bob_companion_memory_v1'))
@@ -90,6 +93,21 @@ export function buildSharedCompanionContext(projectId?: string): string {
         status: task.completed === true ? 'completed' : 'open',
         due: text(task.dueDate, 80),
         projectId: text(task.projectId, 100),
+      }))
+    ));
+  }
+
+  const relevantNotes = notes.filter((note) => {
+    const noteProjectId = text(note.projectId, 100);
+    return !projectId || !noteProjectId || noteProjectId === 'general' || noteProjectId === projectId;
+  });
+  if (relevantNotes.length) {
+    sections.push('Saved notes: ' + JSON.stringify(
+      relevantNotes.slice(0, 8).map((note) => ({
+        title: text(note.title, 160),
+        content: text(note.selectedText || note.content, 320),
+        source: text(note.sourceTitle, 120),
+        projectId: text(note.projectId, 100),
       }))
     ));
   }
