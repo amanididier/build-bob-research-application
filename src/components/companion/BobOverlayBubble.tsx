@@ -37,7 +37,7 @@ Do not write long research reports. If the user needs deep research, roadmap, or
 Never invent sources. Match the user's language.`;
 
 export const BobOverlayBubble: React.FC = () => {
-  const { currentPage, navigateTo, userName, openChromeBridge } = useApp();
+  const { currentPage, navigateTo, userName, activeResearchId, openChromeBridge } = useApp();
 
   const [currentRoutine, setCurrentRoutine] = useState<RoutineDetail>(() => bobRoutines.getCurrentRoutine());
   const [minutesOfDay, setMinutesOfDay] = useState(() => bobRoutines.getCurrentMinutesOfDay());
@@ -174,7 +174,7 @@ export const BobOverlayBubble: React.FC = () => {
           ]
             .filter(Boolean)
             .join('\n');
-          const res = await bobAi.generateResearchAnswer(prompt, 'overlay-chat', undefined, 'warm short chat', undefined, query);
+          const res = await bobAi.generateResearchAnswer(prompt, activeResearchId, undefined, 'warm short chat', undefined, query);
           reply = (res?.answer || '').trim();
         }
       } catch {
