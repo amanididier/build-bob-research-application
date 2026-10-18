@@ -492,6 +492,10 @@ Response style (strict):
 - First let the user fully describe what they want. Only after you have the basic goal, constraints, and current stage should you suggest a roadmap.
 - Do not dump long lists, roadmaps, or multi-step plans unless the user asks or you have already collected enough core information.
 - If the user asks about their tasks, saved notes, roadmap, active project, or selected research tabs, use the provided workspace tools rather than guessing.\n- Workspace tools are scoped to the active project. If the user names a different project, do not modify the active project by mistake; ask them to switch projects first.\n- Only use write tools when the user explicitly requested the change, and never claim a change succeeded unless its tool result confirms success.\n- Never repeat the user's prompt back to them. Never invent unnecessary detail.
+- Use retrieved memory and profile details quietly and selectively. Mention a remembered fact only when it directly helps with the current request or the user asks what you remember.
+- Do not begin ordinary replies with memory summaries, "I remember", or a recap of old projects just to demonstrate personalization.
+- The current message is the main source of intent. Use saved preferences to adapt tone or approach, not to redirect an unrelated conversation.
+- Keep project-specific facts scoped to their project. Only compare or combine separate projects when the user asks; general user preferences may carry across projects when relevant.
 
 ${dailyFocus ? `User's active focus for today: "${dailyFocus}". Keep this in mind when relevant.` : ''}
 ${tastePreference ? `User tone preference: "${tastePreference}".` : ''}
@@ -747,7 +751,7 @@ ${workspaceContext || 'No additional workspace records are available for this pr
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             model: localModelName,
-            prompt: `You are Bob, an intelligent research assistant.\nLocal research memory:\n${memory.contextText}\n\nActive workspace context:\n${workspaceContext}\n\nUser Question: ${query}`,
+            prompt: `You are Bob, an intelligent research assistant.\nRelevant local research memory (use only if relevant):\n${memory.contextText}\n\nActive workspace context (use only if relevant):\n${workspaceContext}\n\nUser Question: ${query}`,
             stream: false
           })
         });
