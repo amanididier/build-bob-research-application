@@ -242,6 +242,7 @@ class BobAiManager {
         localStorage.removeItem(GEMINI_KEY_STORAGE);
       }
     }
+    void this.startBackgroundDownload();
   }
 
   public hasGeminiKey(): boolean {
@@ -271,6 +272,10 @@ class BobAiManager {
     try {
       localStorage.setItem(VERIFIED_MODEL_STORAGE, this.verifiedModel);
     } catch {}
+    if (this.downloadStatus?.provider === 'gemini') {
+      this.downloadStatus = { ...this.downloadStatus, modelName: `Gemini API · ${this.verifiedModel}` };
+      this.notify();
+    }
   }
 
   public getTastePreference(): string {
