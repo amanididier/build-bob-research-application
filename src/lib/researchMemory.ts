@@ -32,64 +32,6 @@ export interface MemoryBankStats {
 const STORAGE_KEY = 'bob_local_research_memory_v1';
 
 // Seed default initial research memory bank if empty
-const DEFAULT_MEMORIES: MemoryNode[] = [
-  {
-    id: 'mem-1',
-    type: 'note',
-    title: 'Transport checkout abandonment rate',
-    content: 'Passenger drop-off occurs most frequently (over 45%) during price calculation when unexpected mobile carrier surcharges and booking fees appear right before payment confirmation.',
-    sourceUrl: 'https://research.example.com/transport-booking',
-    projectId: 'urugendo',
-    tags: ['pricing', 'friction', 'checkout'],
-    relevanceWeight: 0.95,
-    timestamp: Date.now() - 3600000 * 24,
-  },
-  {
-    id: 'mem-2',
-    type: 'highlight',
-    title: 'Seat availability ambiguity',
-    content: 'Unlike ride-hailing in mature markets, regional inter-city transport passengers require explicit physical station location and vehicle plate validation before paying.',
-    sourceUrl: 'https://research.example.com/transport-booking',
-    projectId: 'urugendo',
-    tags: ['dispatch', 'seat-inventory', 'trust'],
-    relevanceWeight: 0.91,
-    timestamp: Date.now() - 3600000 * 18,
-  },
-  {
-    id: 'mem-3',
-    type: 'tab',
-    title: 'Rwanda transport booking workflow notes',
-    content: 'Field observations indicate bus operators prioritize offline ticket booth walk-ups unless digital reservations are guaranteed via real-time SMS webhook.',
-    sourceUrl: 'https://docs.google.com/document/d/transport-rwanda',
-    projectId: 'urugendo',
-    tags: ['rwanda', 'operations', 'sms'],
-    relevanceWeight: 0.88,
-    timestamp: Date.now() - 3600000 * 12,
-  },
-  {
-    id: 'mem-4',
-    type: 'synthesis',
-    title: 'Operator fee tolerance threshold',
-    content: 'Cooperatives show willingness to pay a 2.5% to 3.5% ticketing commission if fraud chargebacks and daily cash reconciliation are automated.',
-    sourceUrl: 'https://chatgpt.com/share/transport-economics',
-    projectId: 'urugendo',
-    tags: ['commission', 'fintech', 'cooperatives'],
-    relevanceWeight: 0.85,
-    timestamp: Date.now() - 3600000 * 4,
-  },
-  {
-    id: 'mem-5',
-    type: 'note',
-    title: 'Local AI quantization benchmark',
-    content: 'Sub-500MB quantized models (Q4_K_M) achieve 35+ tokens per second on low-end quad-core CPUs with 4GB RAM, making on-device private inference viable without cloud tokens.',
-    sourceUrl: 'https://arxiv.org/abs/2401.00001',
-    projectId: 'local-ai',
-    tags: ['ai', 'quantization', '4gb-ram', 'offline'],
-    relevanceWeight: 0.94,
-    timestamp: Date.now() - 3600000 * 2,
-  },
-];
-
 export class LocalResearchMemoryBank {
   private memoryCache: MemoryNode[] = [];
 
@@ -102,13 +44,20 @@ export class LocalResearchMemoryBank {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
-        this.memoryCache = JSON.parse(raw);
+        const parsed = JSON.parse(raw);
+        const memories = Array.isArray(parsed) ? parsed : [];
+        // Older builds seeded fake example research into real users' memory.
+        // Remove those known demo IDs during migration so they are never cited
+        // as if the user actually researched these topics.
+        this.memoryCache = memories.filter((node: Partial<MemoryNode>) =>
+          !['mem-1', 'mem-2', 'mem-3', 'mem-4', 'mem-5'].includes(String(node?.id || ''))
+        );
+        if (this.memoryCache.length !== memories.length) this.saveToDisk();
       } else {
-        this.memoryCache = [...DEFAULT_MEMORIES];
-        this.saveToDisk();
+        this.memoryCache = [];
       }
     } catch {
-      this.memoryCache = [...DEFAULT_MEMORIES];
+      this.memoryCache = [];
     }
   }
 
