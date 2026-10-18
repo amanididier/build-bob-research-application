@@ -44,6 +44,9 @@ jobs:
           done
           exit 1
 
+      - name: Test companion workspace tools
+        run: npm run test:companion-tools
+
       - name: TypeScript validation
         run: npm run lint
 
