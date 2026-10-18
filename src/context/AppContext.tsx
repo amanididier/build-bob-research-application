@@ -685,18 +685,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Load only real saved tasks. Migrate unchanged prototype tasks out of older installs.
   const [tasks, setTasks] = useState<ResearchTaskItem[]>(() => {
-    const demoTasks = new Set([
-      't-1|Validate the core problem with 2 users',
-      't-2|Write problem statement on checkout friction',
-      't-3|Compare 3 competitor ticket dispatch apps',
-    ]);
+    const demoTasks = [
+      { id: 't-1', title: 'Validate the core problem with 2 users', dueDate: 'Today · 8:00 PM', sourceConnection: 'Connected to 5 sources', completed: false, projectId: 'urugendo' },
+      { id: 't-2', title: 'Write problem statement on checkout friction', dueDate: 'Today · 8:00 PM', sourceConnection: 'Connected to 3 AI chats', completed: true, projectId: 'urugendo' },
+      { id: 't-3', title: 'Compare 3 competitor ticket dispatch apps', dueDate: 'Tomorrow', sourceConnection: 'Connected to 4 tabs', completed: false, projectId: 'urugendo' },
+    ];
     try {
       const stored = localStorage.getItem('bob_tasks_v2');
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
           return parsed.filter((task: Partial<ResearchTaskItem>) =>
-            !demoTasks.has(`${String(task?.id || '')}|${String(task?.title || '')}`)
+            !demoTasks.some((demo) =>
+              task?.id === demo.id &&
+              task?.title === demo.title &&
+              task?.dueDate === demo.dueDate &&
+              task?.sourceConnection === demo.sourceConnection &&
+              task?.completed === demo.completed &&
+              task?.projectId === demo.projectId
+            )
           );
         }
       }
@@ -712,17 +719,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Load real saved notes and remove unchanged example notes from older builds.
   const [notes, setNotes] = useState<ResearchNoteItem[]>(() => {
-    const demoNotes = new Set([
-      'n-1|Booking abandonment friction',
-      'n-2|Sub-400MB Local Inference Allocation',
-    ]);
+    const demoNotes = [
+      {
+        id: 'n-1',
+        title: 'Booking abandonment friction',
+        selectedText: 'Users often leave booking flows when prices, seat availability, or pickup details are unclear. A useful research workflow should preserve the exact evidence behind these observations instead of only saving a page title.',
+        sourceTitle: 'Why people abandon online transport booking',
+        sourceUrl: 'research.example.com/transport-booking',
+        projectId: 'urugendo',
+        relevance: 96,
+        color: 'emerald',
+        createdAt: 'Today, 10:14 AM',
+      },
+      {
+        id: 'n-2',
+        title: 'Sub-400MB Local Inference Allocation',
+        selectedText: 'Sparse attention layers in modern architectures reduce KV-cache memory pressure by up to 60%, allowing local LLMs to run with sub-400MB RAM allocations on consumer PCs.',
+        sourceTitle: 'Attention Mechanism Scaling & Sparsity',
+        sourceUrl: 'arxiv.org/abs/1706.03762',
+        projectId: 'bob-startup',
+        relevance: 92,
+        color: 'emerald',
+        createdAt: 'Yesterday, 3:20 PM',
+      },
+    ];
     try {
       const saved = localStorage.getItem('bob_notes_v1');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
           return parsed.filter((note: Partial<ResearchNoteItem>) =>
-            !demoNotes.has(`${String(note?.id || '')}|${String(note?.title || '')}`)
+            !demoNotes.some((demo) =>
+              note?.id === demo.id &&
+              note?.title === demo.title &&
+              note?.selectedText === demo.selectedText &&
+              note?.sourceTitle === demo.sourceTitle &&
+              note?.sourceUrl === demo.sourceUrl &&
+              note?.projectId === demo.projectId &&
+              note?.relevance === demo.relevance &&
+              note?.color === demo.color &&
+              note?.createdAt === demo.createdAt
+            )
           );
         }
       }
