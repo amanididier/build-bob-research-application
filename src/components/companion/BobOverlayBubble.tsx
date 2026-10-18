@@ -166,15 +166,24 @@ export const BobOverlayBubble: React.FC = () => {
       let reply = '';
       try {
         if (bobAi?.generateResearchAnswer) {
-          const prompt = [
+          const surfaceContext = [
             CHAT_SYSTEM,
             selectedExcerpt ? `Selected page text: ${selectedExcerpt.slice(0, 400)}` : '',
             `Bob routine: ${currentRoutine.label}`,
-            `User message: ${userLine}`,
           ]
             .filter(Boolean)
             .join('\n');
-          const res = await bobAi.generateResearchAnswer(prompt, activeResearchId, undefined, 'warm short chat', undefined, query);
+          // Keep the actual user message separate from surface guidance. The AI
+          // engine uses its query argument for memory retrieval and tool intent;
+          // passing the whole system prompt there made unrelated memories match.
+          const res = await bobAi.generateResearchAnswer(
+            userLine,
+            activeResearchId || undefined,
+            undefined,
+            'warm short chat',
+            surfaceContext,
+            query
+          );
           reply = (res?.answer || '').trim();
         }
       } catch {
