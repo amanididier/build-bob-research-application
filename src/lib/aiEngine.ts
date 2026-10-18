@@ -473,6 +473,7 @@ ${workspaceContext || 'No additional workspace records are available for this pr
       ];
 
       let workspaceWriteExecuted = false;
+      let workspaceWriteNeedsClarification = false;
       for (const model of uniqueModels) {
         try {
           const ai = new GoogleGenAI({ apiKey: geminiKey });
@@ -536,6 +537,7 @@ ${workspaceContext || 'No additional workspace records are available for this pr
                 projectId
               );
               executedWorkspaceTool = true;
+              if (toolResult?.needsClarification || toolResult?.notFound) workspaceWriteNeedsClarification = true;
               if (toolResult?.ok && ['note_saved', 'task_added', 'task_completed'].includes(String(toolResult.action))) {
                 executedWorkspaceWrite = true;
                 workspaceWriteExecuted = true;
@@ -559,6 +561,19 @@ ${workspaceContext || 'No additional workspace records are available for this pr
 
           const answerText = String(result?.text || '').trim();
           if (answerText) {
+            if (hasWriteTools && !workspaceWriteExecuted && !workspaceWriteNeedsClarification) {
+              const safeAnswer = 'I did not change anything yet because I could not verify that workspace action. Please try again or tell me exactly which task or note you mean.';
+              onChunk?.(safeAnswer);
+              return {
+                answer: safeAnswer,
+                sources: citations,
+                latencyMs: Math.round(performance.now() - startTime),
+                modelTier: 'cloud-gemini',
+                modelName: model,
+                memoryNodesUsed: memory.citedNodes.length,
+                provider: 'gemini',
+              };
+            }
             onChunk?.(answerText);
             const latencyMs = Math.round(performance.now() - startTime);
             return {
