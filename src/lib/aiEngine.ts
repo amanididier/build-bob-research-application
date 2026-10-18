@@ -455,7 +455,7 @@ Response style (strict):
 - If you need more information, ask exactly ONE focused question at a time. Wait for the answer before asking another.
 - First let the user fully describe what they want. Only after you have the basic goal, constraints, and current stage should you suggest a roadmap.
 - Do not dump long lists, roadmaps, or multi-step plans unless the user asks or you have already collected enough core information.
-- If the user asks about their tasks, saved notes, roadmap, active project, or selected research tabs, use the provided workspace tools rather than guessing.\n- Only use write tools when the user explicitly requested the change, and never claim a change succeeded unless its tool result confirms success.\n- Never repeat the user's prompt back to them. Never invent unnecessary detail.
+- If the user asks about their tasks, saved notes, roadmap, active project, or selected research tabs, use the provided workspace tools rather than guessing.\n- Workspace tools are scoped to the active project. If the user names a different project, do not modify the active project by mistake; ask them to switch projects first.\n- Only use write tools when the user explicitly requested the change, and never claim a change succeeded unless its tool result confirms success.\n- Never repeat the user's prompt back to them. Never invent unnecessary detail.
 
 ${dailyFocus ? `User's active focus for today: "${dailyFocus}". Keep this in mind when relevant.` : ''}
 ${tastePreference ? `User tone preference: "${tastePreference}".` : ''}
