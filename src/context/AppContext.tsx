@@ -182,6 +182,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
     return 'dashboard';
   });
+  useEffect(() => {
+    try {
+      localStorage.setItem('bob_current_page', currentPage);
+    } catch {}
+  }, [currentPage]);
+
   const [researchSubView, setResearchSubView] = useState<ResearchSubView>('chat');
   const [activeResearchId, setActiveResearchId] = useState<string>('urugendo');
   useEffect(() => {
