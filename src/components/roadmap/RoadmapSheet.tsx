@@ -72,6 +72,7 @@ export interface RoadmapSheetProps {
   onClose?: () => void;
   onFinish?: (steps: RoadmapStepItem[]) => void;
   initialGoal?: string;
+  initialContext?: string;
   standalone?: boolean;
 }
 
@@ -80,11 +81,12 @@ export const RoadmapSheet: React.FC<RoadmapSheetProps> = ({
   onClose: propsOnClose,
   onFinish: propsOnFinish,
   initialGoal,
+  initialContext,
 }) => {
   const { userName, triggerThinking, addTask, navigateTo, activeResearchId, projects, currentPage } = useApp();
   const [internalOpen, setInternalOpen] = useState(false);
   const [goalQuery, setGoalQuery] = useState(initialGoal || '');
-  const [conversationContext, setConversationContext] = useState('');
+  const [conversationContext, setConversationContext] = useState(initialContext || '');
   const [stepIndex, setStepIndex] = useState(0); // Intro, goal, 3 adaptive questions, arranger, result
   const [originSource, setOriginSource] = useState<'chat' | 'desktop' | 'tasks' | 'research-tasks'>('chat');
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
