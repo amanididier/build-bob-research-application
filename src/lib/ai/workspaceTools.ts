@@ -123,7 +123,7 @@ const COMPLETE_TASK_TOOL = {
 };
 
 function isInstructionalQuestion(query: string): boolean {
-  return /^\\s*(how do i|how can i|what is the best way to|what does it mean to|explain|why should i|can you explain)\\b/i.test(query);
+  return /^\s*(how do i|how can i|what is the best way to|what does it mean to|explain|why should i|can you explain)\b/i.test(query);
 }
 
 function hasNoteWriteIntent(query: string): boolean {
