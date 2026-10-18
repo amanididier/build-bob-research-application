@@ -21,10 +21,10 @@ export interface ModelDownloadStatus {
   modelName: string;
   totalBytes: number;
   downloadedBytes: number;
-  progressPercent: number; // 0 to 100
+  progressPercent: number; // Provider setup readiness; Bob does not download local language models.
   downloadSpeedMbps: number;
   isDownloading: boolean;
-  isReady: boolean;
+  isReady: boolean; // True when Gemini is configured or Ollama has an installed model.
   provider?: 'gemini' | 'ollama' | 'none';
   error?: string;
 }
