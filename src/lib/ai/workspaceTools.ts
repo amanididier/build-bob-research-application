@@ -127,19 +127,25 @@ function isInstructionalQuestion(query: string): boolean {
 }
 
 function hasNoteWriteIntent(query: string): boolean {
-  if (isInstructionalQuestion(query)) return false;
-  return /\b(save|create|write|add|keep|capture)\b.{0,70}\b(notes?|notebook)\b|\b(notes?|notebook)\b.{0,70}\b(save|create|write|add|keep|capture)\b/i.test(query);
+  if (isInstructionalQuestion(query) || /^\\s*(maybe|i wonder|i should|should i)\\b/i.test(query)) return false;
+  return /\\b(?:please\\s+)?(?:save|create|write|add|keep|capture)\\b.{0,70}\\b(notes?|notebook)\\b/i.test(query)
+    || /\\b(?:can|could|would) you\\b.{0,40}\\b(?:save|create|write|add|keep|capture)\\b.{0,50}\\b(notes?|notebook)\\b/i.test(query)
+    || /\\b(?:i want|i need|i'd like|i would like) to\\b.{0,35}\\b(?:save|create|write|add|keep|capture)\\b.{0,50}\\b(notes?|notebook)\\b/i.test(query);
 }
 
 function hasTaskAddIntent(query: string): boolean {
-  if (isInstructionalQuestion(query)) return false;
-  return /\b(remind me to|add|create|make|schedule|put|include)\b.{0,70}\b(tasks?|to-?dos?|reminders?|my list|task list)\b|\bremind me to\b/i.test(query);
+  if (isInstructionalQuestion(query) || /^\\s*(maybe|i wonder|i should|should i)\\b/i.test(query)) return false;
+  return /\\b(?:please\\s+)?(?:add|create|make|schedule|put|include)\\b.{0,70}\\b(tasks?|to-?dos?|reminders?|my list|task list)\\b/i.test(query)
+    || /\\b(?:can|could|would) you\\b.{0,40}\\b(?:add|create|make|schedule|put)\\b.{0,50}\\b(tasks?|to-?dos?|reminders?|my list|task list)\\b/i.test(query)
+    || /\\b(?:i want|i need|i'd like|i would like) to\\b.{0,35}\\b(?:add|create|make|schedule)\\b.{0,50}\\b(tasks?|to-?dos?|reminders?|my list|task list)\\b/i.test(query)
+    || /\\bremind me to\\b/i.test(query);
 }
 
 function hasSingleTaskCompletionIntent(query: string): boolean {
-  if (isInstructionalQuestion(query)) return false;
-  if (/\ball\b.{0,30}\b(tasks?|to-?dos?)\b/i.test(query)) return false;
-  return /\b(mark|complete|finish|check off|tick off|set)\b.{0,70}\b(tasks?|to-?dos?|as done|completed)\b|\b(tasks?|to-?dos?)\b.{0,50}\b(done|complete|completed|finished)\b/i.test(query);
+  if (isInstructionalQuestion(query) || /^\\s*(maybe|i wonder|i should|should i)\\b/i.test(query)) return false;
+  if (/\\ball\\b.{0,30}\\b(tasks?|to-?dos?)\\b/i.test(query)) return false;
+  return /\\b(?:please\\s+)?(?:mark|complete|finish|check off|tick off)\\b.{0,70}\\b(tasks?|to-?dos?)\\b/i.test(query)
+    || /\\b(?:can|could|would) you\\b.{0,40}\\b(?:mark|complete|finish|check off|tick off)\\b.{0,70}\\b(tasks?|to-?dos?)\\b/i.test(query);
 }
 
 function hasWorkspaceReadIntent(query: string): boolean {
