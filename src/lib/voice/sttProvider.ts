@@ -88,8 +88,9 @@ export class DualEngineSTTProvider implements STTProvider {
       );
     }
 
-    // 1. Browser WebSpeech gives instant zero-latency live streaming words
-    if (this.recognition) {
+    // Gemini is the primary dictation engine whenever a key is configured.
+    // Browser SpeechRecognition is used only when Gemini is unavailable.
+    if (!apiKey && this.recognition) {
       try {
         this.setupRecognitionListeners();
         this.recognition.start();
@@ -117,15 +118,14 @@ export class DualEngineSTTProvider implements STTProvider {
   }
 
   /**
-   * Transcribes recorded audio slices. Where browser WebSpeech exists, it provides
-   * instant live typing; for finalization (and primary in Electron), Gemini transcription
-   * provides verbatim, high-speed text recognition.
+   * Transcribes recorded audio slices with Gemini when a key is configured.
+   * Browser SpeechRecognition is the no-key fallback; no local Whisper model is loaded.
    */
   private async transcribePendingSlice(isFinal: boolean): Promise<string> {
     if (!this.active) return '';
     if (this.isProcessingChunk) return '';
     if (this.webSpeechProducedText && !isFinal) return '';
-    if (!isFinal && this.recognition) return '';
+    if (!isFinal && !resolveGeminiApiKey() && this.recognition) return '';
 
     const recorded = pcmRecorder.getRecordedAudio();
     if (!recorded) return '';
