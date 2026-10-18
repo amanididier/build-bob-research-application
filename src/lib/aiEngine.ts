@@ -557,7 +557,8 @@ ${workspaceContext || 'No additional workspace records are available for this pr
               const toolResult = await executeBobWorkspaceTool(
                 String(call?.name || ''),
                 call?.args && typeof call.args === 'object' ? call.args : {},
-                projectId
+                projectId,
+                toolIntentQuery !== undefined ? toolIntentQuery : query
               );
               executedWorkspaceTool = true;
               if (toolResult?.needsClarification || toolResult?.notFound) workspaceWriteNeedsClarification = true;
