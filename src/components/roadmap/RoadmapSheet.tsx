@@ -412,7 +412,7 @@ No markdown codeblocks or prose, only valid JSON array.`;
     try {
       const ai = new GoogleGenAI({ apiKey: key });
       const prompt = `Decide whether Bob needs one more clarification before creating a useful action plan. Goal: "${goalQuery || 'infer from answers'}". Answers so far: ${JSON.stringify(answers)}. Saved profile context: ${localStorage.getItem('bob_profile_preferences_v1') || '{}'}. Ask another question only if an important unknown would materially change the plan. Be conservative: most goals should be ready after three answers. Ask at most five questions total. Return strict JSON only: {"askMore":true|false,"reason":"short reason"}.`;
-      const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+      const response = await ai.models.generateContent({ model: bobAi.getVerifiedModel(), contents: prompt });
       const cleaned = (response.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
       const result = JSON.parse(cleaned);
       return result.askMore === true;
