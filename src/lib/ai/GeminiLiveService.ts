@@ -154,7 +154,7 @@ export class GeminiLiveService {
   ): Promise<boolean> {
     const resolvedKey = (apiKey || resolveGeminiApiKey() || '').trim();
     if (!resolvedKey) {
-      voiceDiagnostics.event('Primary Gemini Live quota reached / network interruption. Switched to fallback agent mode.');
+      voiceDiagnostics.event('Gemini Live connection unavailable; the controller will use its fallback path.');
       callbacks.onError?.('Missing Gemini API key');
       return false;
     }
@@ -299,7 +299,7 @@ export class GeminiLiveService {
           this.setupResolver = null;
           r?.(false);
         } else {
-          voiceDiagnostics.event('Primary Gemini Live quota reached / network interruption. Switched to fallback agent mode.');
+          voiceDiagnostics.event('Gemini Live connection unavailable; the controller will use its fallback path.');
           this.callbacks.onError?.('Gemini Live WebSocket error');
         }
       };
