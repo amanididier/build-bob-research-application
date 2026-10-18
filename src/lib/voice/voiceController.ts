@@ -146,6 +146,8 @@ export class VoiceController {
     // the fallback STT/VAD stack only once for this call session.
     if (!this.isVoiceModeActive || this.mode !== 'call' || this.isUsingFallback) return;
     this.isUsingFallback = true;
+    this.liveOutputTranscript = '';
+    this.bobReply = '';
     liveProvider.stop();
     this.isUsingLive = false;
     voiceDiagnostics.set({ provider: 'Fallback Secondary Agent', connection: 'active' });
