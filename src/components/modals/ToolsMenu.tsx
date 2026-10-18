@@ -1,9 +1,13 @@
 import React, { useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
-import { BookOpen, Map } from 'lucide-react';
+import { BookOpen, Map, Mic, MicOff } from 'lucide-react';
+import { useVoiceStore } from '../../store/useVoiceStore';
+import { voiceController } from '../../lib/voice/voiceController';
 
 export const ToolsMenu: React.FC = () => {
   const { isToolsMenuOpen, setIsToolsMenuOpen, navigateTo, isSidebarClosed } = useApp();
+  const { voiceState, voiceMode } = useVoiceStore();
+  const isPromptDictating = voiceMode === 'prompt' && ['REQUESTING_PERMISSION', 'LISTENING', 'USER_SPEAKING', 'TRANSCRIBING', 'TRANSCRIPT_READY'].includes(voiceState);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -24,6 +28,27 @@ export const ToolsMenu: React.FC = () => {
       }`}
     >
       <div className="text-[10px] tracking-[0.14em] uppercase font-bold text-[#8a8175] px-3 pt-2 pb-1">Tools</div>
+      <button
+        type="button"
+        onClick={async () => {
+          if (isPromptDictating) {
+            await voiceController.finishPromptDictation();
+          } else {
+            await voiceController.startVoiceMode('prompt');
+          }
+        }}
+        className="w-full text-left px-3 py-2.5 rounded-2xl hover:bg-[#f6f3ec] flex items-center gap-3 cursor-pointer"
+      >
+        <span className="w-9 h-9 rounded-xl bg-[#fff4cc] text-[#8a5a00] grid place-items-center">
+          {isPromptDictating ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+        </span>
+        <span>
+          <b className="block text-[13px] text-[#171717]">{isPromptDictating ? 'Finish dictation' : 'Dictate a message'}</b>
+          <small className="block text-[11px] text-[#6b6560]">
+            {isPromptDictating ? 'Transcribe and leave the words editable' : 'Speak, then review before sending'}
+          </small>
+        </span>
+      </button>
       <button
         type="button"
         onClick={() => { setIsToolsMenuOpen(false); navigateTo('notes'); }}
