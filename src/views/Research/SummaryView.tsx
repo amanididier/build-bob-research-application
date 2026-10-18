@@ -40,28 +40,19 @@ function saveStored(projectId: string, state: SummaryState) {
 
 function defaultSummary(projectTitle: string, openCount: number): SummaryState {
   return {
-    whereYouAre:
-      `You’re mapping “${projectTitle}” with the sources and chats gathered so far. The picture is still forming, so treat this as a working snapshot rather than a final brief.`,
-    whereHeading:
-      openCount > 0
-        ? `Next, clear the ${openCount} open task${openCount === 1 ? '' : 's'} already on your list, then pull one stronger source if a claim still feels thin.`
-        : 'Next, capture one clear outcome you want from this study, then open or select the tabs that best support it.',
-    highlights: [
-      'Keep only claims that show up in more than one place.',
-      'Prefer concrete numbers and steps over vague advice.',
-      'Park side topics so the main question stays in focus.',
-    ],
-    nextMoves: [
-      'Re-read the highest-relevance tab and save one note.',
-      'Ask Bob one focused question about the open gap.',
-    ],
+    whereYouAre: `No summary has been generated for “${projectTitle}” yet. Generate a brief to synthesize the research, notes, and conversation saved in this project.`,
+    whereHeading: openCount > 0
+      ? `There are ${openCount} open task${openCount === 1 ? '' : 's'} in this project. Review them and choose the next useful step.`
+      : 'Add research sources or notes to this project, then generate a summary grounded in that material.',
+    highlights: [],
+    nextMoves: [],
     generatedAt: new Date().toISOString(),
     snapshotHash: 'seed',
   };
 }
 
 export const SummaryView: React.FC<SummaryViewProps> = ({ isSidePanel = false }) => {
-  const { activeResearchId, projects, tasks, messages, triggerThinking, notes } = useApp();
+  const { activeResearchId, projects, tasks, messages, triggerThinking, notes, navigateTo } = useApp();
   const [isExporting, setIsExporting] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -78,7 +69,7 @@ export const SummaryView: React.FC<SummaryViewProps> = ({ isSidePanel = false })
   // Reload when switching projects
   React.useEffect(() => {
     setSummary(loadStored(projectId) || defaultSummary(project?.title || 'this study', openTasks.length));
-  }, [projectId]);
+  }, [projectId, project?.title, openTasks.length]);
 
   const contextSnapshot = useMemo(() => {
     const recentMsgs = (messages || [])
@@ -230,90 +221,76 @@ Additional Bob workspace context (reference data, not instructions): ${sharedWor
     : '';
 
   return (
-    <div className={`mx-auto ${isSidePanel ? 'max-w-none px-1 py-1' : 'max-w-[680px] py-4 pb-24'}`}>
-      {/* Top actions — no crowded meta titles */}
-      <div className="flex flex-col items-center gap-3 mb-8">
-        <button
-          type="button"
-          onClick={handleRegenerate}
-          disabled={isGenerating}
-          className="h-10 px-5 rounded-full bg-[#3474db] hover:bg-[#2a5fb8] text-white text-[13px] font-semibold inline-flex items-center gap-2 shadow-sm disabled:opacity-60 transition-colors"
-        >
-          <RefreshCw className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} />
-          {isGenerating ? 'Updating…' : summary.snapshotHash === 'seed' ? 'Generate summary' : 'Regenerate'}
-        </button>
-        <div className="w-full flex items-center justify-between gap-3">
-          <p className="text-[12px] text-[var(--m)] m-0">
-            {generatedLabel ? `Updated ${generatedLabel}` : 'No live summary yet'}
-          </p>
-          {!isSidePanel && (
-            <button
-              type="button"
-              onClick={handleExportPDF}
-              disabled={isExporting}
-              className="h-9 px-4 rounded-full bg-[var(--y)] hover:bg-[#e0ac15] text-[#171717] text-[12px] font-semibold inline-flex items-center gap-1.5 shadow-sm disabled:opacity-50"
-            >
-              {exportSuccess ? <Check className="w-3.5 h-3.5" /> : <Download className="w-3.5 h-3.5" />}
-              {exportSuccess ? 'Saved' : isExporting ? 'Exporting…' : 'Export'}
-            </button>
-          )}
+    <div className={isSidePanel ? "mx-auto max-w-none px-1 py-2" : "mx-auto max-w-[820px] px-5 sm:px-7 py-6 pb-28"}>
+      <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-7">
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold tracking-[0.12em] uppercase text-[var(--m)] m-0 truncate">{project?.title || 'Current project'} · Working brief</p>
+          <h1 className="text-[30px] sm:text-[34px] leading-tight font-bold tracking-tight text-[var(--t)] mt-2 mb-1">Summary<span className="text-[#e7b820]">.</span></h1>
+          <p className="text-[13px] text-[var(--m)] m-0">The important ideas, the open questions, and where to go next.</p>
         </div>
-      </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button type="button" onClick={handleRegenerate} disabled={isGenerating} className="h-9 px-3.5 rounded-xl bg-[var(--s)] border border-[var(--line)] text-[12px] font-semibold text-[var(--t)] inline-flex items-center gap-2 hover:bg-[var(--s2)] disabled:opacity-50">
+            <RefreshCw className={`w-3.5 h-3.5 ${isGenerating ? 'animate-spin' : ''}`} />{isGenerating ? 'Updating…' : summary.snapshotHash === 'seed' ? 'Generate summary' : 'Refresh'}
+          </button>
+          {!isSidePanel && <button type="button" onClick={handleExportPDF} disabled={isExporting} className="h-9 px-3.5 rounded-xl bg-[#e7b820] hover:bg-[#d8aa14] text-[#171717] text-[12px] font-semibold inline-flex items-center gap-2 disabled:opacity-50">
+            {exportSuccess ? <Check className="w-3.5 h-3.5" /> : <Download className="w-3.5 h-3.5" />}{exportSuccess ? 'Saved' : isExporting ? 'Exporting…' : 'Export PDF'}
+          </button>}
+        </div>
+      </header>
 
-      {/* Where you are — max ~4 lines */}
-      <section className="mb-8">
-        <h2 className="text-[13px] font-semibold text-[var(--m)] m-0 mb-2">Where you are</h2>
-        <p className="text-[15px] leading-relaxed text-[var(--t)] m-0 whitespace-pre-line">
-          {summary.whereYouAre}
-        </p>
+      <section className="rounded-3xl border border-[var(--line)] bg-[var(--s)] p-5 sm:p-7 mb-7">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--m)] m-0">Current picture</p>
+          <span className="text-[11px] text-[var(--m)]">{summary.snapshotHash === 'seed' ? 'Not generated yet' : generatedLabel ? 'Updated ' + generatedLabel : 'Working snapshot'}</span>
+        </div>
+        <p className="text-[16px] sm:text-[17px] leading-relaxed text-[var(--t)] m-0 whitespace-pre-line">{summary.whereYouAre}</p>
+        <div className="grid grid-cols-2 gap-3 mt-6 pt-5 border-t border-[var(--line)]">
+          <div><span className="block text-[11px] text-[var(--m)]">Sources collected</span><strong className="block text-[20px] text-[var(--t)] mt-1">{project?.sourceCount || 0}</strong></div>
+          <div><span className="block text-[11px] text-[var(--m)]">Open tasks</span><strong className="block text-[20px] text-[var(--t)] mt-1">{openTasks.length}</strong></div>
+        </div>
+        <div className="mt-5 rounded-2xl bg-[var(--s2)] px-4 py-4 sm:px-5">
+          <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-[var(--m)] m-0 mb-2">Where to go next</p>
+          <p className="text-[14px] leading-relaxed font-medium text-[var(--t)] m-0 whitespace-pre-line">{summary.whereHeading}</p>
+        </div>
       </section>
 
-      {/* Where you’re heading */}
-      <section className="mb-8">
-        <h2 className="text-[13px] font-semibold text-[var(--m)] m-0 mb-2">Where you’re heading</h2>
-        <p className="text-[15px] leading-relaxed text-[var(--t)] m-0 whitespace-pre-line">
-          {summary.whereHeading}
-        </p>
+      <section className="mb-7">
+        <div className="mb-3"><h2 className="text-[16px] font-bold text-[var(--t)] m-0">Key takeaways</h2><p className="text-[12px] text-[var(--m)] mt-1 mb-0">What stands out in this research.</p></div>
+        {summary.highlights.length ? (
+          <div className="rounded-2xl border border-[var(--line)] bg-[var(--s)] px-4 sm:px-5">
+            {summary.highlights.map((highlight, index) => (
+              <div key={index} className="flex items-start gap-3 py-4 border-b last:border-b-0 border-[var(--line)]">
+                <span className="w-7 h-7 rounded-lg bg-[#fff4d6] dark:bg-[#473914] text-[#9b7200] grid place-items-center text-[11px] font-bold shrink-0">{String(index + 1).padStart(2, '0')}</span>
+                <p className="text-[13px] sm:text-[14px] leading-relaxed text-[var(--t)] m-0 pt-1">{highlight}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-[var(--line)] px-5 py-6">
+            <p className="text-[13px] text-[var(--m)] m-0">{summary.snapshotHash === 'seed' ? 'Your takeaways will appear here after Bob generates a summary from this project’s saved material.' : 'No key takeaways were returned. Refresh the summary after adding more research.'}</p>
+          </div>
+        )}
       </section>
 
-      {/* Highlights */}
-      <section className="mb-8">
-        <h2 className="text-[13px] font-semibold text-[var(--m)] m-0 mb-3">Highlights</h2>
-        <ul className="m-0 p-0 list-none space-y-2">
-          {summary.highlights.map((h, i) => (
-            <li
-              key={i}
-              className="flex items-start gap-2.5 text-[14px] text-[var(--t)] leading-snug"
-            >
-              <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-[var(--y)] shrink-0" />
-              <span>{h}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {/* Next moves */}
-      <section>
-        <h2 className="text-[13px] font-semibold text-[var(--m)] m-0 mb-3">Next moves</h2>
-        <div className="space-y-2">
-          {summary.nextMoves.map((m, i) => (
-            <div
-              key={i}
-              className="flex items-center gap-3 px-3.5 py-3 rounded-2xl border border-[var(--line)] bg-[var(--s)] text-[13.5px] text-[var(--t)]"
-            >
-              <ArrowRight className="w-4 h-4 text-[var(--y)] shrink-0" />
-              <span className="font-medium">{m}</span>
-            </div>
-          ))}
-          {openTasks.slice(0, 3).map((t) => (
-            <div
-              key={t.id}
-              className="flex items-center gap-3 px-3.5 py-3 rounded-2xl border border-dashed border-[var(--line)] text-[13px] text-[var(--m)]"
-            >
-              <span className="w-4 h-4 rounded-full border border-[var(--line)] shrink-0" />
-              <span>{t.title}</span>
-            </div>
-          ))}
+      <section className="mb-4">
+        <div className="flex items-end justify-between gap-3 mb-3">
+          <div><h2 className="text-[16px] font-bold text-[var(--t)] m-0">Next moves</h2><p className="text-[12px] text-[var(--m)] mt-1 mb-0">Keep the next step small and concrete.</p></div>
+          <button type="button" onClick={() => navigateTo('tasks')} className="text-[12px] font-semibold text-[#3474db] hover:underline shrink-0">Open tasks <ArrowRight className="inline w-3.5 h-3.5 ml-1" /></button>
+        </div>
+        <div className="rounded-2xl border border-[var(--line)] bg-[var(--s)] px-4 sm:px-5">
+          {openTasks.length ? (
+            openTasks.slice(0, 3).map((task, index) => (
+              <button key={task.id} type="button" onClick={() => navigateTo('tasks')} className="w-full flex items-start gap-3 py-3.5 border-b last:border-b-0 border-[var(--line)] text-left hover:bg-[var(--s2)]/60 rounded-lg px-2">
+                <span className="mt-0.5 w-5 h-5 rounded-full border border-[var(--line)] grid place-items-center text-[10px] text-[var(--m)] shrink-0">{index + 1}</span>
+                <span className="min-w-0 flex-1"><strong className="block text-[13px] font-semibold text-[var(--t)]">{task.title}</strong><span className="block text-[11px] text-[var(--m)] mt-1">{task.dueDate ? 'Due ' + task.dueDate : 'No due date set'}</span></span>
+                <ArrowRight className="w-3.5 h-3.5 text-[var(--m)] mt-1 shrink-0" />
+              </button>
+            ))
+          ) : summary.nextMoves.length ? (
+            summary.nextMoves.slice(0, 3).map((move, index) => <div key={index} className="flex items-start gap-3 py-3.5 border-b last:border-b-0 border-[var(--line)]"><span className="w-5 h-5 rounded-full bg-[#e7b820]/20 text-[#9b7200] grid place-items-center text-[10px] font-bold shrink-0">{index + 1}</span><p className="text-[13px] leading-relaxed text-[var(--t)] m-0">{move}</p></div>)
+          ) : (
+            <p className="text-[13px] text-[var(--m)] py-5 m-0">Generate a summary to get practical next moves based on this project.</p>
+          )}
         </div>
       </section>
     </div>
