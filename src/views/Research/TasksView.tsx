@@ -281,7 +281,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ isSidePanel = false }) => 
         .map((message) => `${message.role === 'user' ? 'User' : 'Bob'}: ${message.text}`),
     ]
       .filter(Boolean)
-      .join('\\n')
+      .join('\n')
       .slice(-4500);
 
     // Use the adaptive, AI-powered roadmap flow that is shared with TasksPage,
@@ -332,7 +332,6 @@ export const TasksView: React.FC<TasksViewProps> = ({ isSidePanel = false }) => 
         >
           Preview sample steps
         </button>
-
 
       </div>
     );
