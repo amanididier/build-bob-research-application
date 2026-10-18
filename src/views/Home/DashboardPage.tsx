@@ -260,14 +260,14 @@ export const DashboardPage: React.FC = () => {
     <div className="w-full min-h-full bg-[#fafafa] dark:bg-[var(--bg)] pb-28 animate-in fade-in duration-300">
       {/* Header */}
       <header className="max-w-[1120px] mx-auto px-5 md:px-8 pt-8 pb-6">
-        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-400 m-0">Overview</p>
+        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--m)] m-0">Good to see you, {userName || 'there'}</p>
         <div className="mt-1 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
           <div>
-            <h1 className="text-[28px] sm:text-[32px] font-extrabold tracking-tight text-neutral-900 dark:text-white m-0">
-              Dashboard
+            <h1 className="text-[28px] sm:text-[32px] font-extrabold tracking-tight text-[var(--t)] m-0">
+              Your ideas are going places<span className="text-[#e7b820]">.</span>
             </h1>
-            <p className="mt-1.5 text-[13px] text-neutral-500 dark:text-[var(--m)] m-0 max-w-md">
-              {userName ? `${userName}, ` : ''}a calm view of progress, focus, and what’s due.
+            <p className="mt-1.5 text-[13px] text-[var(--m)] m-0 max-w-md">
+              A clear view of your work, with a little room to move forward.
             </p>
           </div>
           <div className="flex items-center gap-2">
