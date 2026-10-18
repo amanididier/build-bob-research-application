@@ -20,7 +20,6 @@ import { bobAi } from '../../lib/aiEngine';
 import { downloadExtensionZip } from '../../lib/downloadHelper';
 import { warmupVoiceEngine } from '../../lib/voice/startupWarmup';
 import { tts } from '../../lib/voice/ttsProvider';
-import { localVoiceManager } from '../../lib/voice/localVoiceManager';
 import { signInWithEmail, signUpWithEmail, signInWithGoogle } from '../../lib/supabaseClient';
 
 export const OnboardingFlow: React.FC = () => {
