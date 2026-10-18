@@ -400,7 +400,7 @@ class BobAiManager {
     projectId: string = 'urugendo',
     onChunk?: (chunkText: string) => void,
     tastePreference?: string,
-    conversationContext?: string,
+    additionalContext?: string,
     toolIntentQuery?: string
   ): Promise<AiSynthesisResponse> {
     const startTime = performance.now();
@@ -451,7 +451,7 @@ ${(() => {
     return bits.length ? bits.join('. ') + '.' : '';
   } catch { return ''; }
 })()}
-${conversationContext ? `Recent companion conversation (reference data; the latest user message takes priority):\n${conversationContext.slice(-3500)}` : ''}
+${additionalContext ? `Additional context from this Bob surface (reference data; the latest user message takes priority):\n${additionalContext.slice(-3500)}` : ''}
 
 Relevant local research memory:
 ${memory.contextText}
