@@ -31,86 +31,26 @@ export const TabsView: React.FC<TabsViewProps> = ({ isSidePanel = false }) => {
   const [search, setSearch] = useState('');
 
   const [tabs, setTabs] = useState<TabItemData[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('bob_tabs_catalog_v2');
-        if (saved) return JSON.parse(saved);
-      } catch {}
-    }
-    return [
-      {
-        id: 'tab-1',
-        title: 'Why people abandon online transport booking',
-        domain: 'research.example.com',
-        url: 'https://research.example.com/transport-booking',
-        preview: '',
-        relevance: 96,
-        isToday: true,
-        isRelated: true,
-        selected: true,
-        faviconChar: 'R',
-      },
-      {
-        id: 'tab-2',
-        title: 'ChatGPT — transport research & friction comparison',
-        domain: 'chatgpt.com',
-        url: 'https://chatgpt.com/c/transport-flow',
-        preview: '',
-        relevance: 88,
-        isToday: true,
-        isRelated: true,
-        selected: true,
-        faviconChar: 'C',
-      },
-      {
-        id: 'tab-3',
-        title: 'Rwanda transport booking workflow notes',
-        domain: 'docs.google.com',
-        url: 'https://docs.google.com/document/transport',
-        preview: '',
-        relevance: 92,
-        isToday: true,
-        isRelated: true,
-        selected: true,
-        faviconChar: 'N',
-      },
-      {
-        id: 'tab-4',
-        title: 'Competitor Booking Flow & Checkout Architecture',
-        domain: 'example.org',
-        url: 'https://example.org/checkout-case-study',
-        preview: '',
-        relevance: 74,
-        isToday: true,
-        isRelated: true,
-        selected: false,
-        faviconChar: 'V',
-      },
-      {
-        id: 'tab-5',
-        title: 'AI Product Research & Local Assistant Design',
-        domain: 'claude.ai',
-        url: 'https://claude.ai/chat/ai-product-research',
-        preview: '',
-        relevance: 62,
-        isToday: false,
-        isRelated: false,
-        selected: false,
-        faviconChar: 'A',
-      },
-      {
-        id: 'tab-6',
-        title: 'General travel blog post and tourism tips',
-        domain: 'travelblog.net',
-        url: 'https://travelblog.net/visiting-kigali',
-        preview: '',
-        relevance: 42,
-        isToday: false,
-        isRelated: false,
-        selected: false,
-        faviconChar: 'T',
-      },
-    ];
+    const demoTabKeys = new Set([
+      'tab-1|Why people abandon online transport booking|https://research.example.com/transport-booking',
+      'tab-2|ChatGPT — transport research & friction comparison|https://chatgpt.com/c/transport-flow',
+      'tab-3|Rwanda transport booking workflow notes|https://docs.google.com/document/transport',
+      'tab-4|Competitor Booking Flow & Checkout Architecture|https://example.org/checkout-case-study',
+      'tab-5|AI Product Research & Local Assistant Design|https://claude.ai/chat/ai-product-research',
+      'tab-6|General travel blog post and tourism tips|https://travelblog.net/visiting-kigali',
+    ]);
+    try {
+      const saved = localStorage.getItem('bob_tabs_catalog_v2');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((tab: Partial<TabItemData>) =>
+            !demoTabKeys.has(`${String(tab?.id || '')}|${String(tab?.title || '')}|${String(tab?.url || '')}`)
+          );
+        }
+      }
+    } catch {}
+    return [];
   });
 
   const persist = (updated: TabItemData[]) => {
