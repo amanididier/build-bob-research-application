@@ -93,6 +93,7 @@ export const DashboardPage: React.FC = () => {
 
   const openTasks = tasks.filter((t) => !t.completed);
   const doneTasks = tasks.filter((t) => t.completed);
+  const activeProjectCount = projects.filter((project) => !/completed|archived|inactive/i.test(String(project.status || ''))).length;
   const doneTodayCount = doneTasks.filter((task) => {
     const completedAt = (task as { completedAt?: string }).completedAt;
     if (!completedAt) return false;
@@ -325,7 +326,7 @@ export const DashboardPage: React.FC = () => {
               <span className="text-[12px] font-semibold text-[var(--m)]">Active projects</span>
               <span className="grid place-items-center w-8 h-8 rounded-xl bg-[#e8f2ff] text-[#3474db]"><Compass className="w-4 h-4" /></span>
             </div>
-            <p className="text-[30px] leading-none font-bold tracking-tight text-[var(--t)] mt-4 mb-1">{projects.length}</p>
+            <p className="text-[30px] leading-none font-bold tracking-tight text-[var(--t)] mt-4 mb-1">{activeProjectCount}</p>
             <p className="text-[12px] text-[var(--m)] m-0">{projects.filter((p) => p.pinned).length} pinned for quick access</p>
           </article>
           <article className="rounded-2xl border border-[var(--line)] bg-[var(--s)] p-5">
