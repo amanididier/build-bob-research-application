@@ -14,8 +14,7 @@ import {
   Search, 
   Menu,
   PanelLeft,
-  Paperclip,
-  ArrowRight
+  Paperclip
 } from 'lucide-react';
 import bobOrb from '../../assets/images/bob_mascot_orb_1791540734514.jpg';
 import { resolveGeminiApiKey } from '../../lib/ai/keyManager';
