@@ -15,7 +15,18 @@ const STARS_KEY = 'bob_roadmap_stars_v1';
 function loadPhased(projectId: string): PhasedTask[] | null {
   try {
     const all = JSON.parse(localStorage.getItem(PHASED_KEY) || '{}');
-    return all[projectId] || null;
+    if (Array.isArray(all[projectId])) return all[projectId];
+
+    // Migrate/read the adaptive RoadmapSheet's canonical roadmap for this project.
+    const roadmap = JSON.parse(localStorage.getItem('bob_phased_roadmap_v2') || 'null');
+    if (
+      roadmap &&
+      (!roadmap.projectId || roadmap.projectId === projectId) &&
+      Array.isArray(roadmap.tasks)
+    ) {
+      return roadmap.tasks;
+    }
+    return null;
   } catch {
     return null;
   }
