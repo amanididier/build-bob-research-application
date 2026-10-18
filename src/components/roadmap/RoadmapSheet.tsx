@@ -86,7 +86,7 @@ export const RoadmapSheet: React.FC<RoadmapSheetProps> = ({
   const [goalQuery, setGoalQuery] = useState(initialGoal || '');
   const [conversationContext, setConversationContext] = useState('');
   const [stepIndex, setStepIndex] = useState(0); // Intro, goal, 3 adaptive questions, arranger, result
-  const [originSource, setOriginSource] = useState<'chat' | 'desktop' | 'tasks'>('chat');
+  const [originSource, setOriginSource] = useState<'chat' | 'desktop' | 'tasks' | 'research-tasks'>('chat');
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const [isOverviewOpen, setIsOverviewOpen] = useState(false);
 
@@ -627,7 +627,9 @@ Due Date: ${s.dueDate}
     propsOnClose?.();
 
     // 5. Navigate based on origin
-    if (originSource === 'tasks') {
+    if (originSource === 'research-tasks') {
+      navigateTo('research', 'tasks');
+    } else if (originSource === 'tasks') {
       navigateTo('tasks');
     } else if (originSource === 'desktop') {
       navigateTo('tasks');
