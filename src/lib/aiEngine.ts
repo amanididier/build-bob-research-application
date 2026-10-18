@@ -161,7 +161,10 @@ export function buildBobWorkspaceContext(projectId: string): string {
 
   try {
     const focus = localStorage.getItem('bob_custom_focus_goal');
-    if (focus) sections.push('CURRENT FOCUS\n' + focus.slice(0, 300));
+    const focusProjectId = localStorage.getItem('bob_focus_project_id');
+    if (focus && (!focusProjectId || focusProjectId === projectId)) {
+      sections.push('CURRENT FOCUS\n' + focus.slice(0, 300));
+    }
   } catch {}
 
   // A bounded workspace snapshot protects latency and prompt size.
