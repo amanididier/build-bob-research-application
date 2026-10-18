@@ -1,0 +1,304 @@
+import { Type } from '@google/genai';
+import { loadRoadmapForProject } from '../roadmap/roadmapStorage';
+
+type JsonRecord = Record<string, any>;
+
+function readJson(key: string): unknown {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function asRecords(value: unknown): JsonRecord[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is JsonRecord => Boolean(item) && typeof item === 'object' && !Array.isArray(item))
+    : [];
+}
+
+function safeText(value: unknown, max = 240): string {
+  return typeof value === 'string' ? value.trim().slice(0, max) : '';
+}
+
+const READ_TOOLS = [
+  {
+    name: 'get_project_overview',
+    description: 'Read the active research project title, summary, status, and source count.',
+    parameters: { type: Type.OBJECT, properties: {} },
+  },
+  {
+    name: 'list_tasks',
+    description: 'List tasks belonging to the active project. Use this when the user asks what tasks exist, what is next, or what is complete.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        status: { type: Type.STRING, enum: ['open', 'completed', 'all'], description: 'Which tasks to return. Defaults to open.' },
+      },
+    },
+  },
+  {
+    name: 'search_notes',
+    description: 'Search saved notebook notes in the active project and general notes.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        query: { type: Type.STRING, description: 'A few words describing the note or evidence to find.' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'get_roadmap',
+    description: 'Read the active project roadmap goal, milestones, and cadence.',
+    parameters: { type: Type.OBJECT, properties: {} },
+  },
+  {
+    name: 'list_selected_tabs',
+    description: 'List research tabs selected for the active project, including their URLs and short previews.',
+    parameters: { type: Type.OBJECT, properties: {} },
+  },
+];
+
+const CREATE_NOTE_TOOL = {
+  name: 'create_note',
+  description: 'Save a note to the user’s Bob notebook. Only use when the user clearly asks to save, create, or capture a note.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      title: { type: Type.STRING, description: 'Short, descriptive note title.' },
+      content: { type: Type.STRING, description: 'The actual note content to save.' },
+    },
+    required: ['title', 'content'],
+  },
+};
+
+const ADD_TASK_TOOL = {
+  name: 'add_task',
+  description: 'Add one task to the active project. Only use when the user clearly asks to add or schedule a task or reminder.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      title: { type: Type.STRING, description: 'The task to add, phrased as a clear action.' },
+      due_date: { type: Type.STRING, description: 'A due date or natural-language time such as Today, Tomorrow, or Flexible. Defaults to Flexible.' },
+    },
+    required: ['title'],
+  },
+};
+
+const COMPLETE_TASK_TOOL = {
+  name: 'complete_task',
+  description: 'Mark one existing task complete. Only use when the user explicitly asks to mark, finish, or check off a task. Never use for bulk completion.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      task_id: { type: Type.STRING, description: 'The exact task ID when known.' },
+      task_title: { type: Type.STRING, description: 'The task title or distinctive words from the title.' },
+    },
+  },
+};
+
+function hasNoteWriteIntent(query: string): boolean {
+  return /\b(save|create|write|add|keep|capture)\b.{0,70}\b(notes?|notebook)\b|\b(notes?|notebook)\b.{0,70}\b(save|create|write|add|keep|capture)\b/i.test(query);
+}
+
+function hasTaskAddIntent(query: string): boolean {
+  return /\b(remind me to|add|create|make|schedule|put|include)\b.{0,70}\b(tasks?|to-?dos?|reminders?|my list|task list)\b|\bremind me to\b/i.test(query);
+}
+
+function hasSingleTaskCompletionIntent(query: string): boolean {
+  if (/\ball\b.{0,30}\b(tasks?|to-?dos?)\b/i.test(query)) return false;
+  return /\b(mark|complete|finish|check off|tick off|set)\b.{0,70}\b(tasks?|to-?dos?|as done|completed)\b|\b(tasks?|to-?dos?)\b.{0,50}\b(done|complete|completed|finished)\b/i.test(query);
+}
+
+function hasWorkspaceReadIntent(query: string): boolean {
+  return /\b(my|this|current|active|saved|open|selected|pending|overdue|completed|existing)\b.{0,45}\b(project|tasks?|notes?|roadmap|tabs?|sources?)\b|\b(list|show|find|search|check|what|which|summari[sz]e)\b.{0,45}\b(tasks?|notes?|roadmap|project|tabs?|sources?)\b/i.test(query);
+}
+
+/** Tools are offered only for workspace-related requests, not ordinary conversation. */
+export function getBobWorkspaceToolDeclarations(query: string): JsonRecord[] {
+  const declarations: JsonRecord[] = [];
+  if (hasWorkspaceReadIntent(query) || hasNoteWriteIntent(query) || hasTaskAddIntent(query) || hasSingleTaskCompletionIntent(query)) {
+    declarations.push(...READ_TOOLS);
+  }
+  if (hasNoteWriteIntent(query)) declarations.push(CREATE_NOTE_TOOL);
+  if (hasTaskAddIntent(query)) declarations.push(ADD_TASK_TOOL);
+  if (hasSingleTaskCompletionIntent(query)) declarations.push(COMPLETE_TASK_TOOL);
+  return declarations;
+}
+
+function dispatchWorkspaceAction(detail: JsonRecord): boolean {
+  if (typeof window === 'undefined') return false;
+  window.dispatchEvent(new CustomEvent('bob:workspace-tool-action', { detail }));
+  return true;
+}
+
+export async function executeBobWorkspaceTool(
+  name: string,
+  args: JsonRecord,
+  projectId: string
+): Promise<JsonRecord> {
+  if (typeof window === 'undefined') return { ok: false, error: 'Workspace tools are unavailable outside the app.' };
+
+  const projects = asRecords(readJson('bob_research_sessions_v3'));
+  const tasks = asRecords(readJson('bob_tasks_v2'));
+  const notes = asRecords(readJson('bob_notes_v1'));
+  const activeProject = projects.find((project) => safeText(project.id, 100) === projectId);
+
+  switch (name) {
+    case 'get_project_overview': {
+      if (!activeProject) return { found: false, message: 'No active project record was found.' };
+      return {
+        found: true,
+        project: {
+          id: safeText(activeProject.id, 100),
+          title: safeText(activeProject.title, 180),
+          summary: safeText(activeProject.summary, 800),
+          status: safeText(activeProject.status, 80),
+          sourceCount: typeof activeProject.sourceCount === 'number' ? activeProject.sourceCount : 0,
+        },
+      };
+    }
+
+    case 'list_tasks': {
+      const status = safeText(args.status, 20) || 'open';
+      const projectTasks = tasks.filter((task) => safeText(task.projectId, 100) === projectId);
+      const filtered = projectTasks.filter((task) => {
+        if (status === 'all') return true;
+        if (status === 'completed') return task.completed === true;
+        return task.completed !== true;
+      });
+      return {
+        projectId,
+        status,
+        total: filtered.length,
+        tasks: filtered.slice(0, 15).map((task) => ({
+          id: safeText(task.id, 100),
+          title: safeText(task.title, 180),
+          dueDate: safeText(task.dueDate, 80),
+          completed: task.completed === true,
+        })),
+      };
+    }
+
+    case 'search_notes': {
+      const query = safeText(args.query, 160).toLowerCase();
+      if (!query) return { ok: false, error: 'Provide a short search query for the notes.' };
+      const terms = query.split(/\s+/).filter(Boolean);
+      const matching = notes
+        .filter((note) => {
+          const noteProjectId = safeText(note.projectId, 100);
+          if (noteProjectId && noteProjectId !== 'general' && noteProjectId !== projectId) return false;
+          const haystack = [note.title, note.selectedText, note.content, note.sourceTitle]
+            .map((value) => safeText(value, 1200).toLowerCase())
+            .join(' ');
+          return terms.some((term) => haystack.includes(term));
+        })
+        .slice(0, 8)
+        .map((note) => ({
+          id: safeText(note.id, 100),
+          title: safeText(note.title, 180),
+          content: safeText(note.selectedText || note.content, 600),
+          sourceTitle: safeText(note.sourceTitle, 160),
+          sourceUrl: safeText(note.sourceUrl, 240),
+        }));
+      return { query, count: matching.length, notes: matching };
+    }
+
+    case 'get_roadmap': {
+      const roadmap = loadRoadmapForProject(projectId);
+      if (!roadmap) return { found: false, message: 'No saved roadmap exists for this project yet.' };
+      return {
+        found: true,
+        goal: safeText(roadmap.goal, 300),
+        situation: safeText(roadmap.situation, 100),
+        cadence: safeText(roadmap.cadence, 80),
+        milestones: (Array.isArray(roadmap.tasks) ? roadmap.tasks : []).slice(0, 12).map((task: JsonRecord) => ({
+          title: safeText(task.title, 180),
+          phase: safeText(task.phase, 80),
+          priority: typeof task.priority === 'number' ? task.priority : undefined,
+        })),
+      };
+    }
+
+    case 'list_selected_tabs': {
+      const tabs = asRecords(readJson('bob_tabs_catalog_v2'));
+      const selected = tabs.filter((tab) =>
+        tab.selected === true && (!safeText(tab.projectId, 100) || safeText(tab.projectId, 100) === projectId)
+      ).slice(0, 8);
+      return {
+        count: selected.length,
+        tabs: selected.map((tab) => ({
+          title: safeText(tab.title, 180),
+          url: safeText(tab.url, 240),
+          preview: safeText(tab.preview, 320),
+        })),
+      };
+    }
+
+    case 'create_note': {
+      const title = safeText(args.title, 160);
+      const content = safeText(args.content, 1800);
+      if (!title || !content) return { ok: false, error: 'A note needs both a title and some content.' };
+      const dispatched = dispatchWorkspaceAction({
+        type: 'create_note',
+        title,
+        content,
+        projectId,
+      });
+      return dispatched
+        ? { ok: true, action: 'note_saved', title, message: 'The note save action was sent to Bob’s notebook.' }
+        : { ok: false, error: 'Could not send the note save action to the app.' };
+    }
+
+    case 'add_task': {
+      const title = safeText(args.title, 180);
+      const dueDate = safeText(args.due_date, 80) || 'Flexible';
+      if (!title) return { ok: false, error: 'A task needs a title.' };
+      const dispatched = dispatchWorkspaceAction({
+        type: 'add_task',
+        title,
+        dueDate,
+        projectId,
+      });
+      return dispatched
+        ? { ok: true, action: 'task_added', title, dueDate, message: 'The task was sent to the active project task list.' }
+        : { ok: false, error: 'Could not send the task action to the app.' };
+    }
+
+    case 'complete_task': {
+      const requestedId = safeText(args.task_id, 100);
+      const requestedTitle = safeText(args.task_title, 180).toLowerCase();
+      const projectTasks = tasks.filter((task) => safeText(task.projectId, 100) === projectId);
+      let candidates = projectTasks.filter((task) => task.completed !== true);
+      if (requestedId) candidates = candidates.filter((task) => safeText(task.id, 100) === requestedId);
+      else if (requestedTitle) {
+        const exact = candidates.filter((task) => safeText(task.title, 180).toLowerCase() === requestedTitle);
+        candidates = exact.length ? exact : candidates.filter((task) => safeText(task.title, 180).toLowerCase().includes(requestedTitle));
+      } else {
+        return { ok: false, needsClarification: true, message: 'Ask which task the user wants to mark complete.' };
+      }
+
+      if (candidates.length === 0) return { ok: false, notFound: true, message: 'No matching open task was found in the active project.' };
+      if (candidates.length > 1) {
+        return {
+          ok: false,
+          needsClarification: true,
+          candidates: candidates.slice(0, 6).map((task) => ({ id: safeText(task.id, 100), title: safeText(task.title, 180) })),
+          message: 'Several open tasks match. Ask the user which one they mean before changing anything.',
+        };
+      }
+
+      const task = candidates[0];
+      const dispatched = dispatchWorkspaceAction({ type: 'complete_task', taskId: safeText(task.id, 100), projectId });
+      return dispatched
+        ? { ok: true, action: 'task_completed', taskTitle: safeText(task.title, 180), message: 'The task was marked complete in the active project.' }
+        : { ok: false, error: 'Could not send the task completion action to the app.' };
+    }
+
+    default:
+      return { ok: false, error: `Unknown workspace tool: ${name}` };
+  }
+}
