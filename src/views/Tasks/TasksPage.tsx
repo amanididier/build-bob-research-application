@@ -68,6 +68,7 @@ export const TasksPage: React.FC = () => {
   const [newTitle, setNewTitle] = useState('');
   const [newDueDate, setNewDueDate] = useState('Tomorrow');
   const [isExtracting, setIsExtracting] = useState(false);
+  const [taskExtractNotice, setTaskExtractNotice] = useState<string | null>(null);
   const [activeRoadmap, setActiveRoadmap] = useState<PhasedRoadmapData | null>(() =>
     loadRoadmapForProject(activeProjectId) as PhasedRoadmapData | null
   );
@@ -140,8 +141,16 @@ export const TasksPage: React.FC = () => {
 
   const handleAiExtract = async () => {
     setIsExtracting(true);
+    setTaskExtractNotice(null);
     try {
-      await extractAiTasks();
+      const count = await extractAiTasks();
+      setTaskExtractNotice(
+        count > 0
+          ? `Added ${count} task${count === 1 ? '' : 's'} from this project's saved evidence.`
+          : 'No tasks were added. Bob only creates tasks supported by real project evidence—check that this project has relevant notes or research and that Gemini is connected in Settings.'
+      );
+    } catch {
+      setTaskExtractNotice('Bob could not extract tasks right now. Nothing new was added; please try again.');
     } finally {
       setIsExtracting(false);
     }
@@ -179,6 +188,12 @@ export const TasksPage: React.FC = () => {
           <button type="button" onClick={() => navigateTo('research', 'tasks')} className="h-9 px-3.5 rounded-xl border border-[var(--line)] bg-[var(--s)] text-[12px] font-semibold text-[var(--t)] inline-flex items-center gap-2 hover:bg-[var(--s2)]"><ListTodo className="w-3.5 h-3.5" />Guided steps</button>
         </div>
       </header>
+
+      {taskExtractNotice && (
+        <p role="status" className="mb-4 rounded-xl border border-[var(--line)] bg-[var(--s)] px-4 py-3 text-xs text-[var(--m)]">
+          {taskExtractNotice}
+        </p>
+      )}
 
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
         <article className="rounded-2xl border border-[var(--line)] bg-[var(--s)] p-4 flex items-center gap-3"><span className="w-9 h-9 rounded-xl bg-[#e8f2ff] text-[#3474db] grid place-items-center"><ListTodo className="w-4 h-4" /></span><span><strong className="block text-[22px] leading-none text-[var(--t)]">{pendingCount}</strong><span className="block text-[11px] text-[var(--m)] mt-1">Open tasks</span></span></article>
