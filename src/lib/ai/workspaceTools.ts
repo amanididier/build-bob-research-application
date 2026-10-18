@@ -143,7 +143,7 @@ function hasTaskAddIntent(query: string): boolean {
 
 function hasSingleTaskCompletionIntent(query: string): boolean {
   if (isInstructionalQuestion(query) || /^\s*(maybe|i wonder|i should|should i)\b/i.test(query)) return false;
-  if (/\ball\b.{0,30}\b(tasks?|to-?dos?)\b/i.test(query)) return false;
+  if (/\b(all|every|each)\b.{0,30}\b(tasks?|to-?dos?)\b/i.test(query)) return false;
   return /\b(?:please\s+)?(?:mark|complete|finish|check off|tick off)\b.{0,70}\b(tasks?|to-?dos?)\b/i.test(query)
     || /\b(?:can|could|would) you\b.{0,40}\b(?:mark|complete|finish|check off|tick off)\b.{0,70}\b(tasks?|to-?dos?)\b/i.test(query);
 }
