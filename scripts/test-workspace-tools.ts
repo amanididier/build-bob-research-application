@@ -65,7 +65,7 @@ async function main() {
   const noInventedDate = await executeBobWorkspaceTool('add_task', { title: 'Task without a deadline', due_date: 'Tomorrow' }, 'project-a', 'Please add a task to read the notes');
   assert.equal(noInventedDate.dueDate, 'Flexible', 'tool must not invent a deadline that the user did not state');
 
-  const ambiguousCompletion = await executeBobWorkspaceTool('complete_task', { task_title: 'Write' }, 'project-a', 'Please mark the task complete');
+  const ambiguousCompletion = await executeBobWorkspaceTool('complete_task', {}, 'project-a', 'Please mark the task complete');
   assert.equal(ambiguousCompletion.needsClarification, true, 'ambiguous completion must ask which task');
 
   const completed = await executeBobWorkspaceTool('complete_task', { task_id: 'task-a' }, 'project-a', 'Please mark the task complete');
