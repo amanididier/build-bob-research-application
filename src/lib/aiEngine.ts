@@ -13,6 +13,7 @@ import { localMemoryBank, MemoryNode } from './researchMemory';
 import { detectSystemHardware, MODEL_CATALOG, SystemHardwareInfo } from './hardware';
 import { ModelTier } from '../types';
 import { resolveGeminiApiKey } from './ai/keyManager';
+import { buildSharedCompanionContext } from './companionContext';
 
 export interface ModelDownloadStatus {
   tier: ModelTier;
@@ -270,6 +271,7 @@ class BobAiManager {
   ): Promise<AiSynthesisResponse> {
     const startTime = performance.now();
     const memory = localMemoryBank.buildPromptContext(query, projectId);
+    const sharedContext = buildSharedCompanionContext(projectId);
     let dailyFocus = '';
     try { dailyFocus = localStorage.getItem('bob_custom_focus_goal') || ''; } catch {}
     const citations = memory.citedNodes.map((m) => ({
@@ -428,7 +430,7 @@ ${memory.contextText}`;
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             model: localModelName,
-            prompt: `You are Bob, an intelligent research assistant.\nContext:\n${memory.contextText}\n\nUser Question: ${query}`,
+            prompt: `You are Bob, an intelligent research assistant.\nResearch memory:\n${memory.contextText}\n\n${sharedContext}\n\nUser Question: ${query}`,
             stream: false
           })
         });
