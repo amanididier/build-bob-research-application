@@ -111,6 +111,7 @@ export class LocalResearchMemoryBank {
 
     const queryWords = query.toLowerCase().split(/\W+/).filter((w) => w.length > 2);
     const pool = this.getAllMemories(projectId);
+    const explicitRecall = /\b(remember|recall|memory|previous|earlier|last time|what did we|where did we|continue where|we discussed|we decided)\b/i.test(query);
 
     const scored = pool.map((item) => {
       const textToScan = `${item.title} ${item.content} ${item.tags.join(' ')}`.toLowerCase();
@@ -124,14 +125,16 @@ export class LocalResearchMemoryBank {
         }
       }
 
-      // Weight by initial relevance and recency
+      // Relevance is the gate; stored importance and recency only break ties
+      // after the query has matched this memory's content.
       const recencyBonus = Math.max(0, 1 - (Date.now() - item.timestamp) / (1000 * 60 * 60 * 24 * 7));
-      const totalScore = matchScore * 1.5 + item.relevanceWeight * 2 + recencyBonus;
+      const totalScore = matchScore * 1.5 + item.relevanceWeight * 0.15 + recencyBonus;
 
-      return { item, totalScore };
+      return { item, totalScore, matchScore };
     });
 
     return scored
+      .filter((s) => s.matchScore > 0 || explicitRecall)
       .filter((s) => s.totalScore > 0.5)
       .sort((a, b) => b.totalScore - a.totalScore)
       .slice(0, limit)
