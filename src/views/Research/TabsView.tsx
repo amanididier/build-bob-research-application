@@ -44,9 +44,13 @@ export const TabsView: React.FC<TabsViewProps> = ({ isSidePanel = false }) => {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          return parsed.filter((tab: Partial<TabItemData>) =>
+          const cleaned = parsed.filter((tab: Partial<TabItemData>) =>
             !demoTabKeys.has(`${String(tab?.id || '')}|${String(tab?.title || '')}|${String(tab?.url || '')}`)
           );
+          if (cleaned.length !== parsed.length) {
+            localStorage.setItem('bob_tabs_catalog_v2', JSON.stringify(cleaned));
+          }
+          return cleaned;
         }
       }
     } catch {}
