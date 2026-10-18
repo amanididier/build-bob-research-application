@@ -1,21 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { loadRoadmapForProject } from '../../lib/roadmap/roadmapStorage';
-import { 
-  CheckCircle2, 
-  Circle, 
-  Plus, 
-  Calendar, 
-  Sparkles, 
+import {
+  CheckCircle2,
+  Circle,
+  Plus,
+  Calendar,
+  Sparkles,
   ArrowRight,
   Bot,
-  User,
   ListTodo,
   Layers,
   Compass,
-  Check,
   Clock,
-  Terminal
+  Search,
+  ChevronDown
 } from 'lucide-react';
 
 interface PhasedRoadmapData {
@@ -64,6 +63,8 @@ export const TasksPage: React.FC = () => {
   const activeProjectId = activeProject?.id || activeResearchId || 'urugendo';
 
   const [filter, setFilter] = useState<'all' | 'pending' | 'completed'>('all');
+  const [projectFilter, setProjectFilter] = useState('all');
+  const [search, setSearch] = useState('');
   const [newTitle, setNewTitle] = useState('');
   const [newDueDate, setNewDueDate] = useState('Tomorrow');
   const [isExtracting, setIsExtracting] = useState(false);
@@ -86,13 +87,48 @@ export const TasksPage: React.FC = () => {
     };
   }, [activeProjectId]);
 
-  const filtered = tasks.filter((t) => {
-    if (filter === 'pending') return !t.completed;
-    if (filter === 'completed') return t.completed;
-    return true;
+  const visibleTasks = tasks.filter((task) =>
+    projectFilter === 'all' || task.projectId === projectFilter
+  );
+  const filtered = visibleTasks.filter((task) => {
+    if (filter === 'pending' && task.completed) return false;
+    if (filter === 'completed' && !task.completed) return false;
+    return task.title.toLowerCase().includes(search.toLowerCase().trim());
   });
-
-  const pendingCount = tasks.filter((t) => !t.completed).length;
+  const pendingCount = visibleTasks.filter((task) => !task.completed).length;
+  const completedCount = visibleTasks.filter((task) => task.completed).length;
+  const dueSoonCount = visibleTasks.filter((task) => {
+    if (task.completed) return false;
+    const due = String(task.dueDate || '').toLowerCase().trim();
+    if (!due || due === 'flexible' || due === 'not set') return false;
+    if (/today|tomorrow|this week|next few days|overdue/.test(due)) return true;
+    const parsed = Date.parse(due);
+    if (Number.isNaN(parsed)) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const date = new Date(parsed);
+    date.setHours(0, 0, 0, 0);
+    const daysAway = (date.getTime() - today.getTime()) / 86400000;
+    return daysAway >= 0 && daysAway <= 7;
+  });
+  const isDueSoon = (dueDate: string) => {
+    const due = String(dueDate || '').toLowerCase().trim();
+    if (!due || due === 'flexible' || due === 'not set') return false;
+    if (/today|tomorrow|this week|next few days|overdue/.test(due)) return true;
+    const parsed = Date.parse(due);
+    if (Number.isNaN(parsed)) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const date = new Date(parsed);
+    date.setHours(0, 0, 0, 0);
+    const daysAway = (date.getTime() - today.getTime()) / 86400000;
+    return daysAway >= 0 && daysAway <= 7;
+  };
+  const taskGroups = [
+    { key: 'soon', label: 'Due soon', items: filtered.filter((task) => !task.completed && isDueSoon(task.dueDate)) },
+    { key: 'later', label: 'Later or flexible', items: filtered.filter((task) => !task.completed && !isDueSoon(task.dueDate)) },
+    { key: 'done', label: 'Completed', items: filtered.filter((task) => task.completed) },
+  ];
 
   const handleManualAdd = (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,259 +165,82 @@ export const TasksPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-[1130px] mx-auto px-6 md:px-10 py-7 pb-36 animate-in fade-in duration-300">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-3 pb-6 border-b border-[var(--line)] mb-6">
+    <div className="mx-auto max-w-[1080px] px-5 md:px-8 py-7 pb-32 animate-in fade-in duration-300">
+      <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-7">
         <div>
-          <div className="text-[10px] tracking-[0.08em] text-[#999] uppercase font-semibold">
-            YOUR RESEARCH PLAN · HYBRID TASK WORKSPACE
-          </div>
-          <h1 className="text-[31px] tracking-[-1px] font-extrabold my-2 text-[var(--t)]">
-            Tasks & Next Steps
-          </h1>
-          <p className="text-[var(--m)] text-[13px] leading-relaxed max-w-[620px] m-0">
-            Combine your structured project roadmaps with manual to-dos and AI-extracted action items.
-          </p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--m)] m-0">Make progress at your own pace</p>
+          <h1 className="text-[30px] sm:text-[34px] leading-tight font-bold tracking-tight text-[var(--t)] mt-2 mb-1">Tasks<span className="text-[#e7b820]">.</span></h1>
+          <p className="text-[13px] text-[var(--m)] m-0">One clear next step is enough. Your tasks stay connected to their projects.</p>
         </div>
-
-        {/* Action Controls */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Create / Open Full Roadmap Wizard */}
-          <button
-            onClick={openFullRoadmap}
-            className="h-9 px-4 rounded-xl bg-[var(--y)] hover:bg-[#e0ac15] text-[#171717] font-bold text-[12px] flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>{activeRoadmap ? 'Edit Roadmap' : 'Create Roadmap'}</span>
-          </button>
-
-          {/* Sequential Step Execution View */}
-          <button
-            onClick={() => navigateTo('research', 'tasks')}
-            className="h-9 px-4 rounded-xl border border-[var(--line)] bg-[var(--s)] hover:bg-[var(--s2)] text-[var(--t)] font-bold text-[12px] flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
-          >
-            <ListTodo className="w-3.5 h-3.5 text-[var(--y)]" />
-            <span>Sequential Execution View</span>
-          </button>
-
-          {/* AI Auto-Extract Button */}
-          <button
-            onClick={handleAiExtract}
-            disabled={isExtracting}
-            className="h-9 px-4 rounded-xl border border-[var(--line)] bg-[var(--s)] hover:bg-[var(--s2)] text-[var(--t)] font-bold text-[12px] flex items-center gap-1.5 shadow-sm active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
-          >
-            <Bot className="w-3.5 h-3.5 text-blue-500" />
-            <span>{isExtracting ? 'Analyzing evidence...' : '✨ AI Extract'}</span>
-          </button>
-
-          {/* Filters */}
-          <div className="flex items-center gap-1.5 bg-[var(--s2)] p-1 rounded-xl">
-            <button
-              onClick={() => setFilter('all')}
-              className={`px-3 py-1 text-[11px] font-medium rounded-lg transition-colors cursor-pointer ${
-                filter === 'all'
-                  ? 'bg-[var(--s)] text-[var(--t)] shadow-sm'
-                  : 'text-[var(--m)] hover:text-[var(--t)]'
-              }`}
-            >
-              All ({tasks.length})
-            </button>
-            <button
-              onClick={() => setFilter('pending')}
-              className={`px-3 py-1 text-[11px] font-medium rounded-lg transition-colors cursor-pointer ${
-                filter === 'pending'
-                  ? 'bg-[var(--s)] text-[var(--t)] shadow-sm'
-                  : 'text-[var(--m)] hover:text-[var(--t)]'
-              }`}
-            >
-              Pending ({pendingCount})
-            </button>
-            <button
-              onClick={() => setFilter('completed')}
-              className={`px-3 py-1 text-[11px] font-medium rounded-lg transition-colors cursor-pointer ${
-                filter === 'completed'
-                  ? 'bg-[var(--s)] text-[var(--t)] shadow-sm'
-                  : 'text-[var(--m)] hover:text-[var(--t)]'
-              }`}
-            >
-              Done
-            </button>
-          </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={openFullRoadmap} className="h-9 px-3.5 rounded-xl bg-[#e7b820] hover:bg-[#d8aa14] text-[#171717] text-[12px] font-semibold inline-flex items-center gap-2"><Sparkles className="w-3.5 h-3.5" />{activeRoadmap ? 'Edit roadmap' : 'Create roadmap'}</button>
+          <button type="button" onClick={handleAiExtract} disabled={isExtracting} className="h-9 px-3.5 rounded-xl border border-[var(--line)] bg-[var(--s)] text-[12px] font-semibold text-[var(--t)] inline-flex items-center gap-2 hover:bg-[var(--s2)] disabled:opacity-50"><Bot className="w-3.5 h-3.5" />{isExtracting ? 'Finding tasks…' : 'AI extract'}</button>
+          <button type="button" onClick={() => navigateTo('research', 'tasks')} className="h-9 px-3.5 rounded-xl border border-[var(--line)] bg-[var(--s)] text-[12px] font-semibold text-[var(--t)] inline-flex items-center gap-2 hover:bg-[var(--s2)]"><ListTodo className="w-3.5 h-3.5" />Guided steps</button>
         </div>
-      </div>
+      </header>
 
-      {/* ACTIVE PHASED ROADMAP BANNER & SUMMARY */}
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+        <article className="rounded-2xl border border-[var(--line)] bg-[var(--s)] p-4 flex items-center gap-3"><span className="w-9 h-9 rounded-xl bg-[#e8f2ff] text-[#3474db] grid place-items-center"><ListTodo className="w-4 h-4" /></span><span><strong className="block text-[22px] leading-none text-[var(--t)]">{pendingCount}</strong><span className="block text-[11px] text-[var(--m)] mt-1">Open tasks</span></span></article>
+        <article className="rounded-2xl border border-[var(--line)] bg-[var(--s)] p-4 flex items-center gap-3"><span className="w-9 h-9 rounded-xl bg-[#fff4d6] dark:bg-[#473914] text-[#9b7200] grid place-items-center"><Clock className="w-4 h-4" /></span><span><strong className="block text-[22px] leading-none text-[var(--t)]">{dueSoonCount}</strong><span className="block text-[11px] text-[var(--m)] mt-1">Due within a week</span></span></article>
+        <article className="rounded-2xl border border-[var(--line)] bg-[var(--s)] p-4 flex items-center gap-3"><span className="w-9 h-9 rounded-xl bg-[#e7f7ed] text-[#24804b] grid place-items-center"><CheckCircle2 className="w-4 h-4" /></span><span><strong className="block text-[22px] leading-none text-[var(--t)]">{completedCount}</strong><span className="block text-[11px] text-[var(--m)] mt-1">Completed</span></span></article>
+      </section>
+
       {activeRoadmap && (
-        <div className="mb-6 p-5 sm:p-6 rounded-[24px] bg-[var(--s)] border border-[var(--line)] shadow-sm space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[var(--line)]">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-[var(--y)]/15 text-[var(--y)] flex items-center justify-center shrink-0">
-                <Compass className="w-5 h-5 text-[var(--y)]" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[var(--y)]">
-                    ACTIVE PROJECT ROADMAP
-                  </span>
-                  <span className="text-[11px] text-[var(--m)] font-semibold">
-                    · {activeRoadmap.cadence === 'sprint' ? 'Hyper-Sprint (3-5 Days)' : activeRoadmap.cadence === 'month' ? '1 Month Milestone' : '2-Week Cadence'}
-                  </span>
-                </div>
-                <h3 className="text-base sm:text-lg font-bold text-[var(--t)] m-0">
-                  {activeRoadmap.goal || 'Engineering Roadmap'}
-                </h3>
-              </div>
+        <section className="rounded-2xl border border-[var(--line)] bg-[var(--s)] p-4 sm:p-5 mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-1"><Compass className="w-4 h-4 text-[#b88900]" /><span className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--m)]">Active project roadmap</span></div>
+              <h2 className="text-[15px] font-bold text-[var(--t)] m-0 truncate">{activeRoadmap.goal || 'Project roadmap'}</h2>
+              <p className="text-[12px] text-[var(--m)] mt-1 mb-0">{activeRoadmap.steps?.length || activeRoadmap.tasks?.length || 0} planned milestones · {activeProject?.title || 'Current project'}</p>
             </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={openFullRoadmap}
-                className="px-3 py-1.5 rounded-xl border border-[var(--line)] bg-[var(--s2)] hover:bg-[var(--line)] text-xs font-bold text-[var(--t)] flex items-center gap-1.5 transition-colors cursor-pointer"
-              >
-                <span>Edit Steps</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
+            <button type="button" onClick={openFullRoadmap} className="h-8 px-3 rounded-lg border border-[var(--line)] text-[12px] font-semibold text-[var(--t)] hover:bg-[var(--s2)] shrink-0">Edit roadmap <ArrowRight className="inline w-3.5 h-3.5 ml-1" /></button>
           </div>
-
-          {/* Phased Steps Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-            {activeRoadmap.steps && activeRoadmap.steps.length > 0 ? (
-              activeRoadmap.steps.map((step, idx) => (
-                <div
-                  key={step.id || idx}
-                  className="p-3.5 rounded-xl bg-[var(--s2)]/70 border border-[var(--line)] flex items-start gap-3"
-                >
-                  <div className="w-5 h-5 rounded-md bg-[var(--y)]/20 text-[var(--y)] text-[10px] font-mono font-bold flex items-center justify-center shrink-0 mt-0.5">
-                    {idx + 1}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <span className="text-[9.5px] font-mono uppercase text-[var(--y)] font-bold block">
-                      {step.phase}
-                    </span>
-                    <b className="text-xs text-[var(--t)] block font-bold truncate">
-                      {step.title}
-                    </b>
-                    <p className="text-[11px] text-[var(--m)] m-0 mt-0.5 line-clamp-1">
-                      {step.why}
-                    </p>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p className="text-xs text-[var(--m)]">Roadmap generated with all phases active.</p>
-            )}
-          </div>
-        </div>
+          {activeRoadmap.steps && activeRoadmap.steps.length > 0 && <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-4">{activeRoadmap.steps.slice(0, 3).map((step, index) => <div key={step.id || index} className="rounded-xl bg-[var(--s2)] px-3 py-3"><span className="block text-[10px] uppercase tracking-wide text-[var(--m)]">{step.phase || 'Milestone ' + (index + 1)}</span><strong className="block text-[12px] text-[var(--t)] mt-1 leading-snug">{step.title}</strong></div>)}</div>}
+        </section>
       )}
 
-      {/* Manual Task Creator Input Form */}
-      <form onSubmit={handleManualAdd} className="mb-6 p-4 rounded-2xl bg-[var(--s)] border border-[var(--line)] shadow-sm flex flex-col sm:flex-row gap-3 items-center">
-        <div className="flex-1 w-full flex items-center gap-2.5">
-          <Plus className="w-4 h-4 text-[var(--m)] ml-1 flex-shrink-0" />
-          <input
-            type="text"
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            placeholder={`Add a task for ${activeProject.title}...`}
-            className="w-full bg-transparent border-0 outline-none text-[13px] text-[var(--t)] placeholder-[var(--m)]"
-          />
-        </div>
-        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-          <input
-            type="text"
-            value={newDueDate}
-            onChange={(e) => setNewDueDate(e.target.value)}
-            placeholder="Due date (e.g. Friday)"
-            className="h-8 px-2.5 rounded-lg bg-[var(--s2)] border border-[var(--line)] text-[11px] text-[var(--t)] outline-none w-28 text-center"
-          />
-          <button
-            type="submit"
-            disabled={!newTitle.trim()}
-            className="h-8 px-4 rounded-lg bg-[#171717] dark:bg-[#f2eee7] text-white dark:text-[#171717] text-[11px] font-bold hover:opacity-90 disabled:opacity-40 transition-opacity flex-shrink-0 cursor-pointer"
-          >
-            Add Task
-          </button>
-        </div>
-      </form>
-
-      {/* Task List Card */}
-      <div className="bg-[var(--s)] border border-[var(--line)] rounded-[20px] p-6 shadow-[0_5px_25px_rgba(0,0,0,0.02)] space-y-4">
-        {filtered.length === 0 ? (
-          <div className="text-center py-12">
-            <ListTodo className="w-10 h-10 text-[var(--m)] mx-auto mb-2 opacity-40" />
-            <h4 className="text-[14px] font-bold text-[var(--t)]">No tasks in this filter</h4>
-            <p className="text-[12px] text-[var(--m)]">Add a task above or click "Create Roadmap" to generate and structure your execution steps.</p>
+      <section className="rounded-2xl border border-[var(--line)] bg-[var(--s)] overflow-hidden">
+        <div className="p-4 sm:p-5 border-b border-[var(--line)]">
+          <form onSubmit={handleManualAdd} className="flex flex-col sm:flex-row gap-2 mb-4">
+            <input type="text" value={newTitle} onChange={(event) => setNewTitle(event.target.value)} placeholder="Add a clear next step…" aria-label="New task title" className="flex-1 min-w-0 h-10 rounded-xl border border-[var(--line)] bg-[var(--bg)] px-3 text-[13px] text-[var(--t)] placeholder:text-[var(--m)] outline-none focus:ring-2 focus:ring-[#e7b820]/40" />
+            <input type="text" value={newDueDate} onChange={(event) => setNewDueDate(event.target.value)} placeholder="Due date (optional)" aria-label="New task due date" className="h-10 sm:w-40 rounded-xl border border-[var(--line)] bg-[var(--bg)] px-3 text-[12px] text-[var(--t)] placeholder:text-[var(--m)] outline-none focus:ring-2 focus:ring-[#e7b820]/40" />
+            <button type="submit" disabled={!newTitle.trim()} className="h-10 px-4 rounded-xl bg-[#171717] dark:bg-[#f2eee7] text-white dark:text-[#171717] text-[12px] font-semibold inline-flex items-center justify-center gap-2 disabled:opacity-40"><Plus className="w-3.5 h-3.5" />Add task</button>
+          </form>
+          <div className="flex flex-col md:flex-row md:items-center gap-3 justify-between">
+            <div className="flex items-center gap-1 rounded-xl bg-[var(--s2)] p-1 w-fit" role="tablist" aria-label="Task status">
+              <button type="button" role="tab" aria-selected={filter === 'all'} onClick={() => setFilter('all')} className={filter === 'all' ? 'px-3 py-1.5 rounded-lg bg-[var(--s)] shadow-sm text-[12px] font-semibold text-[var(--t)]' : 'px-3 py-1.5 rounded-lg text-[12px] text-[var(--m)]'}>All <span className="ml-1">{visibleTasks.length}</span></button>
+              <button type="button" role="tab" aria-selected={filter === 'pending'} onClick={() => setFilter('pending')} className={filter === 'pending' ? 'px-3 py-1.5 rounded-lg bg-[var(--s)] shadow-sm text-[12px] font-semibold text-[var(--t)]' : 'px-3 py-1.5 rounded-lg text-[12px] text-[var(--m)]'}>Open <span className="ml-1">{pendingCount}</span></button>
+              <button type="button" role="tab" aria-selected={filter === 'completed'} onClick={() => setFilter('completed')} className={filter === 'completed' ? 'px-3 py-1.5 rounded-lg bg-[var(--s)] shadow-sm text-[12px] font-semibold text-[var(--t)]' : 'px-3 py-1.5 rounded-lg text-[12px] text-[var(--m)]'}>Done <span className="ml-1">{completedCount}</span></button>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <label className="relative flex items-center gap-2 h-9 rounded-xl border border-[var(--line)] bg-[var(--bg)] px-3 min-w-0"><Search className="w-3.5 h-3.5 text-[var(--m)] shrink-0" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search tasks" aria-label="Search tasks" className="w-full sm:w-36 bg-transparent outline-none text-[12px] text-[var(--t)] placeholder:text-[var(--m)]" /></label>
+              <label className="flex items-center gap-2 h-9 rounded-xl border border-[var(--line)] bg-[var(--bg)] px-3"><Layers className="w-3.5 h-3.5 text-[var(--m)]" /><select value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)} aria-label="Filter tasks by project" className="bg-transparent outline-none text-[12px] text-[var(--t)] max-w-[180px]"><option value="all">All projects</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}</select><ChevronDown className="w-3.5 h-3.5 text-[var(--m)]" /></label>
+            </div>
           </div>
-        ) : (
-          <div className="divide-y divide-[var(--line)]">
-            {filtered.map((task) => (
-              <div
-                key={task.id}
-                onClick={() => toggleTask(task.id)}
-                className="py-4 flex items-start gap-3.5 cursor-pointer group hover:bg-[var(--s2)]/40 -mx-3 px-3 rounded-xl transition-colors"
-              >
-                <button
-                  type="button"
-                  className="mt-0.5 text-neutral-400 group-hover:text-[var(--y)] transition-colors flex-shrink-0"
-                >
-                  {task.completed ? (
-                    <CheckCircle2 className="w-5 h-5 text-[var(--g)] fill-current" />
-                  ) : (
-                    <Circle className="w-5 h-5" />
-                  )}
-                </button>
+        </div>
 
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-3">
-                    <b
-                      className={`text-[13.5px] block font-bold ${
-                        task.completed ? 'line-through text-[var(--m)]' : 'text-[var(--t)]'
-                      }`}
-                    >
-                      {task.title}
-                    </b>
-                    <span className="text-[11px] text-[var(--m)] font-medium flex items-center gap-1 flex-shrink-0">
-                      <Calendar className="w-3.5 h-3.5 text-[#aaa]" />
-                      {task.dueDate}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2.5 mt-2">
-                    {task.isAiGenerated ? (
-                      <span className="text-[9.5px] text-[var(--b)] bg-[var(--bs)] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
-                        <Bot className="w-3 h-3" />
-                        <span>Bob AI extracted</span>
-                      </span>
-                    ) : (
-                      <span className="text-[9.5px] text-[var(--m)] bg-[var(--s2)] px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
-                        <User className="w-3 h-3" />
-                        <span>Manual</span>
-                      </span>
-                    )}
-
-                    <span className="text-[10px] text-[var(--y)] bg-[var(--ys)] dark:bg-[#4a3818] px-2.5 py-0.5 rounded-full font-semibold">
-                      {task.sourceConnection}
-                    </span>
-
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigateTo('research', 'chat', task.projectId);
-                      }}
-                      className="text-[11px] text-[var(--m)] hover:text-[var(--t)] hover:underline inline-flex items-center gap-1 ml-auto cursor-pointer"
-                    >
-                      <span>{task.projectId}</span>
-                      <ArrowRight className="w-3 h-3" />
-                    </button>
-                  </div>
+        {filtered.length ? (
+          <div className="px-4 sm:px-5">
+            {taskGroups.filter((group) => group.items.length > 0).map((group) => (
+              <section key={group.key} className="py-2">
+                <div className="flex items-center justify-between gap-3 py-3"><h3 className="text-[12px] font-bold text-[var(--t)] m-0">{group.label}</h3><span className="text-[11px] text-[var(--m)]">{group.items.length}</span></div>
+                <div className="divide-y divide-[var(--line)]">
+                  {group.items.map((task) => {
+                    const taskProject = projects.find((project) => project.id === task.projectId);
+                    return <div key={task.id} className="flex items-start gap-3 py-4">
+                      <button type="button" onClick={() => toggleTask(task.id)} aria-label={task.completed ? 'Reopen ' + task.title : 'Complete ' + task.title} className="w-5 h-5 mt-0.5 rounded-full shrink-0 text-[var(--m)] hover:text-[#24804b]">{task.completed ? <CheckCircle2 className="w-5 h-5 text-[#24804b]" /> : <Circle className="w-5 h-5" />}</button>
+                      <div className="min-w-0 flex-1"><p className={task.completed ? 'text-[13px] font-medium text-[var(--m)] line-through m-0' : 'text-[13px] font-semibold text-[var(--t)] m-0'}>{task.title}</p><div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-[11px] text-[var(--m)]"><span>{taskProject?.title || 'Unassigned project'}</span><span className="inline-flex items-center gap-1"><Calendar className="w-3 h-3" />{task.dueDate || 'No due date'}</span>{task.isAiGenerated && <span className="inline-flex items-center gap-1 text-[#3474db]"><Bot className="w-3 h-3" />Suggested by Bob</span>}</div></div>
+                      <button type="button" onClick={() => navigateTo('research', 'chat', task.projectId)} className="text-[11px] text-[var(--m)] hover:text-[var(--t)] shrink-0">Open project <ArrowRight className="inline w-3 h-3 ml-1" /></button>
+                    </div>;
+                  })}
                 </div>
-              </div>
+              </section>
             ))}
           </div>
+        ) : (
+          <div className="px-5 py-14 text-center"><CheckCircle2 className="w-8 h-8 text-[#3a9b68] mx-auto mb-3" /><h2 className="text-[15px] font-bold text-[var(--t)] m-0">{search ? 'No matching tasks' : filter === 'completed' ? 'Nothing completed yet' : 'All clear for now'}</h2><p className="text-[12px] text-[var(--m)] mt-2 mb-0">{search ? 'Try another search or project filter.' : 'Add a task or create a roadmap when you are ready for your next step.'}</p></div>
         )}
-      </div>
+      </section>
     </div>
   );
 };
