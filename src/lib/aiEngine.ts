@@ -491,7 +491,7 @@ class BobAiManager {
       } catch { return []; }
     })();
     const preferenceStopwords = new Set(['about', 'after', 'also', 'and', 'are', 'can', 'did', 'for', 'from', 'have', 'how', 'into', 'like', 'me', 'more', 'my', 'the', 'that', 'this', 'what', 'when', 'where', 'with', 'you', 'your', 'remember', 'memory']);
-    const preferenceTerms = query.toLowerCase().split(/\\W+/).filter((word: string) => word.length > 3 && !preferenceStopwords.has(word));
+    const preferenceTerms = query.toLowerCase().split(/\W+/).filter((word: string) => word.length > 3 && !preferenceStopwords.has(word));
     const relevantCompanionPreferences = recallRequested
       ? explicitCompanionPreferences.slice(-4)
       : explicitCompanionPreferences.filter((fact) => preferenceTerms.some((term) => fact.toLowerCase().includes(term))).slice(-3);
