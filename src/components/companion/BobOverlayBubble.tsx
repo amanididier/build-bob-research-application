@@ -213,7 +213,7 @@ export const BobOverlayBubble: React.FC = () => {
         {/* Slide-up panel */}
         {isExpanded && (
           <div
-            className={`pointer-events-auto mb-3 w-[min(100vw-2rem,360px)] bg-white/95 dark:bg-[#151515]/95 backdrop-blur-xl border border-black/5 dark:border-white/10 rounded-[24px] shadow-[0_20px_50px_rgba(0,0,0,0.28)] flex flex-col max-h-[min(70vh,480px)] overflow-hidden ${
+            className={`pointer-events-auto fixed left-1/2 bottom-20 z-40 -translate-x-1/2 w-[min(100vw-2rem,360px)] bg-white/95 dark:bg-[#151515]/95 backdrop-blur-xl border border-black/5 dark:border-white/10 rounded-[24px] shadow-[0_20px_50px_rgba(0,0,0,0.28)] flex flex-col max-h-[min(70vh,480px)] overflow-hidden ${
               isClosing ? 'bob-panel-out' : 'bob-panel-in'
             }`}
           >
@@ -433,12 +433,12 @@ export const BobOverlayBubble: React.FC = () => {
 
       <style>{`
         @keyframes bobPanelIn {
-          from { opacity: 0; transform: translateY(18px) scale(0.98); }
-          to { opacity: 1; transform: none; }
+          from { opacity: 0; translate: 0 18px; scale: 0.98; }
+          to { opacity: 1; translate: 0 0; scale: 1; }
         }
         @keyframes bobPanelOut {
-          from { opacity: 1; transform: none; }
-          to { opacity: 0; transform: translateY(16px) scale(0.98); }
+          from { opacity: 1; translate: 0 0; scale: 1; }
+          to { opacity: 0; translate: 0 16px; scale: 0.98; }
         }
         .bob-panel-in { animation: bobPanelIn 0.22s ease-out both; }
         .bob-panel-out { animation: bobPanelOut 0.2s ease-in both; }
