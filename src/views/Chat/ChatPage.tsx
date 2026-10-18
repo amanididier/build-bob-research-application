@@ -176,7 +176,12 @@ export const ChatPage: React.FC = () => {
     }
 
     try {
-      const rememberedFacts = loadCompanionMemory();
+      const recallRequested = /\b(what do you remember|what do you know about me|what have we discussed|previous conversation|where did we stop|continue where we left off)\b/i.test(userInput);
+      const preferenceStopwords = new Set(['about', 'after', 'also', 'and', 'are', 'can', 'did', 'for', 'from', 'have', 'how', 'into', 'like', 'me', 'more', 'my', 'the', 'that', 'this', 'what', 'when', 'where', 'with', 'you', 'your', 'remember']);
+      const preferenceTerms = userInput.toLowerCase().split(/\W+/).filter((word) => word.length > 3 && !preferenceStopwords.has(word));
+      const rememberedFacts = loadCompanionMemory().filter((fact) =>
+        recallRequested || preferenceTerms.some((term) => fact.toLowerCase().includes(term))
+      ).slice(-4);
       const savedProfile = (() => {
         try { return JSON.parse(localStorage.getItem('bob_profile_preferences_v1') || '{}'); } catch { return {}; }
       })();
