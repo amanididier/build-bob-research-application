@@ -13,6 +13,7 @@ import { localMemoryBank, MemoryNode } from './researchMemory';
 import { detectSystemHardware, MODEL_CATALOG, SystemHardwareInfo } from './hardware';
 import { ModelTier } from '../types';
 import { resolveGeminiApiKey } from './ai/keyManager';
+import { loadRoadmapForProject } from './roadmap/roadmapStorage';
 
 export interface ModelDownloadStatus {
   tier: ModelTier;
@@ -103,8 +104,8 @@ function buildWorkspaceContext(projectId: string): string {
     }
   }
 
-  const roadmap = readJson('bob_phased_roadmap_v2');
-  if (roadmap && (!roadmap.projectId || roadmap.projectId === projectId)) {
+  const roadmap = loadRoadmapForProject(projectId);
+  if (roadmap) {
     const goal = String(roadmap.goal || '').trim();
     const roadmapTasks = Array.isArray(roadmap.tasks) ? roadmap.tasks.slice(0, 12) : [];
     if (goal || roadmapTasks.length) {
