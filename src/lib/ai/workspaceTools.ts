@@ -122,15 +122,22 @@ const COMPLETE_TASK_TOOL = {
   },
 };
 
+function isInstructionalQuestion(query: string): boolean {
+  return /^\\s*(how do i|how can i|what is the best way to|what does it mean to|explain|why should i|can you explain)\\b/i.test(query);
+}
+
 function hasNoteWriteIntent(query: string): boolean {
+  if (isInstructionalQuestion(query)) return false;
   return /\b(save|create|write|add|keep|capture)\b.{0,70}\b(notes?|notebook)\b|\b(notes?|notebook)\b.{0,70}\b(save|create|write|add|keep|capture)\b/i.test(query);
 }
 
 function hasTaskAddIntent(query: string): boolean {
+  if (isInstructionalQuestion(query)) return false;
   return /\b(remind me to|add|create|make|schedule|put|include)\b.{0,70}\b(tasks?|to-?dos?|reminders?|my list|task list)\b|\bremind me to\b/i.test(query);
 }
 
 function hasSingleTaskCompletionIntent(query: string): boolean {
+  if (isInstructionalQuestion(query)) return false;
   if (/\ball\b.{0,30}\b(tasks?|to-?dos?)\b/i.test(query)) return false;
   return /\b(mark|complete|finish|check off|tick off|set)\b.{0,70}\b(tasks?|to-?dos?|as done|completed)\b|\b(tasks?|to-?dos?)\b.{0,50}\b(done|complete|completed|finished)\b/i.test(query);
 }
