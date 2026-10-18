@@ -313,236 +313,123 @@ export const DashboardPage: React.FC = () => {
         </div>
       )}
 
-      {/* Pinned projects — quick access from research pin */}
-      {projects.some((p) => p.pinned) && (
-        <div className="max-w-[1120px] mx-auto px-5 md:px-8 mb-5">
-          <h2 className="text-[13px] font-extrabold uppercase tracking-[0.12em] text-neutral-400 m-0 mb-3">Pinned</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-            {projects
-              .filter((p) => p.pinned)
-              .map((proj) => {
-                const pTasks = tasks.filter((t) => t.projectId === proj.id);
-                const done = pTasks.filter((t) => t.completed).length;
-                const open = pTasks.filter((t) => !t.completed).length;
-                const pct = pTasks.length ? Math.round((done / pTasks.length) * 100) : 0;
+      {/* A compact overview built from the user's real workspace data */}
+      <section className="max-w-[1120px] mx-auto px-5 md:px-8 mb-7">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <article className="rounded-2xl border border-[var(--line)] bg-[var(--s)] p-5">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[12px] font-semibold text-[var(--m)]">Active projects</span>
+              <span className="grid place-items-center w-8 h-8 rounded-xl bg-[#e8f2ff] text-[#3474db]"><Compass className="w-4 h-4" /></span>
+            </div>
+            <p className="text-[30px] leading-none font-bold tracking-tight text-[var(--t)] mt-4 mb-1">{projects.length}</p>
+            <p className="text-[12px] text-[var(--m)] m-0">{projects.filter((p) => p.pinned).length} pinned for quick access</p>
+          </article>
+          <article className="rounded-2xl border border-[var(--line)] bg-[var(--s)] p-5">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[12px] font-semibold text-[var(--m)]">Tasks completed</span>
+              <span className="grid place-items-center w-8 h-8 rounded-xl bg-[#e7f7ed] text-[#24804b]"><CheckCircle2 className="w-4 h-4" /></span>
+            </div>
+            <p className="text-[30px] leading-none font-bold tracking-tight text-[var(--t)] mt-4 mb-1">{doneTasks.length}<span className="text-[14px] font-medium text-[var(--m)] ml-1">/ {tasks.length}</span></p>
+            <div className="h-1.5 rounded-full bg-[var(--s2)] overflow-hidden mt-3"><div className="h-full rounded-full bg-[#3a9b68]" style={{ width: (tasks.length ? Math.round((doneTasks.length / tasks.length) * 100) : 0) + '%' }} /></div>
+          </article>
+          <article className="rounded-2xl border border-[var(--line)] bg-[var(--s)] p-5">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[12px] font-semibold text-[var(--m)]">Due soon</span>
+              <span className="grid place-items-center w-8 h-8 rounded-xl bg-[#fff4d6] text-[#9b7200]"><Clock className="w-4 h-4" /></span>
+            </div>
+            <p className="text-[30px] leading-none font-bold tracking-tight text-[var(--t)] mt-4 mb-1">{dueSoon.length}</p>
+            <p className="text-[12px] text-[var(--m)] m-0">{dueSoon.length ? 'Upcoming items to keep in view' : 'Nothing urgent in your current task list'}</p>
+          </article>
+        </div>
+      </section>
+
+      <section className="max-w-[1120px] mx-auto px-5 md:px-8 mb-7 grid grid-cols-1 xl:grid-cols-[1.35fr_1fr] gap-4">
+        <article className="rounded-2xl border border-[var(--line)] bg-[var(--s)] p-5 sm:p-6 min-w-0">
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div>
+              <h2 className="text-[16px] font-bold text-[var(--t)] m-0">Recent projects</h2>
+              <p className="text-[12px] text-[var(--m)] mt-1 mb-0">Your latest work, all in one place.</p>
+            </div>
+            <button type="button" onClick={() => navigateTo('research', 'chat')} className="text-[12px] font-semibold text-[#3474db] hover:underline shrink-0">View all</button>
+          </div>
+          {projects.length ? (
+            <div className="divide-y divide-[var(--line)]">
+              {projects.slice(0, 5).map((proj) => {
+                const projectTaskItems = tasks.filter((task) => task.projectId === proj.id);
+                const completed = projectTaskItems.filter((task) => task.completed).length;
+                const percent = projectTaskItems.length ? Math.round((completed / projectTaskItems.length) * 100) : 0;
                 return (
-                  <button
-                    key={proj.id}
-                    type="button"
-                    onClick={() => navigateTo('research', 'chat', proj.id)}
-                    className="text-left rounded-[18px] border border-neutral-200/80 dark:border-[var(--line)] bg-white dark:bg-[var(--s)] p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all"
-                  >
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: proj.dotColor || '#f5c842' }} />
-                      <b className="text-[13px] text-neutral-900 dark:text-white truncate">{proj.title}</b>
-                    </div>
-                    <p className="text-[11px] text-neutral-500 m-0 line-clamp-2 min-h-[2.4em]">{proj.summary || 'Pinned project'}</p>
-                    <div className="mt-3 flex items-center justify-between gap-2 text-[10px] font-semibold text-neutral-400">
-                      <span>
-                        {done} done · {open} open
-                      </span>
-                      <span>{pct}%</span>
-                    </div>
-                    <div className="mt-1.5 h-1.5 rounded-full bg-neutral-100 dark:bg-white/10 overflow-hidden">
-                      <div className="h-full rounded-full bg-[#f5c842]" style={{ width: `${pct}%` }} />
-                    </div>
+                  <button key={proj.id} type="button" onClick={() => navigateTo('research', 'chat', proj.id)} className="w-full py-3.5 flex items-center gap-3 text-left hover:bg-[var(--s2)]/60 rounded-xl px-2 transition-colors">
+                    <span className="w-9 h-9 rounded-xl grid place-items-center shrink-0 text-[12px] font-bold" style={{ backgroundColor: (proj.dotColor || '#f5c842') + '20', color: proj.dotColor || '#b88900' }}>{(proj.title || 'P').slice(0, 1).toUpperCase()}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2 min-w-0"><b className="text-[13px] text-[var(--t)] truncate">{proj.title}</b>{proj.pinned && <span className="text-[10px] text-[var(--m)] border border-[var(--line)] rounded-full px-2 py-0.5 shrink-0">Pinned</span>}</span>
+                      <span className="block text-[11px] text-[var(--m)] mt-1 truncate">{proj.sourceCount} sources · {projectTaskItems.length - completed} open tasks · {proj.status || 'In progress'}</span>
+                      <span className="block h-1 rounded-full bg-[var(--s2)] overflow-hidden mt-2"><span className="block h-full rounded-full bg-[#e7b820]" style={{ width: percent + '%' }} /></span>
+                    </span>
+                    <ArrowUpRight className="w-4 h-4 text-[var(--m)] shrink-0" />
                   </button>
                 );
               })}
-          </div>
-        </div>
-      )}
-
-      {/* Card grid */}
-      <div className="max-w-[1120px] mx-auto px-5 md:px-8 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-        {/* Streak / stars — Duolingo-inspired */}
-        <div className="rounded-[22px] border border-[#ffd4b8] bg-gradient-to-br from-[#fff4ec] to-white dark:from-[#3a2a22] dark:to-[var(--s)] dark:border-[#5a4030] p-5 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span className="w-9 h-9 rounded-2xl bg-[#ffe0cc] dark:bg-[#5a3a28] text-[#e06b2c] grid place-items-center">
-                <Flame className="w-4.5 h-4.5" />
-              </span>
-              <div>
-                <h3 className="text-[15px] font-extrabold text-neutral-900 dark:text-white m-0">Streak</h3>
-                <p className="text-[11px] text-neutral-500 m-0">Come back daily</p>
-              </div>
             </div>
-            <div className="flex items-center gap-1 text-[#e06b2c]">
-              {[0, 1, 2].map((i) => (
-                <Star key={i} className={`w-4 h-4 ${i < Math.min(3, streak.count) ? 'fill-current' : 'opacity-30'}`} />
-              ))}
-            </div>
-          </div>
-          <p className="text-[36px] font-black tracking-tight text-neutral-900 dark:text-white m-0 leading-none">
-            {streak.count}
-            <span className="text-[14px] font-bold text-neutral-400 ml-1.5">days</span>
-          </p>
-          <p className="mt-2 text-[12px] text-neutral-500 m-0">Keep a calm rhythm — open Bob once a day to grow the streak.</p>
-        </div>
-
-        {/* Today’s focus */}
-        <div className="rounded-[22px] border border-[#f5e7b4] bg-gradient-to-br from-[#fff8df] to-white dark:from-[#332b18] dark:to-[var(--s)] dark:border-[#5b4b27] p-5 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span className="w-9 h-9 rounded-2xl bg-[#f5c842]/25 text-[#b88900] grid place-items-center">
-                <Compass className="w-4.5 h-4.5" />
-              </span>
-              <h3 className="text-[15px] font-extrabold text-neutral-900 dark:text-white m-0">Today’s focus</h3>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setFocusPickerStep('project');
-                setIsSetFocusModalOpen(true);
-              }}
-              className="text-[11px] font-bold text-[#b88900] hover:underline"
-            >
-              Change
-            </button>
-          </div>
-          <p className="text-[15px] font-bold text-neutral-900 dark:text-white leading-snug m-0 line-clamp-2">{activeFocusTitle}</p>
-          <p className="mt-1 text-[11px] text-neutral-500 m-0">{focusProject?.title || 'No project yet'}</p>
-          <div className="mt-4 h-2 rounded-full bg-black/5 dark:bg-white/10 overflow-hidden">
-            <div className="h-full rounded-full bg-[#f5c842] transition-all" style={{ width: `${focusProgress}%` }} />
-          </div>
-          <p className="mt-1.5 text-[11px] font-semibold text-neutral-500 m-0">{focusProgress}% of project tasks done</p>
-        </div>
-
-        {/* Daily goal progress */}
-        <div className="rounded-[22px] border border-[#c9e9d0] bg-gradient-to-br from-[#e9f7ec] to-white dark:from-[#1b3025] dark:to-[var(--s)] dark:border-[#31543f] p-5 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span className="w-9 h-9 rounded-2xl bg-[#c9e9d0] dark:bg-[#31543f] text-[#1f7a4a] grid place-items-center">
-                <Target className="w-4.5 h-4.5" />
-              </span>
-              <h3 className="text-[15px] font-extrabold text-neutral-900 dark:text-white m-0">Daily goal</h3>
-            </div>
-            <button type="button" onClick={() => setIsGoalsOpen(true)} className="text-[11px] font-bold text-[#1f7a4a] hover:underline">
-              Set goals
-            </button>
-          </div>
-          <p className="text-[28px] font-black text-neutral-900 dark:text-white m-0">
-            {Math.min(doneTodayCount, goals.daily)}
-            <span className="text-[14px] font-bold text-neutral-400"> / {goals.daily} tasks</span>
-          </p>
-          <div className="mt-3 h-2.5 rounded-full bg-black/5 dark:bg-white/10 overflow-hidden">
-            <div className="h-full rounded-full bg-[#34c759] transition-all" style={{ width: `${dailyPct}%` }} />
-          </div>
-          <p className="mt-2 text-[11px] text-neutral-500 m-0">Bob checks goals against completed tasks on your projects.</p>
-        </div>
-
-        {/* Stats: done vs open */}
-        <div className="rounded-[22px] border border-[#cbdfff] bg-gradient-to-br from-[#eaf3ff] to-white dark:from-[#1b293b] dark:to-[var(--s)] dark:border-[#2d4565] p-5 shadow-sm">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="w-9 h-9 rounded-2xl bg-[#dbe8ff] dark:bg-[#2d4565] text-[#3474db] grid place-items-center">
-              <TrendingUp className="w-4.5 h-4.5" />
-            </span>
-            <h3 className="text-[15px] font-extrabold text-neutral-900 dark:text-white m-0">Task balance</h3>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-xl bg-white/70 dark:bg-black/20 p-3 border border-black/5 dark:border-white/10">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 m-0">Done</p>
-              <p className="text-[22px] font-black text-[#3474db] m-0 mt-1">{doneTasks.length}</p>
-            </div>
-            <div className="rounded-xl bg-white/70 dark:bg-black/20 p-3 border border-black/5 dark:border-white/10">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 m-0">Open</p>
-              <p className="text-[22px] font-black text-neutral-800 dark:text-white m-0 mt-1">{openTasks.length}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Due soon */}
-        <div className="rounded-[22px] border border-[#f2d0c5] bg-gradient-to-br from-[#fff0eb] to-white dark:from-[#38251f] dark:to-[var(--s)] dark:border-[#674035] p-5 shadow-sm">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="w-9 h-9 rounded-2xl bg-[#ffd8cc] dark:bg-[#674035] text-[#c45c2a] grid place-items-center">
-              <Clock className="w-4.5 h-4.5" />
-            </span>
-            <h3 className="text-[15px] font-extrabold text-neutral-900 dark:text-white m-0">Due soon</h3>
-          </div>
-          {dueSoon.length === 0 ? (
-            <p className="text-[12px] text-neutral-500 m-0">Nothing urgent. Enjoy the calm.</p>
           ) : (
-            <ul className="space-y-2 m-0 p-0 list-none">
-              {dueSoon.map((t) => (
-                <li key={t.id} className="flex items-center justify-between gap-2 text-[12px]">
-                  <span className="font-semibold text-neutral-800 dark:text-white truncate">{t.title}</span>
-                  <span className="text-[10px] font-bold text-neutral-400 shrink-0">{t.dueDate || 'Soon'}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        {/* Recent projects */}
-        <div className="rounded-[22px] border border-[#e0d0f5] bg-gradient-to-br from-[#f3eaff] to-white dark:from-[#2a1f3d] dark:to-[var(--s)] dark:border-[#4a3a65] p-5 shadow-sm sm:col-span-2 xl:col-span-1">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span className="w-9 h-9 rounded-2xl bg-[#e8d9ff] dark:bg-[#4a3a65] text-[#6b4bb8] grid place-items-center">
-                <ListTodo className="w-4.5 h-4.5" />
-              </span>
-              <h3 className="text-[15px] font-extrabold text-neutral-900 dark:text-white m-0">Recent projects</h3>
+            <div className="py-10 text-center">
+              <Compass className="w-7 h-7 text-[var(--m)] mx-auto mb-2" />
+              <p className="text-[13px] font-semibold text-[var(--t)] m-0">Your first project starts here.</p>
+              <p className="text-[12px] text-[var(--m)] mt-1 mb-0">Create a study to keep your research and next steps together.</p>
             </div>
-            <button type="button" onClick={() => navigateTo('research', 'chat')} className="text-[11px] font-bold text-[#6b4bb8] hover:underline">
-              View all
-            </button>
-          </div>
-          <div className="space-y-1">
-            {projects.slice(0, 4).map((proj) => (
-              <button
-                key={proj.id}
-                type="button"
-                onClick={() => navigateTo('research', 'chat', proj.id)}
-                className="w-full flex items-center justify-between gap-2 py-2.5 px-2 -mx-1 rounded-xl hover:bg-black/[0.03] dark:hover:bg-white/5 text-left transition-colors"
-              >
-                <span className="flex items-center gap-2.5 min-w-0">
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: proj.dotColor || '#f59e0b' }} />
-                  <span className="min-w-0">
-                    <b className="block text-[13px] text-neutral-900 dark:text-white truncate">{proj.title}</b>
-                    <small className="text-[10px] text-neutral-400">
-                      {proj.sourceCount} sources · {proj.status}
-                    </small>
-                  </span>
-                </span>
-                <ArrowUpRight className="w-3.5 h-3.5 text-neutral-300 shrink-0" />
-              </button>
-            ))}
-            {projects.length === 0 && <p className="text-[12px] text-neutral-500 m-0">Start a study from Home to see projects here.</p>}
-          </div>
-        </div>
+          )}
+        </article>
 
-        {/* Top project highlight */}
-        <div className="rounded-[22px] border border-[#c9e6f5] bg-gradient-to-br from-[#e8f6fc] to-white dark:from-[#1a2e38] dark:to-[var(--s)] dark:border-[#2d4f5c] p-5 shadow-sm xl:col-span-2">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="w-9 h-9 rounded-2xl bg-[#cfeaf5] dark:bg-[#2d4f5c] text-[#2a8fad] grid place-items-center">
-              <Sparkles className="w-4.5 h-4.5" />
-            </span>
+        <article className="rounded-2xl border border-[var(--line)] bg-[var(--s)] p-5 sm:p-6 min-w-0">
+          <div className="flex items-start justify-between gap-3 mb-3">
             <div>
-              <h3 className="text-[15px] font-extrabold text-neutral-900 dark:text-white m-0">Top project</h3>
-              <p className="text-[11px] text-neutral-500 m-0">Most active workspace</p>
+              <h2 className="text-[16px] font-bold text-[var(--t)] m-0">Due soon</h2>
+              <p className="text-[12px] text-[var(--m)] mt-1 mb-0">A short list, not another thing to manage.</p>
             </div>
+            <button type="button" onClick={() => navigateTo('tasks')} className="text-[12px] font-semibold text-[#3474db] hover:underline shrink-0">Open tasks</button>
           </div>
-          {focusProject ? (
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <p className="text-[18px] font-extrabold text-neutral-900 dark:text-white m-0">{focusProject.title}</p>
-                <p className="mt-1 text-[12px] text-neutral-500 m-0">
-                  {focusProject.sourceCount} sources · {projectOpenTasks.length} open · {doneInProject} done
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => navigateTo('research', 'chat', focusProject.id)}
-                className="h-10 px-4 rounded-xl bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-[12px] font-bold inline-flex items-center gap-1.5 shrink-0"
-              >
-                Open research
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+          {dueSoon.length ? (
+            <div className="divide-y divide-[var(--line)]">
+              {dueSoon.slice(0, 5).map((task) => (
+                <button key={task.id} type="button" onClick={() => navigateTo('tasks')} className="w-full flex items-start gap-3 py-3 text-left rounded-lg hover:bg-[var(--s2)]/60 px-2 transition-colors">
+                  <span className="mt-0.5 w-7 h-7 rounded-lg bg-[#fff4d6] dark:bg-[#473914] text-[#9b7200] grid place-items-center shrink-0"><Calendar className="w-3.5 h-3.5" /></span>
+                  <span className="min-w-0 flex-1"><b className="block text-[12px] font-semibold text-[var(--t)] leading-snug">{task.title}</b><span className="block text-[11px] text-[var(--m)] mt-1">{task.dueDate || 'Date not set'}</span></span>
+                  <ArrowRight className="w-3.5 h-3.5 text-[var(--m)] mt-1 shrink-0" />
+                </button>
+              ))}
             </div>
           ) : (
-            <p className="text-[12px] text-neutral-500 m-0">Create a project to pin your top workspace.</p>
+            <div className="py-10 text-center">
+              <CheckCircle2 className="w-7 h-7 text-[#3a9b68] mx-auto mb-2" />
+              <p className="text-[13px] font-semibold text-[var(--t)] m-0">You have room to breathe.</p>
+              <p className="text-[12px] text-[var(--m)] mt-1 mb-0">No upcoming tasks need attention right now.</p>
+            </div>
           )}
+        </article>
+      </section>
+
+      <section className="max-w-[1120px] mx-auto px-5 md:px-8 mb-7">
+        <div className="flex items-end justify-between gap-3 mb-3">
+          <div><h2 className="text-[16px] font-bold text-[var(--t)] m-0">Make today count</h2><p className="text-[12px] text-[var(--m)] mt-1 mb-0">Choose one useful next step and leave the rest for later.</p></div>
+          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-bold ${badge.tone}`}><Trophy className="w-3.5 h-3.5" />{badge.title}</span>
         </div>
-      </div>
+        <div className="grid grid-cols-1 lg:grid-cols-[1.15fr_0.85fr] gap-4">
+          <article className="rounded-2xl border border-[var(--line)] bg-[var(--s)] p-5 sm:p-6">
+            <div className="flex items-center justify-between gap-3 mb-3"><div className="flex items-center gap-2"><span className="w-8 h-8 rounded-xl bg-[#fff4d6] dark:bg-[#473914] text-[#9b7200] grid place-items-center"><Target className="w-4 h-4" /></span><h3 className="text-[14px] font-bold text-[var(--t)] m-0">Today's focus</h3></div><button type="button" onClick={() => { setFocusPickerStep('project'); setIsSetFocusModalOpen(true); }} className="text-[12px] font-semibold text-[#3474db] hover:underline">Change</button></div>
+            <p className="text-[18px] font-bold text-[var(--t)] leading-snug m-0">{activeFocusTitle}</p>
+            <p className="text-[12px] text-[var(--m)] mt-1 mb-0">{focusProject?.title || 'Choose a project to set your focus.'}</p>
+            <div className="flex items-center justify-between text-[11px] text-[var(--m)] mt-5 mb-2"><span>Project progress</span><strong className="text-[var(--t)]">{focusProgress}%</strong></div>
+            <div className="h-1.5 rounded-full bg-[var(--s2)] overflow-hidden"><div className="h-full rounded-full bg-[#e7b820]" style={{ width: focusProgress + '%' }} /></div>
+          </article>
+          <article className="rounded-2xl border border-[var(--line)] bg-[var(--s)] p-5 sm:p-6">
+            <div className="flex items-center justify-between gap-3"><h3 className="text-[14px] font-bold text-[var(--t)] m-0">Your rhythm</h3><Flame className="w-4 h-4 text-[#e06b2c]" /></div>
+            <div className="flex items-end gap-2 mt-4"><p className="text-[30px] leading-none font-bold text-[var(--t)] m-0">{streak.count}</p><p className="text-[12px] text-[var(--m)] m-0 pb-0.5">day streak</p></div>
+            <div className="flex items-center justify-between gap-3 mt-5"><span className="text-[12px] text-[var(--m)]">Daily goal</span><button type="button" onClick={() => setIsGoalsOpen(true)} className="text-[12px] font-semibold text-[#3474db] hover:underline">Edit goal</button></div>
+            <div className="flex items-center justify-between text-[12px] mt-2"><span className="text-[var(--m)]">{Math.min(doneTodayCount, goals.daily)} of {goals.daily} tasks</span><strong className="text-[var(--t)]">{dailyPct}%</strong></div>
+            <div className="h-1.5 rounded-full bg-[var(--s2)] overflow-hidden mt-2"><div className="h-full rounded-full bg-[#3a9b68]" style={{ width: dailyPct + '%' }} /></div>
+          </article>
+        </div>
+      </section>
 
       {/* Minimized ChatGPT-style composer for dashboard Q&A */}
       <div className="fixed bottom-6 inset-x-0 z-20 px-4 pointer-events-none">
