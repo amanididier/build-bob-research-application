@@ -414,8 +414,29 @@ class BobAiManager {
       snippet: m.content.slice(0, 160) + (m.content.length > 160 ? '...' : ''),
     }));
 
-    // 1. Try Google Gemini API if user has connected their key
+    const workspaceToolDeclarations = getBobWorkspaceToolDeclarations(toolIntentQuery !== undefined ? toolIntentQuery : query);
+    const hasWriteTools = workspaceToolDeclarations.some((tool) =>
+      ['create_note', 'add_task', 'complete_task'].includes(String(tool.name))
+    );
+
+    // Without the Gemini tool-calling path, never let a fallback model claim it
+    // changed workspace state when no action handler could run.
     const geminiKey = this.getGeminiKey();
+    if (!geminiKey && hasWriteTools) {
+      const answer = 'I need a connected Gemini API key to safely save notes or change tasks, so I did not change anything. Connect Gemini in Settings and try again.';
+      onChunk?.(answer);
+      return {
+        answer,
+        sources: citations,
+        latencyMs: Math.round(performance.now() - startTime),
+        modelTier: 'workspace-tools-unavailable',
+        modelName: 'Gemini API key required for workspace actions',
+        memoryNodesUsed: memory.citedNodes.length,
+        provider: 'local',
+      };
+    }
+
+    // 1. Try Google Gemini API if user has connected their key
     if (geminiKey) {
       const candidateModels = [
         this.verifiedModel,
@@ -461,11 +482,7 @@ ${workspaceContext || 'No additional workspace records are available for this pr
 
       // A. Try SDK across candidate models. Workspace tools are only enabled for
       // explicit workspace-related requests; ordinary chat keeps its streaming path.
-      const workspaceToolDeclarations = getBobWorkspaceToolDeclarations(toolIntentQuery !== undefined ? toolIntentQuery : query);
       const hasWorkspaceTools = workspaceToolDeclarations.length > 0;
-      const hasWriteTools = workspaceToolDeclarations.some((tool) =>
-        ['create_note', 'add_task', 'complete_task'].includes(String(tool.name))
-      );
       const toolConfig = hasWorkspaceTools
         ? { tools: [{ functionDeclarations: workspaceToolDeclarations }] }
         : undefined;
