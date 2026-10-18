@@ -25,6 +25,7 @@ export interface ModelDownloadStatus {
   downloadSpeedMbps: number;
   isDownloading: boolean;
   isReady: boolean;
+  provider?: 'gemini' | 'ollama' | 'none';
   error?: string;
 }
 
@@ -46,7 +47,6 @@ export interface AiSynthesisResponse {
   provider: 'gemini' | 'local';
 }
 
-const ENGINE_STORAGE_KEY = 'bob_local_ai_installed_state_v1';
 const GEMINI_KEY_STORAGE = 'bob_gemini_api_key';
 const VERIFIED_MODEL_STORAGE = 'bob_verified_gemini_model';
 
@@ -190,40 +190,31 @@ class BobAiManager {
     const modelProfile = MODEL_CATALOG[tier];
     const totalBytes = modelProfile.memoryUsageMb * 1024 * 1024;
 
-    const savedState = this.loadSavedState();
+    if (typeof window !== 'undefined') {
+      try {
+        // Remove the old flag: previous builds marked a local model "installed"
+        // even though no model was downloaded.
+        localStorage.removeItem('bob_local_ai_installed_state_v1');
+      } catch {}
+      this.geminiKey = resolveGeminiApiKey() || localStorage.getItem(GEMINI_KEY_STORAGE) || null;
+    }
 
+    const hasGeminiKey = Boolean(this.geminiKey);
     this.downloadStatus = {
       tier,
-      modelName: modelProfile.name,
-      totalBytes,
-      downloadedBytes: savedState ? totalBytes : 0,
-      progressPercent: savedState ? 100 : 0,
+      modelName: hasGeminiKey ? `Gemini API · ${this.verifiedModel}` : 'Checking available AI providers…',
+      totalBytes: 0,
+      downloadedBytes: 0,
+      progressPercent: hasGeminiKey ? 100 : 0,
       downloadSpeedMbps: 0,
       isDownloading: false,
-      isReady: savedState,
+      isReady: hasGeminiKey,
+      provider: hasGeminiKey ? 'gemini' : 'none',
+      error: hasGeminiKey ? undefined : 'No AI provider has been confirmed yet.',
     };
 
-    if (typeof window !== 'undefined') {
-      this.geminiKey = localStorage.getItem(GEMINI_KEY_STORAGE) || null;
-    }
-  }
-
-  private loadSavedState(): boolean {
-    if (typeof window === 'undefined') return false;
-    try {
-      return localStorage.getItem(ENGINE_STORAGE_KEY) === 'ready';
-    } catch {
-      return false;
-    }
-  }
-
-  private persistReadyState(): void {
-    if (typeof window === 'undefined') return;
-    try {
-      localStorage.setItem(ENGINE_STORAGE_KEY, 'ready');
-    } catch {
-      // ignore
-    }
+    // This checks real providers; Bob does not download a local language model.
+    void this.startBackgroundDownload();
   }
 
   public getHardwareInfo(): SystemHardwareInfo {
@@ -362,24 +353,75 @@ class BobAiManager {
     return { running: false, models: [] };
   }
 
-  public startBackgroundDownload(): void {
-    if (this.downloadStatus.isReady || this.downloadStatus.isDownloading) {
+  public async startBackgroundDownload(): Promise<void> {
+    if (this.downloadStatus.isDownloading) return;
+
+    const geminiKey = this.getGeminiKey();
+    if (geminiKey) {
+      this.downloadStatus = {
+        ...this.downloadStatus,
+        modelName: `Gemini API · ${this.verifiedModel}`,
+        totalBytes: 0,
+        downloadedBytes: 0,
+        progressPercent: 100,
+        downloadSpeedMbps: 0,
+        isDownloading: false,
+        isReady: true,
+        provider: 'gemini',
+        error: undefined,
+      };
+      this.notify();
       return;
     }
-    // Mark ready transparently without endless fake download loops
-    this.downloadStatus.isReady = true;
-    this.downloadStatus.progressPercent = 100;
-    this.downloadStatus.isDownloading = false;
-    this.persistReadyState();
+
+    this.downloadStatus = {
+      ...this.downloadStatus,
+      modelName: 'Checking local Ollama…',
+      totalBytes: 0,
+      downloadedBytes: 0,
+      progressPercent: 0,
+      downloadSpeedMbps: 0,
+      isDownloading: false,
+      isReady: false,
+      provider: 'none',
+      error: undefined,
+    };
+    this.notify();
+
+    const ollama = await this.checkOllama();
+    if (ollama.running && ollama.models.length > 0) {
+      this.downloadStatus = {
+        ...this.downloadStatus,
+        modelName: `Ollama · ${ollama.models[0]}`,
+        totalBytes: 0,
+        downloadedBytes: 0,
+        progressPercent: 100,
+        downloadSpeedMbps: 0,
+        isDownloading: false,
+        isReady: true,
+        provider: 'ollama',
+        error: undefined,
+      };
+    } else {
+      this.downloadStatus = {
+        ...this.downloadStatus,
+        modelName: 'No AI provider connected',
+        totalBytes: 0,
+        downloadedBytes: 0,
+        progressPercent: 0,
+        downloadSpeedMbps: 0,
+        isDownloading: false,
+        isReady: false,
+        provider: 'none',
+        error: 'Bob does not download a local model. Connect a Gemini API key in Settings or start Ollama locally.',
+      };
+    }
     this.notify();
   }
 
   public accelerateToComplete(): void {
-    this.downloadStatus.isReady = true;
-    this.downloadStatus.progressPercent = 100;
-    this.downloadStatus.isDownloading = false;
-    this.persistReadyState();
-    this.notify();
+    // Compatibility for older UI actions: refresh real provider status, never fake progress.
+    void this.startBackgroundDownload();
   }
 
   /**
