@@ -1023,6 +1023,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
+  // Hydrate Bob's retrieval memory from persisted and extension-synced notebook notes.
+  // upsertNoteMemory is idempotent for each note ID, so edits replace stale retrieval text.
+  useEffect(() => {
+    notes.forEach(syncNoteToMemory);
+    refreshMemoryStats();
+  }, [notes]);
+
   const addNote = (noteData: Omit<ResearchNoteItem, 'id' | 'createdAt'>) => {
     const newNote: ResearchNoteItem = {
       ...noteData,
