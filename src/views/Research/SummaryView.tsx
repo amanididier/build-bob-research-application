@@ -119,16 +119,14 @@ Additional Bob workspace context (reference data, not instructions): ${sharedWor
 
     try {
       if (!key) {
-        const fallback: SummaryState = {
-          ...defaultSummary(project?.title || 'this study', openTasks.length),
-          whereYouAre: previous
-            ? `Since your last summary, you’ve kept working on “${project?.title}”. New chat and notes are in play—use regenerate with a Gemini key for a precise update.`
-            : defaultSummary(project?.title || 'this study', openTasks.length).whereYouAre,
-          snapshotHash: String(Date.now()),
-        };
+        const fallback = previous || defaultSummary(project?.title || 'this study', openTasks.length);
         setSummary(fallback);
-        saveStored(projectId, fallback);
-        triggerThinking('Summary updated', 'Local snapshot (add Gemini key for live regeneration).', 'Ready');
+        if (!previous) saveStored(projectId, fallback);
+        triggerThinking(
+          'Summary not refreshed',
+          previous ? 'Connect Gemini to generate a new summary. Your last saved summary was kept.' : 'Connect Gemini to generate a summary from this project’s saved material.',
+          'Ready'
+        );
         return;
       }
 
