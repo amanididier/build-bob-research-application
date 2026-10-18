@@ -166,7 +166,7 @@ export function buildBobWorkspaceContext(projectId: string): string {
       .filter((item: unknown): item is string => typeof item === 'string')
       .slice(-8)
       .map((item: string) => item.slice(0, 200));
-    if (interests.length) sections.push('EXPLICITLY SHARED USER INTERESTS\\n' + interests.map((item: string) => '- ' + item).join('\\n'));
+    if (interests.length) sections.push('EXPLICITLY SHARED USER INTERESTS\n' + interests.map((item: string) => '- ' + item).join('\n'));
   }
 
   try {
