@@ -48,7 +48,9 @@ export const TabsView: React.FC<TabsViewProps> = ({ isSidePanel = false }) => {
             !demoTabKeys.has(`${String(tab?.id || '')}|${String(tab?.title || '')}|${String(tab?.url || '')}`)
           );
           if (cleaned.length !== parsed.length) {
-            localStorage.setItem('bob_tabs_catalog_v2', JSON.stringify(cleaned));
+            try {
+              localStorage.setItem('bob_tabs_catalog_v2', JSON.stringify(cleaned));
+            } catch {}
           }
           return cleaned;
         }
