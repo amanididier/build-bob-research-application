@@ -654,6 +654,9 @@ export class GeminiLiveService {
     this.isConnected = false;
     this.isConnecting = false;
     this.setupAcknowledged = false;
+    this.userSpeaking = false;
+    this.lastUserSpeechTimestamp = 0;
+    this.scheduledPlayTime = this.playbackAudioContext?.currentTime || 0;
     if (this.setupTimeout) {
       clearTimeout(this.setupTimeout);
       this.setupTimeout = null;
@@ -664,6 +667,7 @@ export class GeminiLiveService {
   public stop(): void {
     this.isStopped = true;
     this.cleanup();
+    this.callbacks = {};
   }
 }
 
