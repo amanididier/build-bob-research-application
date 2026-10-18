@@ -8,8 +8,7 @@
  * 1. Audio-to-Audio Pipeline: Bidirectional 16kHz PCM audio streaming upstream and 24kHz PCM downstream.
  * 2. Instant Barge-In (Interruption): Web Audio API playback queue stops instantaneously the moment user speech is detected.
  * 3. Fallback Protocol & Safeguards: Automatically catches network issues, 429 rate limits, and quota exhaustion (1,500 req/day limit),
- *    triggering seamless failover to secondary legacy agents (Kokoro / DualEngineSTT) with gentle debug logging:
- *    "Primary Gemini Live quota reached / network interruption. Switched to fallback agent mode."
+ *    triggering seamless failover to secondary voice agents when the Live connection is unavailable.
  */
 
 import { voiceDiagnostics } from '../voice/diagnostics';
@@ -37,11 +36,11 @@ export interface GeminiLiveOptions {
 }
 
 const LIVE_WS_ENDPOINT = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
-const DEFAULT_LIVE_MODEL = 'models/gemini-2.5-flash-native-audio-dialog';
+const DEFAULT_LIVE_MODEL = 'models/gemini-3.8-live';
 const FALLBACK_MODELS = [
-  'models/gemini-2.5-flash-native-audio-dialog',
-  'models/gemini-live-2.5-flash-preview',
-  'models/gemini-2.0-flash-live-001'
+  'models/gemini-3.8-live',
+  'models/gemini-3.1-flash-live-preview',
+  'models/gemini-2.5-flash-native-audio-preview-12-2025'
 ];
 
 const TARGET_INPUT_SAMPLE_RATE = 16000;
@@ -170,12 +169,14 @@ export class GeminiLiveService {
     // Start Audio Capture Graph
     const captureOk = this.startAudioCapture(stream);
     if (!captureOk) {
-      voiceDiagnostics.event('Primary Gemini Live quota reached / network interruption. Switched to fallback agent mode.');
+      this.cleanup();
+      voiceDiagnostics.event('Primary Gemini Live connection unavailable; trying the SDK fallback.');
       return false;
     }
 
     // Try primary models
-    const modelsToTry = options.model ? [options.model, ...FALLBACK_MODELS] : FALLBACK_MODELS;
+    const configuredModels = options.model ? [options.model, ...FALLBACK_MODELS] : FALLBACK_MODELS;
+    const modelsToTry = [...new Set(configuredModels.map((model) => model.replace(/^models\//, '')))];
 
     for (const model of modelsToTry) {
       if (this.isStopped) return false;
@@ -186,9 +187,10 @@ export class GeminiLiveService {
       }
     }
 
-    // All Live connection candidates failed: trigger fallback safeguard
-    voiceDiagnostics.event('Primary Gemini Live quota reached / network interruption. Switched to fallback agent mode.');
-    callbacks.onError?.('Failed to establish Gemini Live WebSocket connection');
+    // All raw WebSocket candidates failed. Release their audio graph before
+    // liveProvider attempts the SDK fallback, and do not signal a fatal error yet.
+    voiceDiagnostics.event('Raw Gemini Live WebSocket candidates failed; the SDK fallback will be tried next.');
+    this.cleanup();
     return false;
   }
 
@@ -230,16 +232,16 @@ export class GeminiLiveService {
         const setupPayload = {
           setup: {
             model: model.startsWith('models/') ? model : `models/${model}`,
-            generationConfig: {
-              responseModalities: options.mode === 'dictation' ? ['TEXT'] : ['AUDIO'],
-              speechConfig: {
-                voiceConfig: {
-                  prebuiltVoiceConfig: {
-                    voiceName: options.voiceName || 'Puck'
-                  }
+            responseModalities: ['AUDIO'],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: {
+                  voiceName: options.voiceName || 'Puck'
                 }
               }
             },
+            inputAudioTranscription: {},
+            outputAudioTranscription: {},
             systemInstruction: {
               parts: [
                 {
@@ -380,19 +382,31 @@ export class GeminiLiveService {
       }
     }
 
+    const serverContent = msg.serverContent;
+
+    // Live API transcriptions are separate serverContent fields, not modelTurn parts.
+    const inputText = serverContent?.inputTranscription?.text || serverContent?.interimInputTranscription?.text;
+    if (inputText) {
+      this.callbacks.onUserTranscript?.(inputText, Boolean(serverContent?.inputTranscription?.text));
+    }
+    const outputText = serverContent?.outputTranscription?.text;
+    if (outputText) {
+      this.callbacks.onModelText?.(outputText, false);
+    }
+
     // Interruption signal: user spoke while model was speaking
-    if (msg.serverContent?.interrupted) {
+    if (serverContent?.interrupted) {
       this.interruptPlayback();
       this.callbacks.onInterrupted?.();
       return;
     }
 
     // Model turn parts (text or audio PCM)
-    const parts = msg.serverContent?.modelTurn?.parts;
+    const parts = serverContent?.modelTurn?.parts;
     if (Array.isArray(parts)) {
       for (const part of parts) {
         // Model Text Chunk
-        if (part.text) {
+        if (part.text && !outputText) {
           this.callbacks.onModelText?.(part.text, false);
         }
 
@@ -468,19 +482,13 @@ export class GeminiLiveService {
         const pcm16 = floatTo16BitPCM(downsampled);
         const base64Audio = arrayBufferToBase64(pcm16.buffer);
 
-        // Send upstream PCM chunk via WebSocket (supports both audio and mediaChunks specifications)
+        // The Live API expects one audio payload per realtimeInput message.
         const realtimeInputPayload = {
           realtimeInput: {
             audio: {
               mimeType: `audio/pcm;rate=${TARGET_INPUT_SAMPLE_RATE}`,
               data: base64Audio
-            },
-            mediaChunks: [
-              {
-                mimeType: `audio/pcm;rate=${TARGET_INPUT_SAMPLE_RATE}`,
-                data: base64Audio
-              }
-            ]
+            }
           }
         };
 

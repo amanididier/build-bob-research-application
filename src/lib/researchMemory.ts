@@ -183,6 +183,43 @@ export class LocalResearchMemoryBank {
   }
 
   /**
+   * Create or update the memory record associated with a notebook note.
+   * The stable note tag prevents edits from leaving stale copies in retrieval.
+   */
+  public upsertNoteMemory(
+    noteId: string,
+    node: Omit<MemoryNode, 'id' | 'timestamp'>
+  ): MemoryNode {
+    const noteTag = `app-note:${noteId}`;
+    const existing = this.memoryCache.find((item) =>
+      item.tags.includes(noteTag)
+    ) || this.memoryCache.find((item) =>
+      item.type === 'note' &&
+      item.projectId === node.projectId &&
+      item.title === node.title &&
+      item.tags.includes('notebook')
+    );
+
+    const updated: MemoryNode = {
+      ...node,
+      id: existing?.id || `mem-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      tags: [...new Set([...(node.tags || []), noteTag])],
+      timestamp: Date.now(),
+    };
+
+    if (existing) {
+      this.memoryCache = this.memoryCache.map((item) =>
+        item.id === existing.id ? updated : item
+      );
+    } else {
+      this.memoryCache.unshift(updated);
+    }
+
+    this.saveToDisk();
+    return updated;
+  }
+
+  /**
    * Delete a memory node
    */
   public deleteMemory(id: string): void {

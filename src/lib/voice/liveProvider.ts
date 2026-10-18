@@ -124,7 +124,9 @@ export class GeminiLiveProvider {
       );
       if (ok) {
         this.connected = true;
-        this.model = models[0];
+        // The raw WebSocket service may have selected a fallback model after
+        // rejecting the preferred one. Report the model actually acknowledged.
+        this.model = geminiLiveService.getModel() || this.model || models[0];
         return true;
       }
     } catch (e) {
@@ -139,6 +141,10 @@ export class GeminiLiveProvider {
       const ok = await this.tryConnect(model, apiKey, systemInstruction);
       if (ok) return true;
     }
+
+    // Do not leave a microphone AudioContext alive when every SDK model fails.
+    // The controller can then start the secondary voice path without duplicate capture.
+    this.stop();
     return false;
   }
 
@@ -154,15 +160,20 @@ export class GeminiLiveProvider {
           onmessage: (msg: any) => this.handleMessage(msg),
           onerror: (e: any) => {
             if (this.stopped) return;
-            const detail = e?.message || e?.error?.message || 'live connection error';
-            voiceDiagnostics.set({ connection: 'failed' });
-            this.callbacks?.onError(String(detail).slice(0, 200));
+            const detail = String(e?.message || e?.error?.message || 'live connection error').slice(0, 200);
+            voiceDiagnostics.set({ connection: this.connected ? 'failed' : 'connecting' });
+            // Connection-attempt errors are handled by the bounded model loop.
+            // Only notify the controller after a session was established.
+            if (this.connected) this.callbacks?.onError(detail);
+            else voiceDiagnostics.event(`Gemini Live SDK connection attempt failed (${model}): ${detail}`);
           },
           onclose: () => {
             if (this.stopped) return;
+            const wasConnected = this.connected;
             this.connected = false;
-            voiceDiagnostics.set({ connection: 'closed' });
-            this.callbacks?.onClosed();
+            voiceDiagnostics.set({ connection: wasConnected ? 'closed' : 'connecting' });
+            if (wasConnected) this.callbacks?.onClosed();
+            else voiceDiagnostics.event(`Gemini Live SDK connection closed before establishment (${model})`);
           },
         },
         config: {
