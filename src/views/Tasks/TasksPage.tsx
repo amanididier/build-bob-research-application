@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
+import { loadRoadmapForProject } from '../../lib/roadmap/roadmapStorage';
 import { 
   CheckCircle2, 
   Circle, 
@@ -59,36 +60,31 @@ export const TasksPage: React.FC = () => {
     navigateTo 
   } = useApp();
 
+  const activeProject = projects.find((p) => p.id === activeResearchId) || projects[0];
+  const activeProjectId = activeProject?.id || activeResearchId || 'urugendo';
+
   const [filter, setFilter] = useState<'all' | 'pending' | 'completed'>('all');
   const [newTitle, setNewTitle] = useState('');
   const [newDueDate, setNewDueDate] = useState('Tomorrow');
   const [isExtracting, setIsExtracting] = useState(false);
-  const [activeRoadmap, setActiveRoadmap] = useState<PhasedRoadmapData | null>(() => {
-    try {
-      const stored = localStorage.getItem('bob_phased_roadmap_v2');
-      if (stored) return JSON.parse(stored);
-    } catch {}
-    return null;
-  });
+  const [activeRoadmap, setActiveRoadmap] = useState<PhasedRoadmapData | null>(() =>
+    loadRoadmapForProject(activeProjectId) as PhasedRoadmapData | null
+  );
 
-  // Re-sync whenever a roadmap is finished or updated
+  // Re-sync the roadmap for the currently selected project.
   useEffect(() => {
     const handleUpdate = () => {
-      try {
-        const stored = localStorage.getItem('bob_phased_roadmap_v2');
-        if (stored) setActiveRoadmap(JSON.parse(stored));
-      } catch {}
+      setActiveRoadmap(loadRoadmapForProject(activeProjectId) as PhasedRoadmapData | null);
     };
 
+    handleUpdate();
     window.addEventListener('bob:roadmap-updated', handleUpdate);
     window.addEventListener('bob:roadmap-finished', handleUpdate);
     return () => {
       window.removeEventListener('bob:roadmap-updated', handleUpdate);
       window.removeEventListener('bob:roadmap-finished', handleUpdate);
     };
-  }, []);
-
-  const activeProject = projects.find((p) => p.id === activeResearchId) || projects[0];
+  }, [activeProjectId]);
 
   const filtered = tasks.filter((t) => {
     if (filter === 'pending') return !t.completed;
