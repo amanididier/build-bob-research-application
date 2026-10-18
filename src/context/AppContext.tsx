@@ -39,6 +39,7 @@ export interface ResearchTaskItem {
   completed: boolean;
   projectId: string;
   isAiGenerated?: boolean;
+  completedAt?: string;
 }
 
 export interface ResearchNoteItem {
@@ -997,7 +998,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const toggleTask = (id: string) => {
     setTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t))
+      prev.map((task) => {
+        if (task.id !== id) return task;
+        const completed = !task.completed;
+        return {
+          ...task,
+          completed,
+          completedAt: completed ? new Date().toISOString() : undefined,
+        };
+      })
     );
   };
 
