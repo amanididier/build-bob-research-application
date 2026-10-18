@@ -187,8 +187,6 @@ class BobAiManager {
     } catch {}
     this.hardwareInfo = detectSystemHardware();
     const tier = this.hardwareInfo.recommendedTier;
-    const modelProfile = MODEL_CATALOG[tier];
-    const totalBytes = modelProfile.memoryUsageMb * 1024 * 1024;
 
     if (typeof window !== 'undefined') {
       try {
