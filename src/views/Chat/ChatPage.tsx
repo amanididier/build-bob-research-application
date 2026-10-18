@@ -457,7 +457,7 @@ export const ChatPage: React.FC = () => {
             className="w-10 h-10 rounded-full bg-[#3478f6] hover:bg-[#f5c842] hover:text-[#172033] text-white grid place-items-center transition-all active:scale-95 disabled:opacity-40 cursor-pointer shrink-0 shadow-xs"
           >
             <Send className="w-4 h-4 ml-0.5" />
-          </button>}
+          </button>
         </form>
       </footer>
     </div>
