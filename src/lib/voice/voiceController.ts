@@ -344,6 +344,9 @@ export class VoiceController {
       const apiKey = resolveGeminiApiKey();
       const hasSpeechRec = typeof window !== 'undefined' && Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
       if (!apiKey && !hasSpeechRec) {
+        // Permission may already have been granted and the microphone opened.
+        // Release every capture/audio resource before surfacing the setup error.
+        this.stopVoiceMode();
         this.setState('ERROR', 'Gemini API key required for dictation. Add your key in Settings.');
         return false;
       }
