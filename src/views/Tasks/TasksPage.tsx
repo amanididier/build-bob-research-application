@@ -115,13 +115,13 @@ export const TasksPage: React.FC = () => {
       .filter((task) => task.projectId === activeProjectId)
       .slice(0, 10)
       .map((task) => `- [${task.completed ? 'done' : 'open'}] ${task.title}`)
-      .join('\\n');
+      .join('\n');
     window.dispatchEvent(new CustomEvent('bob-open-roadmap', {
       detail: {
         context: [
           activeProject?.title ? `Active project: ${activeProject.title}` : '',
-          projectTasks ? `Existing tasks:\\n${projectTasks}` : '',
-        ].filter(Boolean).join('\\n'),
+          projectTasks ? `Existing tasks:\n${projectTasks}` : '',
+        ].filter(Boolean).join('\n'),
         origin: 'tasks',
         projectId: activeProjectId,
       }
