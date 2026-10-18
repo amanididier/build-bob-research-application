@@ -160,6 +160,15 @@ export function buildBobWorkspaceContext(projectId: string): string {
       .map((fact: string) => `- ${fact.slice(0, 220)}`).join('\n'));
   }
 
+  const companionMemory = readJson('bob_companion_memory_v1');
+  if (Array.isArray(companionMemory)) {
+    const interests = companionMemory
+      .filter((item: unknown): item is string => typeof item === 'string')
+      .slice(-8)
+      .map((item: string) => item.slice(0, 200));
+    if (interests.length) sections.push('EXPLICITLY SHARED USER INTERESTS\\n' + interests.map((item: string) => '- ' + item).join('\\n'));
+  }
+
   try {
     const focus = localStorage.getItem('bob_custom_focus_goal');
     const focusProjectId = localStorage.getItem('bob_focus_project_id');
