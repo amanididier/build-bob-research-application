@@ -251,7 +251,7 @@ export async function executeBobWorkspaceTool(
     case 'create_note': {
       const title = safeText(args.title, 160);
       const content = safeText(args.content, 1800);
-      if (!title || !content) return { ok: false, error: 'A note needs both a title and some content.' };
+      if (!title || !content) return { ok: false, needsClarification: true, error: 'A note needs both a title and some content.' };
       const note = {
         id: `note-bob-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         title,
@@ -275,7 +275,7 @@ export async function executeBobWorkspaceTool(
     case 'add_task': {
       const title = safeText(args.title, 180);
       const dueDate = safeText(args.due_date, 80) || 'Flexible';
-      if (!title) return { ok: false, error: 'A task needs a title.' };
+      if (!title) return { ok: false, needsClarification: true, error: 'A task needs a title.' };
       const task = {
         id: `t-bob-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         title,
