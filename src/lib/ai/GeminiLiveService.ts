@@ -169,7 +169,8 @@ export class GeminiLiveService {
     // Start Audio Capture Graph
     const captureOk = this.startAudioCapture(stream);
     if (!captureOk) {
-      voiceDiagnostics.event('Primary Gemini Live quota reached / network interruption. Switched to fallback agent mode.');
+      this.cleanup();
+      voiceDiagnostics.event('Primary Gemini Live connection unavailable; trying the SDK fallback.');
       return false;
     }
 
@@ -185,9 +186,10 @@ export class GeminiLiveService {
       }
     }
 
-    // All Live connection candidates failed: trigger fallback safeguard
-    voiceDiagnostics.event('Primary Gemini Live quota reached / network interruption. Switched to fallback agent mode.');
-    callbacks.onError?.('Failed to establish Gemini Live WebSocket connection');
+    // All raw WebSocket candidates failed. Release their audio graph before
+    // liveProvider attempts the SDK fallback, and do not signal a fatal error yet.
+    voiceDiagnostics.event('Raw Gemini Live WebSocket candidates failed; the SDK fallback will be tried next.');
+    this.cleanup();
     return false;
   }
 
