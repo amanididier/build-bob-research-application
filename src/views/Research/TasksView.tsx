@@ -14,11 +14,8 @@ const STARS_KEY = 'bob_roadmap_stars_v1';
 
 function loadPhased(projectId: string): PhasedTask[] | null {
   try {
-    const all = JSON.parse(localStorage.getItem(PHASED_KEY) || '{}');
-    if (Array.isArray(all[projectId]) && all[projectId].length) return all[projectId];
-
-    // The shared RoadmapSheet is the canonical planner. Reuse its saved plan
-    // instead of making the Research Tasks view maintain a separate roadmap.
+    // The shared RoadmapSheet is canonical; prefer its latest plan over any
+    // older per-view roadmap left behind by the legacy wizard.
     const shared = JSON.parse(localStorage.getItem('bob_phased_roadmap_v2') || 'null');
     if (
       shared &&
@@ -28,7 +25,9 @@ function loadPhased(projectId: string): PhasedTask[] | null {
     ) {
       return shared.tasks;
     }
-    return null;
+
+    const all = JSON.parse(localStorage.getItem(PHASED_KEY) || '{}');
+    return Array.isArray(all[projectId]) && all[projectId].length ? all[projectId] : null;
   } catch {
     return null;
   }
@@ -199,6 +198,11 @@ export const TasksView: React.FC<TasksViewProps> = ({ isSidePanel = false }) => 
       if (loaded?.length) {
         setPhasedTasks(loaded);
         setHasRoadmap(true);
+        setActiveTaskIndex(0);
+        setCompletedTaskIds([]);
+        saveCompleted(projectId, []);
+        setStars(0);
+        saveStars(projectId, 0);
       }
     };
     window.addEventListener('bob-roadmap-saved', onRoadmap);
