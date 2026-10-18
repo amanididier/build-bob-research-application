@@ -110,7 +110,7 @@ export const TasksPage: React.FC = () => {
       setTaskExtractNotice(
         count > 0
           ? `Added ${count} task${count === 1 ? '' : 's'} from this project's saved evidence.`
-          : 'No tasks were added. Add relevant notes or research to this project and connect Gemini in Settings; Bob will only suggest tasks supported by your evidence.'
+          : 'No tasks were added. Bob only creates tasks supported by real project evidence—check that this project has relevant notes or research and that Gemini is connected in Settings.'
       );
     } catch {
       setTaskExtractNotice('Bob could not extract tasks right now. Nothing new was added; please try again.');
