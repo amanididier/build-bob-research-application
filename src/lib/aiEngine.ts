@@ -469,8 +469,12 @@ ${workspaceContext || 'No additional workspace records are available for this pr
       const toolConfig = hasWorkspaceTools
         ? { tools: [{ functionDeclarations: workspaceToolDeclarations }] }
         : undefined;
+      const generationConfig: any = {
+        systemInstruction: systemPrompt,
+        ...(toolConfig || {}),
+      };
       const initialContents: any[] = [
-        { role: 'user', parts: [{ text: `${systemPrompt}\n\nUser Question: ${query}` }] }
+        { role: 'user', parts: [{ text: query }] }
       ];
 
       let workspaceWriteExecuted = false;
@@ -485,7 +489,8 @@ ${workspaceContext || 'No additional workspace records are available for this pr
             try {
               const responseStream = await ai.models.generateContentStream({
                 model,
-                contents: initialContents
+                contents: initialContents,
+                config: generationConfig,
               });
               let fullText = '';
               for await (const chunk of responseStream) {
@@ -516,7 +521,7 @@ ${workspaceContext || 'No additional workspace records are available for this pr
           let result: any = await ai.models.generateContent({
             model,
             contents: initialContents,
-            ...(toolConfig ? { config: toolConfig } : {}),
+            config: generationConfig,
           } as any);
           let executedWorkspaceTool = false;
           let executedWorkspaceWrite = false;
@@ -556,7 +561,7 @@ ${workspaceContext || 'No additional workspace records are available for this pr
             result = await ai.models.generateContent({
               model,
               contents: history,
-              ...(toolConfig ? { config: toolConfig } : {}),
+              config: generationConfig,
             } as any);
           }
 
