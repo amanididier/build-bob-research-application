@@ -515,7 +515,9 @@ ${workspaceContext || 'No additional workspace records are available for this pr
             const modelContent = result?.candidates?.[0]?.content;
             if (modelContent) history.push(modelContent);
 
-            const functionResponseParts = await Promise.all(calls.map(async (call: any) => {
+            const functionResponseParts: any[] = [];
+            // Execute sequentially so multiple writes in one model turn cannot overwrite each other.
+            for (const call of calls as any[]) {
               const toolResult = await executeBobWorkspaceTool(
                 String(call?.name || ''),
                 call?.args && typeof call.args === 'object' ? call.args : {},
@@ -526,14 +528,14 @@ ${workspaceContext || 'No additional workspace records are available for this pr
                 executedWorkspaceWrite = true;
                 workspaceWriteExecuted = true;
               }
-              return {
+              functionResponseParts.push({
                 functionResponse: {
                   name: String(call?.name || ''),
                   ...(call?.id ? { id: call.id } : {}),
                   response: { result: toolResult },
                 },
-              };
-            }));
+              });
+            }
 
             history.push({ role: 'user', parts: functionResponseParts });
             result = await ai.models.generateContent({
