@@ -174,7 +174,7 @@ export const BobOverlayBubble: React.FC = () => {
           ]
             .filter(Boolean)
             .join('\n');
-          const res = await bobAi.generateResearchAnswer(prompt, 'overlay-chat', undefined, 'warm short chat');
+          const res = await bobAi.generateResearchAnswer(prompt, 'overlay-chat', undefined, 'warm short chat', undefined, query);
           reply = (res?.answer || '').trim();
         }
       } catch {
