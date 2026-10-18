@@ -13,6 +13,16 @@ function readJson(key: string): unknown {
   }
 }
 
+function writeJson(key: string, value: unknown): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function asRecords(value: unknown): JsonRecord[] {
   return Array.isArray(value)
     ? value.filter((item): item is JsonRecord => Boolean(item) && typeof item === 'object' && !Array.isArray(item))
@@ -242,30 +252,46 @@ export async function executeBobWorkspaceTool(
       const title = safeText(args.title, 160);
       const content = safeText(args.content, 1800);
       if (!title || !content) return { ok: false, error: 'A note needs both a title and some content.' };
-      const dispatched = dispatchWorkspaceAction({
-        type: 'create_note',
+      const note = {
+        id: `note-bob-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         title,
-        content,
+        selectedText: content,
+        sourceTitle: 'Saved from Bob chat',
+        sourceUrl: '',
         projectId,
-      });
+        relevance: 85,
+        color: 'emerald',
+        createdAt: new Date().toISOString(),
+      };
+      if (!writeJson('bob_notes_v1', [note, ...notes])) {
+        return { ok: false, error: 'The notebook could not be written to local storage.' };
+      }
+      const dispatched = dispatchWorkspaceAction({ type: 'create_note', note });
       return dispatched
-        ? { ok: true, action: 'note_saved', title, message: 'The note save action was sent to Bob’s notebook.' }
-        : { ok: false, error: 'Could not send the note save action to the app.' };
+        ? { ok: true, action: 'note_saved', title, message: 'The note has been saved to Bob’s notebook.' }
+        : { ok: false, error: 'Could not notify the notebook UI about the saved note.' };
     }
 
     case 'add_task': {
       const title = safeText(args.title, 180);
       const dueDate = safeText(args.due_date, 80) || 'Flexible';
       if (!title) return { ok: false, error: 'A task needs a title.' };
-      const dispatched = dispatchWorkspaceAction({
-        type: 'add_task',
+      const task = {
+        id: `t-bob-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         title,
         dueDate,
+        sourceConnection: 'Created by Bob workspace tool',
+        completed: false,
         projectId,
-      });
+        isAiGenerated: true,
+      };
+      if (!writeJson('bob_tasks_v2', [task, ...tasks])) {
+        return { ok: false, error: 'The task list could not be written to local storage.' };
+      }
+      const dispatched = dispatchWorkspaceAction({ type: 'add_task', task });
       return dispatched
-        ? { ok: true, action: 'task_added', title, dueDate, message: 'The task was sent to the active project task list.' }
-        : { ok: false, error: 'Could not send the task action to the app.' };
+        ? { ok: true, action: 'task_added', title, dueDate, message: 'The task has been added to the active project task list.' }
+        : { ok: false, error: 'Could not notify the task list UI about the new task.' };
     }
 
     case 'complete_task': {
@@ -292,10 +318,15 @@ export async function executeBobWorkspaceTool(
       }
 
       const task = candidates[0];
-      const dispatched = dispatchWorkspaceAction({ type: 'complete_task', taskId: safeText(task.id, 100), projectId });
+      const taskId = safeText(task.id, 100);
+      const updatedTasks = tasks.map((item) => safeText(item.id, 100) === taskId ? { ...item, completed: true } : item);
+      if (!writeJson('bob_tasks_v2', updatedTasks)) {
+        return { ok: false, error: 'The task list could not be updated in local storage.' };
+      }
+      const dispatched = dispatchWorkspaceAction({ type: 'complete_task', taskId, projectId });
       return dispatched
-        ? { ok: true, action: 'task_completed', taskTitle: safeText(task.title, 180), message: 'The task was marked complete in the active project.' }
-        : { ok: false, error: 'Could not send the task completion action to the app.' };
+        ? { ok: true, action: 'task_completed', taskTitle: safeText(task.title, 180), message: 'The task has been marked complete in the active project.' }
+        : { ok: false, error: 'Could not notify the task list UI about the completion.' };
     }
 
     default:
