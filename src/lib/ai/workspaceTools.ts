@@ -1,5 +1,6 @@
 import { Type } from '@google/genai';
 import { loadRoadmapForProject } from '../roadmap/roadmapStorage';
+import { localMemoryBank } from '../researchMemory';
 
 type JsonRecord = Record<string, any>;
 
@@ -56,6 +57,17 @@ const READ_TOOLS = [
       type: Type.OBJECT,
       properties: {
         query: { type: Type.STRING, description: 'A few words describing the note or evidence to find.' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'search_research_memory',
+    description: 'Search saved research sources and evidence for the active project using a focused query.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        query: { type: Type.STRING, description: 'The topic, claim, or phrase to search for in saved research.' },
       },
       required: ['query'],
     },
@@ -215,6 +227,21 @@ export async function executeBobWorkspaceTool(
           sourceUrl: safeText(note.sourceUrl, 240),
         }));
       return { query, count: matching.length, notes: matching };
+    }
+
+    case 'search_research_memory': {
+      const query = safeText(args.query, 180);
+      if (!query) return { ok: false, needsClarification: true, error: 'Provide a focused research topic to search for.' };
+      const memory = localMemoryBank.buildPromptContext(query, projectId);
+      return {
+        query,
+        summary: safeText(memory.contextText, 2600),
+        sources: memory.citedNodes.slice(0, 8).map((node: JsonRecord) => ({
+          title: safeText(node.title, 180),
+          url: safeText(node.sourceUrl, 240),
+          excerpt: safeText(node.content, 360),
+        })),
+      };
     }
 
     case 'get_roadmap': {
