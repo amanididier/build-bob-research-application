@@ -183,6 +183,8 @@ export function selectRelevantFacts(
     return { fact, score };
   });
 
+  // A zero-match fact is not relevant merely because it exists in long-term memory.
+  // Returning only actual matches prevents unrelated preferences from leaking into a reply.
   scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, limit).map((s) => s.fact);
+  return scored.filter((item) => item.score > 0).slice(0, limit).map((s) => s.fact);
 }
