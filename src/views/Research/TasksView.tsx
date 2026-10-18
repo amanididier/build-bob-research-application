@@ -271,7 +271,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ isSidePanel = false }) => 
       detail: {
         title: project?.title || 'Project Roadmap',
         context: recentContext,
-        origin: 'tasks',
+        origin: 'research-tasks',
       },
     }));
   };
