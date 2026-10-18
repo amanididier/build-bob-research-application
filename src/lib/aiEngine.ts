@@ -48,6 +48,111 @@ const ENGINE_STORAGE_KEY = 'bob_local_ai_installed_state_v1';
 const GEMINI_KEY_STORAGE = 'bob_gemini_api_key';
 const VERIFIED_MODEL_STORAGE = 'bob_verified_gemini_model';
 
+
+/**
+ * Read the active workspace from the app's existing local stores.
+ * Keep this scoped to the requested project so one project's private notes/tasks
+ * are never mixed into another project's answer.
+ */
+function buildWorkspaceContext(projectId: string): string {
+  if (typeof window === 'undefined') return '';
+
+  const readJson = (key: string): any => {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const sections: string[] = [];
+  const projects = readJson('bob_research_sessions_v3');
+  const projectList = Array.isArray(projects) ? projects : [];
+  const project = projectList.find((item: any) => item?.id === projectId);
+
+  if (project) {
+    sections.push([
+      'ACTIVE PROJECT',
+      `Title: ${String(project.title || 'Untitled project')}`,
+      project.summary ? `Summary: ${String(project.summary).slice(0, 900)}` : '',
+      `Status: ${String(project.status || 'unknown')}; sources: ${Number(project.sourceCount) || 0}`,
+    ].filter(Boolean).join('\\n'));
+  }
+
+  const allMessages = readJson('bob_session_messages_v3');
+  const projectMessages = allMessages && typeof allMessages === 'object'
+    ? allMessages[projectId]
+    : null;
+  if (Array.isArray(projectMessages) && projectMessages.length) {
+    const recent = projectMessages.slice(-10).map((message: any) => {
+      const role = message?.role === 'assistant' ? 'Bob' : 'User';
+      const text = String(message?.text || '').trim().slice(0, 700);
+      return text ? `${role}: ${text}` : '';
+    }).filter(Boolean);
+    if (recent.length) sections.push('RECENT PROJECT CONVERSATION\\n' + recent.join('\\n'));
+  }
+
+  const allTasks = readJson('bob_tasks_v2');
+  if (Array.isArray(allTasks)) {
+    const projectTasks = allTasks.filter((task: any) => task?.projectId === projectId).slice(0, 12);
+    if (projectTasks.length) {
+      sections.push('PROJECT TASKS\\n' + projectTasks.map((task: any) =>
+        `- [${task.completed ? 'done' : 'open'}] ${String(task.title || 'Untitled task').slice(0, 180)} (due: ${String(task.dueDate || 'not set')})`
+      ).join('\\n'));
+    }
+  }
+
+  const roadmap = readJson('bob_phased_roadmap_v2');
+  if (roadmap && (!roadmap.projectId || roadmap.projectId === projectId)) {
+    const goal = String(roadmap.goal || '').trim();
+    const roadmapTasks = Array.isArray(roadmap.tasks) ? roadmap.tasks.slice(0, 12) : [];
+    if (goal || roadmapTasks.length) {
+      sections.push([
+        'ACTIVE ROADMAP',
+        goal ? `Goal: ${goal.slice(0, 500)}` : '',
+        ...roadmapTasks.map((task: any, index: number) =>
+          `${index + 1}. ${String(task.title || 'Untitled milestone').slice(0, 180)}`
+        ),
+      ].filter(Boolean).join('\\n'));
+    }
+  }
+
+  const tabs = readJson('bob_tabs_catalog_v2');
+  if (Array.isArray(tabs)) {
+    const selectedTabs = tabs.filter((tab: any) => tab?.selected).slice(0, 8);
+    if (selectedTabs.length) {
+      sections.push('SELECTED RESEARCH TABS\\n' + selectedTabs.map((tab: any) =>
+        `- ${String(tab.title || tab.url || 'Untitled tab').slice(0, 180)}${tab.url ? ` — ${String(tab.url).slice(0, 220)}` : ''}${tab.preview ? `\\n  Preview: ${String(tab.preview).slice(0, 240)}` : ''}`
+      ).join('\\n'));
+    }
+  }
+
+  const profile = readJson('bob_profile_preferences_v1');
+  if (profile && typeof profile === 'object') {
+    const preferences = [
+      profile.style ? `Response style: ${String(profile.style)}` : '',
+      profile.priorities && typeof profile.priorities === 'object'
+        ? `Priorities: ${Object.entries(profile.priorities).filter(([, enabled]) => Boolean(enabled)).map(([key]) => key).join(', ')}`
+        : '',
+    ].filter(Boolean);
+    if (preferences.length) sections.push('USER RESPONSE PREFERENCES\\n' + preferences.join('\\n'));
+  }
+
+  const companionMemory = readJson('bob_companion_memory_v1');
+  if (Array.isArray(companionMemory) && companionMemory.length) {
+    sections.push('EXPLICITLY SHARED USER PREFERENCES\\n' + companionMemory.slice(-8)
+      .filter((fact: any) => typeof fact === 'string')
+      .map((fact: string) => `- ${fact.slice(0, 220)}`).join('\\n'));
+  }
+
+  const focus = localStorage.getItem('bob_custom_focus_goal');
+  if (focus) sections.push('CURRENT FOCUS\\n' + focus.slice(0, 300));
+
+  // A bounded workspace snapshot protects latency and prompt size.
+  return sections.join('\\n\\n').slice(0, 7500);
+}
+
 class BobAiManager {
   private hardwareInfo: SystemHardwareInfo;
   private downloadStatus: ModelDownloadStatus;
@@ -270,6 +375,7 @@ class BobAiManager {
   ): Promise<AiSynthesisResponse> {
     const startTime = performance.now();
     const memory = localMemoryBank.buildPromptContext(query, projectId);
+    const workspaceContext = buildWorkspaceContext(projectId);
     let dailyFocus = '';
     try { dailyFocus = localStorage.getItem('bob_custom_focus_goal') || ''; } catch {}
     const citations = memory.citedNodes.map((m) => ({
@@ -314,8 +420,11 @@ ${(() => {
     return bits.length ? bits.join('. ') + '.' : '';
   } catch { return ''; }
 })()}
-Available context:
-${memory.contextText}`;
+Relevant local research memory:
+${memory.contextText}
+
+Active Bob workspace context (scoped to this project):
+${workspaceContext || 'No additional workspace records are available for this project yet.'}`;
 
       // A. Try SDK across candidate models
       for (const model of uniqueModels) {
