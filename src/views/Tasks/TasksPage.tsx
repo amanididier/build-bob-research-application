@@ -133,7 +133,8 @@ export const TasksPage: React.FC = () => {
   const handleManualAdd = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
-    addTask(newTitle.trim(), newDueDate, activeProject.id);
+    const destinationProjectId = projectFilter === 'all' ? activeProjectId : projectFilter;
+    addTask(newTitle.trim(), newDueDate, destinationProjectId);
     setNewTitle('');
   };
 
@@ -195,14 +196,14 @@ export const TasksPage: React.FC = () => {
             </div>
             <button type="button" onClick={openFullRoadmap} className="h-8 px-3 rounded-lg border border-[var(--line)] text-[12px] font-semibold text-[var(--t)] hover:bg-[var(--s2)] shrink-0">Edit roadmap <ArrowRight className="inline w-3.5 h-3.5 ml-1" /></button>
           </div>
-          {activeRoadmap.steps && activeRoadmap.steps.length > 0 && <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-4">{activeRoadmap.steps.slice(0, 3).map((step, index) => <div key={step.id || index} className="rounded-xl bg-[var(--s2)] px-3 py-3"><span className="block text-[10px] uppercase tracking-wide text-[var(--m)]">{step.phase || 'Milestone ' + (index + 1)}</span><strong className="block text-[12px] text-[var(--t)] mt-1 leading-snug">{step.title}</strong></div>)}</div>}
+
         </section>
       )}
 
       <section className="rounded-2xl border border-[var(--line)] bg-[var(--s)] overflow-hidden">
         <div className="p-4 sm:p-5 border-b border-[var(--line)]">
           <form onSubmit={handleManualAdd} className="flex flex-col sm:flex-row gap-2 mb-4">
-            <input type="text" value={newTitle} onChange={(event) => setNewTitle(event.target.value)} placeholder="Add a clear next step…" aria-label="New task title" className="flex-1 min-w-0 h-10 rounded-xl border border-[var(--line)] bg-[var(--bg)] px-3 text-[13px] text-[var(--t)] placeholder:text-[var(--m)] outline-none focus:ring-2 focus:ring-[#e7b820]/40" />
+            <input type="text" value={newTitle} onChange={(event) => setNewTitle(event.target.value)} placeholder={"Add a clear next step for " + (activeProject?.title || "this project") + "…"} aria-label="New task title" className="flex-1 min-w-0 h-10 rounded-xl border border-[var(--line)] bg-[var(--bg)] px-3 text-[13px] text-[var(--t)] placeholder:text-[var(--m)] outline-none focus:ring-2 focus:ring-[#e7b820]/40" />
             <input type="text" value={newDueDate} onChange={(event) => setNewDueDate(event.target.value)} placeholder="Due date (optional)" aria-label="New task due date" className="h-10 sm:w-40 rounded-xl border border-[var(--line)] bg-[var(--bg)] px-3 text-[12px] text-[var(--t)] placeholder:text-[var(--m)] outline-none focus:ring-2 focus:ring-[#e7b820]/40" />
             <button type="submit" disabled={!newTitle.trim()} className="h-10 px-4 rounded-xl bg-[#171717] dark:bg-[#f2eee7] text-white dark:text-[#171717] text-[12px] font-semibold inline-flex items-center justify-center gap-2 disabled:opacity-40"><Plus className="w-3.5 h-3.5" />Add task</button>
           </form>
