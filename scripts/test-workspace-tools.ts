@@ -70,7 +70,10 @@ async function main() {
 
   const completed = await executeBobWorkspaceTool('complete_task', { task_id: 'task-a' }, 'project-a', 'Please mark the task complete');
   assert.equal(completed.ok, true);
-  assert.equal((JSON.parse(store.get('bob_tasks_v2') || '[]') as any[]).find((task) => task.id === 'task-a')?.completed, true);
+  const completedTask = (JSON.parse(store.get('bob_tasks_v2') || '[]') as any[]).find((task) => task.id === 'task-a');
+  assert.equal(completedTask?.completed, true);
+  assert.equal(typeof completedTask?.completedAt, 'string', 'task completion should be timestamped for accurate dashboard progress');
+  assert.equal(emitted.some((event) => event.type === 'bob:workspace-tool-action' && event.detail?.type === 'complete_task' && event.detail?.taskId === 'task-a' && event.detail?.projectId === 'project-a'), true, 'the app should receive the completed task and project IDs');
 
   const note = await executeBobWorkspaceTool('create_note', { title: 'Saved test note', content: 'Keep this finding.' }, 'project-a', 'Please save a note about the finding');
   assert.equal(note.ok, true);
