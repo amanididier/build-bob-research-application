@@ -113,15 +113,18 @@ export class LocalResearchMemoryBank {
       'about', 'after', 'again', 'also', 'and', 'are', 'because', 'been', 'being',
       'but', 'can', 'could', 'did', 'does', 'doing', 'for', 'from', 'had', 'has',
       'have', 'her', 'here', 'him', 'his', 'how', 'into', 'its', 'just', 'like',
-      'may', 'more', 'most', 'not', 'our', 'out', 'please', 'should', 'some',
-      'than', 'that', 'the', 'their', 'them', 'then', 'there', 'these', 'they',
+      'may', 'me', 'more', 'most', 'my', 'not', 'our', 'out', 'please', 'remember', 'memory', 'memories', 'should', 'some',
+      'than', 'that', 'the', 'their', 'them', 'then', 'there', 'these', 'they', 'tell',
       'this', 'those', 'through', 'too', 'very', 'was', 'were', 'what', 'when',
       'where', 'which', 'who', 'why', 'will', 'with', 'would', 'you', 'your',
     ]);
+    const pool = this.getAllMemories(projectId);
+    const explicitRecallRequest = /\b(what do you remember|what can you remember|what have we discussed|previous conversations|tell me what you remember)\b/i.test(query);
+    if (explicitRecallRequest) return pool.slice(0, limit);
+
     const queryWords = [...new Set(
       query.toLowerCase().split(/\W+/).filter((w) => w.length > 2 && !stopwords.has(w))
     )];
-    const pool = this.getAllMemories(projectId);
 
     // Research memories must earn their place through relevance to this query.
     // Recency and a manually assigned weight may rank matching memories, but must
