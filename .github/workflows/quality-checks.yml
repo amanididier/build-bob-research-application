@@ -44,6 +44,9 @@ jobs:
           done
           exit 1
 
+      - name: Test workspace tool behavior
+        run: npm run test:workspace-tools
+
       - name: TypeScript validation
         run: npm run lint
 
