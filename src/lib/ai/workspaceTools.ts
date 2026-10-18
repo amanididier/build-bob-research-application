@@ -104,7 +104,7 @@ const ADD_TASK_TOOL = {
     type: Type.OBJECT,
     properties: {
       title: { type: Type.STRING, description: 'The task to add, phrased as a clear action.' },
-      due_date: { type: Type.STRING, description: 'A due date or natural-language time such as Today, Tomorrow, or Flexible. Defaults to Flexible.' },
+      due_date: { type: Type.STRING, description: 'Use only a due date the user explicitly stated. If none was stated, use Flexible; never invent a deadline.' },
     },
     required: ['title'],
   },
