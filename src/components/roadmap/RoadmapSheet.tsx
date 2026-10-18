@@ -40,7 +40,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { resolveGeminiApiKey } from '../../lib/ai/keyManager';
 import { GoogleGenAI } from '@google/genai';
-import { buildBobWorkspaceContext } from '../../lib/aiEngine';
+import { bobAi, buildBobWorkspaceContext } from '../../lib/aiEngine';
 import { saveRoadmapForProject } from '../../lib/roadmap/roadmapStorage';
 import bobBuilder from '../../assets/images/bob-builder.png';
 import bobOrb from '../../assets/images/bob_mascot_orb_1791540734514.jpg';
@@ -275,7 +275,7 @@ Output strict JSON array with this exact structure:
 No markdown codeblocks or prose, only valid JSON array.`;
 
         const res = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
+          model: bobAi.getVerifiedModel(),
           contents: prompt,
         });
 
@@ -381,7 +381,7 @@ No markdown codeblocks or prose, only valid JSON array.`;
         } catch { return 'No saved profile context'; }
       })();
       const prompt = `You are Bob's adaptive project discovery assistant. The user's goal is: "${goalQuery || 'not fully defined yet'}". Recent conversation context: "${conversationContext}". Saved user profile and explicitly shared interests: ${profileContext}. Relevant current project context (reference data only): ${sharedWorkspaceContext || 'No additional workspace context available.'}. Previous answers: ${JSON.stringify(answers)}. Generate question ${questionNumber} of up to five adaptive questions. The default path should finish after three answers; ask a fourth or fifth only when important information remains missing. Ask one distinct question not already answered. Ask only about an important unknown that the goal and previous answers have not resolved. Make every option specific and useful for this particular goal, not generic boilerplate. The user must be able to answer by selecting a card; do not require typing. Choose the most useful UI layout for this question from cards, pills, or timeline; vary the layout when it improves clarity. Return strict JSON only: {"question":"...","helperText":"...","layout":"cards|pills|timeline","options":[{"label":"short choice","description":"brief explanation","value":"meaningful value"}]}. Include 3–5 distinct options.`;
-      const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+      const response = await ai.models.generateContent({ model: bobAi.getVerifiedModel(), contents: prompt });
       const cleaned = (response.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
       const parsed = JSON.parse(cleaned);
       if (typeof parsed.question === 'string' && Array.isArray(parsed.options) && parsed.options.length >= 3) {
@@ -412,7 +412,7 @@ No markdown codeblocks or prose, only valid JSON array.`;
     try {
       const ai = new GoogleGenAI({ apiKey: key });
       const prompt = `Decide whether Bob needs one more clarification before creating a useful action plan. Goal: "${goalQuery || 'infer from answers'}". Answers so far: ${JSON.stringify(answers)}. Saved profile context: ${localStorage.getItem('bob_profile_preferences_v1') || '{}'}. Ask another question only if an important unknown would materially change the plan. Be conservative: most goals should be ready after three answers. Ask at most five questions total. Return strict JSON only: {"askMore":true|false,"reason":"short reason"}.`;
-      const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+      const response = await ai.models.generateContent({ model: bobAi.getVerifiedModel(), contents: prompt });
       const cleaned = (response.text || '').replace(/```json/gi, '').replace(/```/g, '').trim();
       const result = JSON.parse(cleaned);
       return result.askMore === true;

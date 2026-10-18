@@ -69,90 +69,6 @@ function saveStars(projectId: string, n: number) {
   } catch {}
 }
 
-/** Demo seed only when no stored roadmap — short titles */
-const SEED: PhasedTask[] = [
-  {
-    id: 'pt-1',
-    phase: 'Phase 1',
-    title: 'Understand the problem',
-    estimatedTime: '30 mins',
-    priority: 1,
-    steps: [
-      {
-        id: 's-1',
-        stepNumber: 1,
-        title: 'Watch a short video on the topic',
-        instruction: 'Open one of the links and watch the parts that match your goal. Write down two things that surprised you.',
-        tool: 'youtube',
-        links: [
-          {
-            title: 'YouTube search for this topic',
-            url: 'https://youtube.com/results?search_query=research+planning+basics',
-          },
-        ],
-      },
-      {
-        id: 's-2',
-        stepNumber: 2,
-        title: 'Ask ChatGPT three focused questions',
-        instruction: 'Copy each prompt, paste it into ChatGPT, and save the best answers as notes.',
-        tool: 'chatgpt',
-        prompts: [
-          'What are the main reasons people struggle with this problem?',
-          'What is a simple first version I can finish this week?',
-          'What should I ignore so I stay focused?',
-        ],
-      },
-      {
-        id: 's-3',
-        stepNumber: 3,
-        title: 'Write a one-sentence goal',
-        instruction: 'In plain words, write what “done” looks like for this project. Keep it under 20 words.',
-        tool: 'docs',
-      },
-    ],
-  },
-  {
-    id: 'pt-2',
-    phase: 'Phase 2',
-    title: 'Build the first version',
-    estimatedTime: '1 hour',
-    priority: 2,
-    steps: [
-      {
-        id: 's-4',
-        stepNumber: 1,
-        title: 'Make a tiny prototype',
-        instruction: 'Build the smallest thing that shows the idea works. Skip polish for now.',
-        tool: 'claude_code',
-      },
-      {
-        id: 's-5',
-        stepNumber: 2,
-        title: 'Test with one real example',
-        instruction: 'Run your prototype on one real case and note what broke.',
-        tool: 'other',
-      },
-    ],
-  },
-  {
-    id: 'pt-3',
-    phase: 'Phase 3',
-    title: 'Check and share',
-    estimatedTime: '20 mins',
-    priority: 3,
-    steps: [
-      {
-        id: 's-6',
-        stepNumber: 1,
-        title: 'Review against your goal',
-        instruction: 'Compare the result to your one-sentence goal. List one fix if something is missing.',
-        tool: 'docs',
-      },
-    ],
-  },
-];
-
 export const TasksView: React.FC<TasksViewProps> = ({ isSidePanel = false }) => {
   const {
     tasks,
@@ -260,6 +176,22 @@ export const TasksView: React.FC<TasksViewProps> = ({ isSidePanel = false }) => 
     });
   };
 
+  useEffect(() => {
+    const onWorkspaceToolAction = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (
+        detail?.type === 'complete_task' &&
+        detail.projectId === projectId &&
+        typeof detail.roadmapTaskId === 'string' &&
+        phasedTasks.some((task) => task.id === detail.roadmapTaskId)
+      ) {
+        handleTaskCompleted(detail.roadmapTaskId);
+      }
+    };
+    window.addEventListener('bob:workspace-tool-action', onWorkspaceToolAction);
+    return () => window.removeEventListener('bob:workspace-tool-action', onWorkspaceToolAction);
+  }, [projectId, phasedTasks, handleTaskCompleted]);
+
   const handleAskBobHelp = (query: string) => {
     navigateTo('research', 'chat');
     sendMessage(`Help me with this step: ${query}`);
@@ -286,15 +218,6 @@ export const TasksView: React.FC<TasksViewProps> = ({ isSidePanel = false }) => 
         projectId,
       },
     }));
-  };
-
-  const seedDemo = () => {
-    setPhasedTasks(SEED);
-    savePhased(projectId, SEED);
-    setHasRoadmap(true);
-    setCompletedTaskIds([]);
-    saveCompleted(projectId, []);
-    setActiveTaskIndex(0);
   };
 
   // Empty state — no roadmap yet

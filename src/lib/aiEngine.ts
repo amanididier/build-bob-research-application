@@ -14,6 +14,7 @@ import { detectSystemHardware, MODEL_CATALOG, SystemHardwareInfo } from './hardw
 import { ModelTier } from '../types';
 import { resolveGeminiApiKey } from './ai/keyManager';
 import { loadRoadmapForProject } from './roadmap/roadmapStorage';
+import { executeBobWorkspaceTool, getBobWorkspaceToolDeclarations } from './ai/workspaceTools';
 
 export interface ModelDownloadStatus {
   tier: ModelTier;
@@ -389,7 +390,9 @@ class BobAiManager {
     query: string,
     projectId: string = 'urugendo',
     onChunk?: (chunkText: string) => void,
-    tastePreference?: string
+    tastePreference?: string,
+    additionalContext?: string,
+    toolIntentQuery?: string
   ): Promise<AiSynthesisResponse> {
     const startTime = performance.now();
     const memory = localMemoryBank.buildPromptContext(query, projectId);
@@ -402,8 +405,29 @@ class BobAiManager {
       snippet: m.content.slice(0, 160) + (m.content.length > 160 ? '...' : ''),
     }));
 
-    // 1. Try Google Gemini API if user has connected their key
+    const workspaceToolDeclarations = getBobWorkspaceToolDeclarations(toolIntentQuery !== undefined ? toolIntentQuery : query);
+    const hasWriteTools = workspaceToolDeclarations.some((tool) =>
+      ['create_note', 'add_task', 'complete_task'].includes(String(tool.name))
+    );
+
+    // Without the Gemini tool-calling path, never let a fallback model claim it
+    // changed workspace state when no action handler could run.
     const geminiKey = this.getGeminiKey();
+    if (!geminiKey && hasWriteTools) {
+      const answer = 'I need a connected Gemini API key to safely save notes or change tasks, so I did not change anything. Connect Gemini in Settings and try again.';
+      onChunk?.(answer);
+      return {
+        answer,
+        sources: citations,
+        latencyMs: Math.round(performance.now() - startTime),
+        modelTier: 'workspace-tools-unavailable',
+        modelName: 'Gemini API key required for workspace actions',
+        memoryNodesUsed: memory.citedNodes.length,
+        provider: 'local',
+      };
+    }
+
+    // 1. Try Google Gemini API if user has connected their key
     if (geminiKey) {
       const candidateModels = [
         this.verifiedModel,
@@ -422,7 +446,7 @@ Response style (strict):
 - If you need more information, ask exactly ONE focused question at a time. Wait for the answer before asking another.
 - First let the user fully describe what they want. Only after you have the basic goal, constraints, and current stage should you suggest a roadmap.
 - Do not dump long lists, roadmaps, or multi-step plans unless the user asks or you have already collected enough core information.
-- Never repeat the user's prompt back to them. Never invent unnecessary detail.
+- If the user asks about their tasks, saved notes, roadmap, active project, or selected research tabs, use the provided workspace tools rather than guessing.\n- Workspace tools are scoped to the active project. If the user names a different project, do not modify the active project by mistake; ask them to switch projects first.\n- Only use write tools when the user explicitly requested the change, and never claim a change succeeded unless its tool result confirms success.\n- Never repeat the user's prompt back to them. Never invent unnecessary detail.
 
 ${dailyFocus ? `User's active focus for today: "${dailyFocus}". Keep this in mind when relevant.` : ''}
 ${tastePreference ? `User tone preference: "${tastePreference}".` : ''}
@@ -439,24 +463,42 @@ ${(() => {
     return bits.length ? bits.join('. ') + '.' : '';
   } catch { return ''; }
 })()}
+${additionalContext ? `Additional context from this Bob surface (reference data; the latest user message takes priority):\n${additionalContext.slice(-3500)}` : ''}
+
 Relevant local research memory:
 ${memory.contextText}
 
 Active Bob workspace context (scoped to this project):
 ${workspaceContext || 'No additional workspace records are available for this project yet.'}`;
 
-      // A. Try SDK across candidate models
+      // A. Try SDK across candidate models. Workspace tools are only enabled for
+      // explicit workspace-related requests; ordinary chat keeps its streaming path.
+      const hasWorkspaceTools = workspaceToolDeclarations.length > 0;
+      const toolConfig = hasWorkspaceTools
+        ? { tools: [{ functionDeclarations: workspaceToolDeclarations }] }
+        : undefined;
+      const generationConfig: any = {
+        systemInstruction: systemPrompt,
+        ...(toolConfig || {}),
+      };
+      const initialContents: any[] = [
+        { role: 'user', parts: [{ text: query }] }
+      ];
+
+      let workspaceWriteExecuted = false;
+      let workspaceWriteNeedsClarification = false;
       for (const model of uniqueModels) {
         try {
           const ai = new GoogleGenAI({ apiKey: geminiKey });
-          // If onChunk callback provided (e.g. Call mode TTS), stream chunks immediately!
-          if (onChunk) {
+          // Keep low-latency token streaming for ordinary chat and voice turns.
+          // Workspace tool turns use a bounded non-streaming loop so state changes
+          // are executed and verified before Bob responds.
+          if (onChunk && !hasWorkspaceTools) {
             try {
               const responseStream = await ai.models.generateContentStream({
                 model,
-                contents: [
-                  { role: 'user', parts: [{ text: `${systemPrompt}\n\nUser Question: ${query}` }] }
-                ]
+                contents: initialContents,
+                config: generationConfig,
               });
               let fullText = '';
               for await (const chunk of responseStream) {
@@ -484,18 +526,73 @@ ${workspaceContext || 'No additional workspace records are available for this pr
             }
           }
 
-          const result = await ai.models.generateContent({
+          let result: any = await ai.models.generateContent({
             model,
-            contents: [
-              { role: 'user', parts: [{ text: `${systemPrompt}\n\nUser Question: ${query}` }] }
-            ]
-          });
+            contents: initialContents,
+            config: generationConfig,
+          } as any);
+          let executedWorkspaceTool = false;
+          let executedWorkspaceWrite = false;
+          const history: any[] = [...initialContents];
 
-          if (result && result.text) {
-            onChunk?.(result.text);
+          for (let toolTurn = 0; toolTurn < 3 && hasWorkspaceTools; toolTurn++) {
+            const calls = Array.isArray(result?.functionCalls) ? result.functionCalls : [];
+            if (!calls.length) break;
+
+            const modelContent = result?.candidates?.[0]?.content;
+            if (modelContent) history.push(modelContent);
+
+            const functionResponseParts: any[] = [];
+            // Execute sequentially so multiple writes in one model turn cannot overwrite each other.
+            for (const call of calls as any[]) {
+              const toolResult = await executeBobWorkspaceTool(
+                String(call?.name || ''),
+                call?.args && typeof call.args === 'object' ? call.args : {},
+                projectId,
+                toolIntentQuery !== undefined ? toolIntentQuery : query
+              );
+              executedWorkspaceTool = true;
+              if (toolResult?.needsClarification || toolResult?.notFound) workspaceWriteNeedsClarification = true;
+              if (toolResult?.ok && ['note_saved', 'task_added', 'task_completed'].includes(String(toolResult.action))) {
+                executedWorkspaceWrite = true;
+                workspaceWriteExecuted = true;
+              }
+              functionResponseParts.push({
+                functionResponse: {
+                  name: String(call?.name || ''),
+                  ...(call?.id ? { id: call.id } : {}),
+                  response: { result: toolResult },
+                },
+              });
+            }
+
+            history.push({ role: 'user', parts: functionResponseParts });
+            result = await ai.models.generateContent({
+              model,
+              contents: history,
+              config: generationConfig,
+            } as any);
+          }
+
+          const answerText = String(result?.text || '').trim();
+          if (answerText) {
+            if (hasWriteTools && !workspaceWriteExecuted && !workspaceWriteNeedsClarification) {
+              const safeAnswer = 'I did not change anything yet because I could not verify that workspace action. Please try again or tell me exactly which task or note you mean.';
+              onChunk?.(safeAnswer);
+              return {
+                answer: safeAnswer,
+                sources: citations,
+                latencyMs: Math.round(performance.now() - startTime),
+                modelTier: 'cloud-gemini',
+                modelName: model,
+                memoryNodesUsed: memory.citedNodes.length,
+                provider: 'gemini',
+              };
+            }
+            onChunk?.(answerText);
             const latencyMs = Math.round(performance.now() - startTime);
             return {
-              answer: result.text,
+              answer: answerText,
               sources: citations,
               tokensPerSec: 72,
               latencyMs,
@@ -505,9 +602,58 @@ ${workspaceContext || 'No additional workspace records are available for this pr
               provider: 'gemini',
             };
           }
+
+          // Never retry an already-executed write against another model: that could
+          // create duplicate notes/tasks. Be explicit if the model did not finalize.
+          if (executedWorkspaceTool) {
+            const answer = executedWorkspaceWrite
+              ? 'I updated your workspace, but I could not finish the explanation. Please check the relevant Tasks or Notes page.'
+              : hasWriteTools
+                ? 'I could not verify that workspace action, so I did not change anything. Please clarify the task or note and try again.'
+                : 'I checked the workspace, but could not finish the answer. Please try asking again.';
+            onChunk?.(answer);
+            return {
+              answer,
+              sources: citations,
+              latencyMs: Math.round(performance.now() - startTime),
+              modelTier: 'cloud-gemini',
+              modelName: model,
+              memoryNodesUsed: memory.citedNodes.length,
+              provider: 'gemini',
+            };
+          }
         } catch (err: any) {
           console.warn(`Gemini SDK call (${model}) failed:`, err?.message || err);
+          if (workspaceWriteExecuted) {
+            const answer = 'I updated your workspace, but I could not finish the explanation. Please check the relevant Tasks or Notes page.';
+            onChunk?.(answer);
+            return {
+              answer,
+              sources: citations,
+              latencyMs: Math.round(performance.now() - startTime),
+              modelTier: 'cloud-gemini',
+              modelName: model,
+              memoryNodesUsed: memory.citedNodes.length,
+              provider: 'gemini',
+            };
+          }
         }
+      }
+
+      // If an explicit write request could not use Gemini function calling, do not
+      // fall back to a plain text answer that might falsely claim it changed state.
+      if (hasWriteTools) {
+        const answer = 'I could not safely update your workspace right now, so I did not change anything. Please try again in a moment.';
+        onChunk?.(answer);
+        return {
+          answer,
+          sources: citations,
+          latencyMs: Math.round(performance.now() - startTime),
+          modelTier: 'cloud-gemini',
+          modelName: this.verifiedModel,
+          memoryNodesUsed: memory.citedNodes.length,
+          provider: 'gemini',
+        };
       }
 
       // B. Fallback to direct REST API if SDK encountered browser CORS or packaging issues

@@ -183,7 +183,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return 'dashboard';
   });
   const [researchSubView, setResearchSubView] = useState<ResearchSubView>('chat');
-  const [activeResearchId, setActiveResearchId] = useState<string>('urugendo');
+  const [activeResearchId, setActiveResearchId] = useState<string>(() => {
+    if (typeof window === 'undefined') return 'my-research-project';
+    try {
+      const savedActive = localStorage.getItem('bob_active_research_id');
+      if (savedActive) return savedActive;
+      const savedProjects = JSON.parse(localStorage.getItem('bob_research_sessions_v3') || '[]');
+      if (Array.isArray(savedProjects) && savedProjects[0]?.id) return String(savedProjects[0].id);
+    } catch {}
+    return 'my-research-project';
+  });
   const [isSidebarClosed, setIsSidebarClosed] = useState<boolean>(() => currentPage === 'home');
 
   // Modals
@@ -304,26 +313,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [unreadNotifications, setUnreadNotifications] = useState(3);
 
-  // Dynamic Research Sessions with LocalStorage persistence
+  // Start new installs with a neutral workspace. Existing saved projects are preserved.
   const [projects, setProjects] = useState<ResearchProjectItem[]>(() => {
     if (typeof window !== 'undefined') {
       try {
         const saved = localStorage.getItem('bob_research_sessions_v3');
-        if (saved) return JSON.parse(saved);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
       } catch {}
     }
     return [
       {
-        id: 'urugendo',
-        title: 'Urugendo transport study',
-        sourceCount: 9,
-        openTasks: 3,
-        status: 'active today',
+        id: 'my-research-project',
+        title: 'My Research Project',
+        sourceCount: 0,
+        openTasks: 0,
+        status: 'new project',
         dotColor: '#4385f5',
-        summary: 'Passenger booking friction analysis, station dispatching and market validation.',
+        summary: '',
       }
     ];
   });
+
+  useEffect(() => {
+    if (projects.length > 0 && !projects.some((project) => project.id === activeResearchId)) {
+      setActiveResearchId(projects[0].id);
+    }
+  }, [projects, activeResearchId]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('bob_active_research_id', activeResearchId);
+    } catch {}
+  }, [activeResearchId]);
 
   // Keep desktop bridge in sync with all current research projects so Chrome Side Panel sees them
   useEffect(() => {
@@ -659,41 +683,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  // Seed Tasks with localStorage persistence
+  // Load only real saved tasks. Migrate unchanged prototype tasks out of older installs.
   const [tasks, setTasks] = useState<ResearchTaskItem[]>(() => {
+    const demoTasks = [
+      { id: 't-1', title: 'Validate the core problem with 2 users', dueDate: 'Today · 8:00 PM', sourceConnection: 'Connected to 5 sources', completed: false, projectId: 'urugendo' },
+      { id: 't-2', title: 'Write problem statement on checkout friction', dueDate: 'Today · 8:00 PM', sourceConnection: 'Connected to 3 AI chats', completed: true, projectId: 'urugendo' },
+      { id: 't-3', title: 'Compare 3 competitor ticket dispatch apps', dueDate: 'Tomorrow', sourceConnection: 'Connected to 4 tabs', completed: false, projectId: 'urugendo' },
+    ];
     try {
       const stored = localStorage.getItem('bob_tasks_v2');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          return parsed.filter((task: Partial<ResearchTaskItem>) =>
+            !demoTasks.some((demo) =>
+              task?.id === demo.id &&
+              task?.title === demo.title &&
+              task?.dueDate === demo.dueDate &&
+              task?.sourceConnection === demo.sourceConnection &&
+              task?.completed === demo.completed &&
+              task?.projectId === demo.projectId
+            )
+          );
+        }
       }
     } catch {}
-    return [
-      {
-        id: 't-1',
-        title: 'Validate the core problem with 2 users',
-        dueDate: 'Today · 8:00 PM',
-        sourceConnection: 'Connected to 5 sources',
-        completed: false,
-        projectId: 'urugendo',
-      },
-      {
-        id: 't-2',
-        title: 'Write problem statement on checkout friction',
-        dueDate: 'Today · 8:00 PM',
-        sourceConnection: 'Connected to 3 AI chats',
-        completed: true,
-        projectId: 'urugendo',
-      },
-      {
-        id: 't-3',
-        title: 'Compare 3 competitor ticket dispatch apps',
-        dueDate: 'Tomorrow',
-        sourceConnection: 'Connected to 4 tabs',
-        completed: false,
-        projectId: 'urugendo',
-      },
-    ];
+    return [];
   });
 
   useEffect(() => {
@@ -702,41 +717,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
   }, [tasks]);
 
-  // Load notebook notes from local storage; use examples only for a brand-new workspace.
+  // Load real saved notes and remove unchanged example notes from older builds.
   const [notes, setNotes] = useState<ResearchNoteItem[]>(() => {
+    const demoNotes = [
+      {
+        id: 'n-1',
+        title: 'Booking abandonment friction',
+        selectedText: 'Users often leave booking flows when prices, seat availability, or pickup details are unclear. A useful research workflow should preserve the exact evidence behind these observations instead of only saving a page title.',
+        sourceTitle: 'Why people abandon online transport booking',
+        sourceUrl: 'research.example.com/transport-booking',
+        projectId: 'urugendo',
+        relevance: 96,
+        color: 'emerald',
+        createdAt: 'Today, 10:14 AM',
+      },
+      {
+        id: 'n-2',
+        title: 'Sub-400MB Local Inference Allocation',
+        selectedText: 'Sparse attention layers in modern architectures reduce KV-cache memory pressure by up to 60%, allowing local LLMs to run with sub-400MB RAM allocations on consumer PCs.',
+        sourceTitle: 'Attention Mechanism Scaling & Sparsity',
+        sourceUrl: 'arxiv.org/abs/1706.03762',
+        projectId: 'bob-startup',
+        relevance: 92,
+        color: 'emerald',
+        createdAt: 'Yesterday, 3:20 PM',
+      },
+    ];
     try {
       const saved = localStorage.getItem('bob_notes_v1');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) {
+          return parsed.filter((note: Partial<ResearchNoteItem>) =>
+            !demoNotes.some((demo) =>
+              note?.id === demo.id &&
+              note?.title === demo.title &&
+              note?.selectedText === demo.selectedText &&
+              note?.sourceTitle === demo.sourceTitle &&
+              note?.sourceUrl === demo.sourceUrl &&
+              note?.projectId === demo.projectId &&
+              note?.relevance === demo.relevance &&
+              note?.color === demo.color &&
+              note?.createdAt === demo.createdAt
+            )
+          );
+        }
       }
     } catch {}
-    return [
-    {
-      id: 'n-1',
-      title: 'Booking abandonment friction',
-      selectedText:
-        'Users often leave booking flows when prices, seat availability, or pickup details are unclear. A useful research workflow should preserve the exact evidence behind these observations instead of only saving a page title.',
-      sourceTitle: 'Why people abandon online transport booking',
-      sourceUrl: 'research.example.com/transport-booking',
-      projectId: 'urugendo',
-      relevance: 96,
-      color: 'emerald',
-      createdAt: 'Today, 10:14 AM',
-    },
-    {
-      id: 'n-2',
-      title: 'Sub-400MB Local Inference Allocation',
-      selectedText:
-        'Sparse attention layers in modern architectures reduce KV-cache memory pressure by up to 60%, allowing local LLMs to run with sub-400MB RAM allocations on consumer PCs.',
-      sourceTitle: 'Attention Mechanism Scaling & Sparsity',
-      sourceUrl: 'arxiv.org/abs/1706.03762',
-      projectId: 'bob-startup',
-      relevance: 92,
-      color: 'emerald',
-      createdAt: 'Yesterday, 3:20 PM',
-    },
-  ];
+    return [];
   });
 
   useEffect(() => {
@@ -1049,6 +1077,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     syncNoteToMemory(updatedNote);
     refreshMemoryStats();
   };
+
+  // Apply only validated workspace actions dispatched by Bob's function-calling layer.
+  // Tool execution writes storage first; this listener mirrors the same IDs into React state.
+  useEffect(() => {
+    const onWorkspaceToolAction = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (!detail || typeof detail !== 'object') return;
+
+      if (detail.type === 'add_task' && detail.task && typeof detail.task.id === 'string') {
+        const task = detail.task as ResearchTaskItem;
+        setTasks((prev) => prev.some((item) => item.id === task.id) ? prev : [task, ...prev]);
+        return;
+      }
+
+      if (detail.type === 'complete_task' && typeof detail.taskId === 'string') {
+        setTasks((prev) => prev.map((task) =>
+          task.id === detail.taskId && (!detail.projectId || task.projectId === detail.projectId)
+            ? { ...task, completed: true }
+            : task
+        ));
+        return;
+      }
+
+      if (detail.type === 'create_note' && detail.note && typeof detail.note.id === 'string') {
+        const note = detail.note as ResearchNoteItem;
+        setNotes((prev) => prev.some((item) => item.id === note.id) ? prev : [note, ...prev]);
+        syncNoteToMemory(note);
+        refreshMemoryStats();
+      }
+    };
+
+    window.addEventListener('bob:workspace-tool-action', onWorkspaceToolAction);
+    return () => window.removeEventListener('bob:workspace-tool-action', onWorkspaceToolAction);
+  }, []);
 
   const polishNote = async (noteId: string) => {
     const target = notes.find((n) => n.id === noteId);
