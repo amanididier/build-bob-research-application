@@ -518,7 +518,13 @@ export const ChatView: React.FC = () => {
                 type="button"
                 onClick={() => {
                   const context = messages.filter((message) => message.role === 'user').slice(-5).map((message) => message.text).join('\n');
-                  window.dispatchEvent(new CustomEvent('bob-open-roadmap', { detail: { title: `${project.title}: ${context}`.slice(0, 1400) } }));
+                  window.dispatchEvent(new CustomEvent('bob-open-roadmap', {
+                    detail: {
+                      context: `Active project: ${project.title}\\nRecent user goals and context:\\n${context}`.slice(-4500),
+                      origin: 'chat',
+                      projectId: activeResearchId,
+                    },
+                  }));
                 }}
                 className="px-4 py-2.5 rounded-xl bg-[#171717] dark:bg-[var(--y)] hover:opacity-90 text-white dark:text-[#171717] font-extrabold text-[12px] flex items-center gap-2 transition-all active:scale-95 shadow-sm"
               >
