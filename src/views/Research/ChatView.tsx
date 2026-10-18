@@ -520,7 +520,7 @@ export const ChatView: React.FC = () => {
                   const context = messages.filter((message) => message.role === 'user').slice(-5).map((message) => message.text).join('\n');
                   window.dispatchEvent(new CustomEvent('bob-open-roadmap', {
                     detail: {
-                      context: `Active project: ${project.title}\\nRecent user goals and context:\\n${context}`.slice(-4500),
+                      context: `Active project: ${project.title}\nRecent user goals and context:\n${context}`.slice(-4500),
                       origin: 'chat',
                       projectId: activeResearchId,
                     },
