@@ -457,23 +457,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ isSidePanel = false }) => 
         </div>
       )}
 
-      <RoadmapWizardModal
-        isOpen={isRoadmapWizardOpen}
-        onClose={() => setIsRoadmapWizardOpen(false)}
-        onFinishRoadmap={(data) => {
-          const tasksOut = data.tasks?.length ? data.tasks : SEED;
-          setPhasedTasks(tasksOut);
-          savePhased(projectId, tasksOut);
-          setHasRoadmap(true);
-          setCompletedTaskIds([]);
-          saveCompleted(projectId, []);
-          setStars(0);
-          saveStars(projectId, 0);
-          setActiveTaskIndex(0);
-          data.tasks?.forEach((t) => addTask(t.title, data.deadline, projectId));
-          setIsRoadmapWizardOpen(false);
-        }}
-      />
+
     </div>
   );
 };
