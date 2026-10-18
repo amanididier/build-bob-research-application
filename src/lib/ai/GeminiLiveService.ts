@@ -232,16 +232,16 @@ export class GeminiLiveService {
         const setupPayload = {
           setup: {
             model: model.startsWith('models/') ? model : `models/${model}`,
-            generationConfig: {
-              responseModalities: options.mode === 'dictation' ? ['TEXT'] : ['AUDIO'],
-              speechConfig: {
-                voiceConfig: {
-                  prebuiltVoiceConfig: {
-                    voiceName: options.voiceName || 'Puck'
-                  }
+            responseModalities: ['AUDIO'],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: {
+                  voiceName: options.voiceName || 'Puck'
                 }
               }
             },
+            inputAudioTranscription: {},
+            outputAudioTranscription: {},
             systemInstruction: {
               parts: [
                 {
@@ -382,15 +382,27 @@ export class GeminiLiveService {
       }
     }
 
+    const serverContent = msg.serverContent;
+
+    // Live API transcriptions are separate serverContent fields, not modelTurn parts.
+    const inputText = serverContent?.inputTranscription?.text || serverContent?.interimInputTranscription?.text;
+    if (inputText) {
+      this.callbacks.onUserTranscript?.(inputText, Boolean(serverContent?.inputTranscription?.text));
+    }
+    const outputText = serverContent?.outputTranscription?.text;
+    if (outputText) {
+      this.callbacks.onModelText?.(outputText, false);
+    }
+
     // Interruption signal: user spoke while model was speaking
-    if (msg.serverContent?.interrupted) {
+    if (serverContent?.interrupted) {
       this.interruptPlayback();
       this.callbacks.onInterrupted?.();
       return;
     }
 
     // Model turn parts (text or audio PCM)
-    const parts = msg.serverContent?.modelTurn?.parts;
+    const parts = serverContent?.modelTurn?.parts;
     if (Array.isArray(parts)) {
       for (const part of parts) {
         // Model Text Chunk
@@ -470,19 +482,13 @@ export class GeminiLiveService {
         const pcm16 = floatTo16BitPCM(downsampled);
         const base64Audio = arrayBufferToBase64(pcm16.buffer);
 
-        // Send upstream PCM chunk via WebSocket (supports both audio and mediaChunks specifications)
+        // The Live API expects one audio payload per realtimeInput message.
         const realtimeInputPayload = {
           realtimeInput: {
             audio: {
               mimeType: `audio/pcm;rate=${TARGET_INPUT_SAMPLE_RATE}`,
               data: base64Audio
-            },
-            mediaChunks: [
-              {
-                mimeType: `audio/pcm;rate=${TARGET_INPUT_SAMPLE_RATE}`,
-                data: base64Audio
-              }
-            ]
+            }
           }
         };
 
