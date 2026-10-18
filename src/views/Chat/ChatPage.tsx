@@ -15,12 +15,12 @@ import {
   Menu,
   PanelLeft,
   Paperclip,
-  Mic,
   ArrowRight
 } from 'lucide-react';
 import bobOrb from '../../assets/images/bob_mascot_orb_1791540734514.jpg';
 import { resolveGeminiApiKey } from '../../lib/ai/keyManager';
 import { bobAi } from '../../lib/aiEngine';
+import { voiceController } from '../../lib/voice/voiceController';
 
 interface MessengerMsg {
   id: string;
@@ -93,7 +93,7 @@ const CASUAL_FOLLOWUPS = [
 ];
 
 export const ChatPage: React.FC = () => {
-  const { userName, tasks, toggleSidebar, navigateTo, activeResearchId } = useApp();
+  const { userName, toggleSidebar, navigateTo, activeResearchId, setIsToolsMenuOpen } = useApp();
   const [messages, setMessages] = useState<MessengerMsg[]>(loadMessages);
   const [draft, setDraft] = useState('');
   const [isBobTyping, setIsBobTyping] = useState(false);
@@ -108,6 +108,16 @@ export const ChatPage: React.FC = () => {
     }
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, isBobTyping]);
+
+  // The composer stays microphone-free. Dictation is launched from the header
+  // Tools menu, and its final transcript is inserted here for review—not sent.
+  useEffect(() => {
+    voiceController.registerHandlers({
+      onTranscriptUpdate: (transcript: string) => {
+        if (voiceController.getMode() === 'prompt') setDraft(transcript);
+      },
+    });
+  }, []);
 
   const pushBobMessage = (text: string) => {
     setMessages((prev) => [
@@ -309,9 +319,10 @@ export const ChatPage: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => navigateTo('tasks')}
+            onClick={() => setIsToolsMenuOpen(true)}
             className="p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
-            title="Go to Tasks page"
+            title="Tools and dictation"
+            aria-label="Open Tools and dictation"
           >
             <MoreVertical className="w-4 h-4" />
           </button>
@@ -439,25 +450,14 @@ export const ChatPage: React.FC = () => {
             className="flex-1 h-11 px-5 rounded-full bg-[#f1f5fb] dark:bg-[#222b3a] border border-[#e5ebf5] dark:border-white/5 text-[13.5px] text-[#172033] dark:text-[#f2f6ff] placeholder:text-[#8696a0] outline-none shadow-inner"
           />
 
-          {draft.trim() ? (
-            <button
-              type="submit"
-              disabled={isBobTyping}
-              title="Send message"
-              className="w-10 h-10 rounded-full bg-[#3478f6] hover:bg-[#f5c842] hover:text-[#172033] text-white grid place-items-center transition-all active:scale-95 disabled:opacity-40 cursor-pointer shrink-0 shadow-xs"
-            >
-              <Send className="w-4 h-4 ml-0.5" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => handleSend("Hey Bob! Just taking a quick break to chat.")}
-              title="Voice message"
-              className="w-10 h-10 rounded-full bg-[#3478f6] hover:bg-[#f5c842] hover:text-[#172033] text-white grid place-items-center transition-all active:scale-95 cursor-pointer shrink-0 shadow-xs"
-            >
-              <Mic className="w-4 h-4" />
-            </button>
-          )}
+          <button
+            type="submit"
+            disabled={!draft.trim() || isBobTyping}
+            title="Send message"
+            className="w-10 h-10 rounded-full bg-[#3478f6] hover:bg-[#f5c842] hover:text-[#172033] text-white grid place-items-center transition-all active:scale-95 disabled:opacity-40 cursor-pointer shrink-0 shadow-xs"
+          >
+            <Send className="w-4 h-4 ml-0.5" />
+          </button>}
         </form>
       </footer>
     </div>
