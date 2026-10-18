@@ -173,7 +173,8 @@ function dispatchWorkspaceAction(detail: JsonRecord): boolean {
 export async function executeBobWorkspaceTool(
   name: string,
   args: JsonRecord,
-  projectId: string
+  projectId: string,
+  userQuery = ''
 ): Promise<JsonRecord> {
   if (typeof window === 'undefined') return { ok: false, error: 'Workspace tools are unavailable outside the app.' };
 
@@ -314,7 +315,8 @@ export async function executeBobWorkspaceTool(
 
     case 'add_task': {
       const title = safeText(args.title, 180);
-      const dueDate = safeText(args.due_date, 80) || 'Flexible';
+      const explicitDueDate = /\\b(today|tomorrow|tonight|this week|next week|monday|tuesday|wednesday|thursday|friday|saturday|sunday|in \\d+ days?|by [a-z]+|before [a-z]+|\\d{4}-\\d{2}-\\d{2}|\\d{1,2}[/-]\\d{1,2}(?:[/-]\\d{2,4})?)\\b/i.test(userQuery);
+      const dueDate = explicitDueDate ? (safeText(args.due_date, 80) || 'Flexible') : 'Flexible';
       if (!title) return { ok: false, needsClarification: true, error: 'A task needs a title.' };
       const task = {
         id: `t-bob-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
