@@ -8,8 +8,7 @@
  * 1. Audio-to-Audio Pipeline: Bidirectional 16kHz PCM audio streaming upstream and 24kHz PCM downstream.
  * 2. Instant Barge-In (Interruption): Web Audio API playback queue stops instantaneously the moment user speech is detected.
  * 3. Fallback Protocol & Safeguards: Automatically catches network issues, 429 rate limits, and quota exhaustion (1,500 req/day limit),
- *    triggering seamless failover to secondary legacy agents (Kokoro / DualEngineSTT) with gentle debug logging:
- *    "Primary Gemini Live quota reached / network interruption. Switched to fallback agent mode."
+ *    triggering seamless failover to secondary voice agents when the Live connection is unavailable.
  */
 
 import { voiceDiagnostics } from '../voice/diagnostics';
@@ -37,11 +36,11 @@ export interface GeminiLiveOptions {
 }
 
 const LIVE_WS_ENDPOINT = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
-const DEFAULT_LIVE_MODEL = 'models/gemini-2.5-flash-native-audio-dialog';
+const DEFAULT_LIVE_MODEL = 'models/gemini-3.8-live';
 const FALLBACK_MODELS = [
-  'models/gemini-2.5-flash-native-audio-dialog',
-  'models/gemini-live-2.5-flash-preview',
-  'models/gemini-2.0-flash-live-001'
+  'models/gemini-3.8-live',
+  'models/gemini-3.1-flash-live-preview',
+  'models/gemini-2.5-flash-native-audio-preview-12-2025'
 ];
 
 const TARGET_INPUT_SAMPLE_RATE = 16000;
