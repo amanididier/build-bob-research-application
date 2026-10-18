@@ -55,7 +55,7 @@ const VERIFIED_MODEL_STORAGE = 'bob_verified_gemini_model';
  * Keep this scoped to the requested project so one project's private notes/tasks
  * are never mixed into another project's answer.
  */
-function buildWorkspaceContext(projectId: string): string {
+export function buildBobWorkspaceContext(projectId: string): string {
   if (typeof window === 'undefined') return '';
 
   const readJson = (key: string): any => {
@@ -104,6 +104,18 @@ function buildWorkspaceContext(projectId: string): string {
     }
   }
 
+  const allNotes = readJson('bob_notes_v1');
+  if (Array.isArray(allNotes)) {
+    const projectNotes = allNotes
+      .filter((note: any) => !note?.projectId || note.projectId === 'general' || note.projectId === projectId)
+      .slice(0, 8);
+    if (projectNotes.length) {
+      sections.push('SAVED PROJECT NOTES\\n' + projectNotes.map((note: any) =>
+        `- ${String(note.title || 'Untitled note').slice(0, 160)}: ${String(note.selectedText || note.content || '').slice(0, 320)}`
+      ).join('\\n'));
+    }
+  }
+
   const roadmap = loadRoadmapForProject(projectId);
   if (roadmap) {
     const goal = String(roadmap.goal || '').trim();
@@ -121,7 +133,7 @@ function buildWorkspaceContext(projectId: string): string {
 
   const tabs = readJson('bob_tabs_catalog_v2');
   if (Array.isArray(tabs)) {
-    const selectedTabs = tabs.filter((tab: any) => tab?.selected).slice(0, 8);
+    const selectedTabs = tabs.filter((tab: any) => tab?.selected && (!tab?.projectId || tab.projectId === projectId)).slice(0, 8);
     if (selectedTabs.length) {
       sections.push('SELECTED RESEARCH TABS\n' + selectedTabs.map((tab: any) =>
         `- ${String(tab.title || tab.url || 'Untitled tab').slice(0, 180)}${tab.url ? ` — ${String(tab.url).slice(0, 220)}` : ''}${tab.preview ? `\n  Preview: ${String(tab.preview).slice(0, 240)}` : ''}`
@@ -378,7 +390,7 @@ class BobAiManager {
   ): Promise<AiSynthesisResponse> {
     const startTime = performance.now();
     const memory = localMemoryBank.buildPromptContext(query, projectId);
-    const workspaceContext = buildWorkspaceContext(projectId);
+    const workspaceContext = buildBobWorkspaceContext(projectId);
     let dailyFocus = '';
     try { dailyFocus = localStorage.getItem('bob_custom_focus_goal') || ''; } catch {}
     const citations = memory.citedNodes.map((m) => ({
