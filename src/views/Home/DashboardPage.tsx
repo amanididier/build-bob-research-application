@@ -18,7 +18,6 @@ import {
   Calendar,
   TrendingUp,
 } from 'lucide-react';
-import { RoadmapWizardModal } from '../../components/roadmap/RoadmapWizardModal';
 import { resolveGeminiApiKey } from '../../lib/ai/keyManager';
 import { GoogleGenAI } from '@google/genai';
 import { buildBobWorkspaceContext } from '../../lib/aiEngine';
@@ -76,7 +75,6 @@ export const DashboardPage: React.FC = () => {
     activeResearchId,
   } = useApp();
 
-  const [isRoadmapWizardOpen, setIsRoadmapWizardOpen] = useState(false);
   const [isSetFocusModalOpen, setIsSetFocusModalOpen] = useState(false);
   const [isGoalsOpen, setIsGoalsOpen] = useState(false);
   const [customFocusText, setCustomFocusText] = useState('');
@@ -727,14 +725,6 @@ export const DashboardPage: React.FC = () => {
         </div>
       )}
 
-      <RoadmapWizardModal
-        isOpen={isRoadmapWizardOpen}
-        onClose={() => setIsRoadmapWizardOpen(false)}
-        onFinishRoadmap={(data) => {
-          data.tasks.forEach((t) => addTask(t.title, data.deadline));
-          navigateTo('research', 'tasks');
-        }}
-      />
     </div>
   );
 };
