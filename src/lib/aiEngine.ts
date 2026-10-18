@@ -400,7 +400,8 @@ class BobAiManager {
     projectId: string = 'urugendo',
     onChunk?: (chunkText: string) => void,
     tastePreference?: string,
-    conversationContext?: string
+    conversationContext?: string,
+    toolIntentQuery?: string
   ): Promise<AiSynthesisResponse> {
     const startTime = performance.now();
     const memory = localMemoryBank.buildPromptContext(query, projectId);
@@ -460,7 +461,7 @@ ${workspaceContext || 'No additional workspace records are available for this pr
 
       // A. Try SDK across candidate models. Workspace tools are only enabled for
       // explicit workspace-related requests; ordinary chat keeps its streaming path.
-      const workspaceToolDeclarations = getBobWorkspaceToolDeclarations(query);
+      const workspaceToolDeclarations = getBobWorkspaceToolDeclarations(toolIntentQuery || query);
       const hasWorkspaceTools = workspaceToolDeclarations.length > 0;
       const hasWriteTools = workspaceToolDeclarations.some((tool) =>
         ['create_note', 'add_task', 'complete_task'].includes(String(tool.name))
