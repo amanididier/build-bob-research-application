@@ -8,15 +8,11 @@ import {
   Compass,
   Flame,
   Plus,
-  Sparkles,
-  Star,
   Target,
   Trophy,
   X,
   CheckCircle2,
-  ListTodo,
   Calendar,
-  TrendingUp,
 } from 'lucide-react';
 import { resolveGeminiApiKey } from '../../lib/ai/keyManager';
 import { bobAi } from '../../lib/aiEngine';
