@@ -49,8 +49,15 @@ export class LocalResearchMemoryBank {
         // Older builds seeded fake example research into real users' memory.
         // Remove those known demo IDs during migration so they are never cited
         // as if the user actually researched these topics.
+        const knownDemoMemories = new Set([
+          'mem-1|Transport checkout abandonment rate',
+          'mem-2|Seat availability ambiguity',
+          'mem-3|Rwanda transport booking workflow notes',
+          'mem-4|Operator fee tolerance threshold',
+          'mem-5|Local AI quantization benchmark',
+        ]);
         this.memoryCache = memories.filter((node: Partial<MemoryNode>) =>
-          !['mem-1', 'mem-2', 'mem-3', 'mem-4', 'mem-5'].includes(String(node?.id || ''))
+          !knownDemoMemories.has(`${String(node?.id || '')}|${String(node?.title || '')}`)
         );
         if (this.memoryCache.length !== memories.length) this.saveToDisk();
       } else {
