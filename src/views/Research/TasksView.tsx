@@ -263,9 +263,13 @@ export const TasksView: React.FC<TasksViewProps> = ({ isSidePanel = false }) => 
   };
 
   const openCreateRoadmap = () => {
-    const recentContext = (messages || [])
-      .slice(-10)
-      .map((message) => `${message.role === 'user' ? 'User' : 'Bob'}: ${message.text}`)
+    const recentContext = [
+      project?.title ? `Active project: ${project.title}` : '',
+      ...(messages || [])
+        .slice(-10)
+        .map((message) => `${message.role === 'user' ? 'User' : 'Bob'}: ${message.text}`),
+    ]
+      .filter(Boolean)
       .join('\\n')
       .slice(-4500);
 
@@ -273,7 +277,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ isSidePanel = false }) => 
     // the tools menu, and research chat instead of the legacy prefilled wizard.
     window.dispatchEvent(new CustomEvent('bob-open-roadmap', {
       detail: {
-        title: project?.title || '',
+        // Keep the goal blank: a project name is context, not the user's actual goal.
         context: recentContext,
         origin: 'tasks',
         projectId,
