@@ -21,6 +21,7 @@ import {
 import { resolveGeminiApiKey } from '../../lib/ai/keyManager';
 import { GoogleGenAI } from '@google/genai';
 import { buildSharedCompanionContext } from '../../lib/companionContext';
+import { generateCompanionResponse } from '../../lib/companionToolRunner';
 
 const STREAK_KEY = 'bob_dashboard_streak_v1';
 const GOALS_KEY = 'bob_dashboard_goals_v1';
@@ -239,25 +240,23 @@ export const DashboardPage: React.FC = () => {
     try {
       const ai = new GoogleGenAI({ apiKey: key });
       const sharedWorkspaceContext = buildSharedCompanionContext(activeResearchId);
-      const result = await ai.models.generateContent({
+      const result = await generateCompanionResponse({
+        ai,
         model: 'gemini-2.5-flash',
         contents: [
           {
             role: 'user',
             parts: [
               {
-                text: `You are Bob. Answer briefly about this user's dashboard using the JSON context and relevant shared workspace facts. Be clear and practical (2–5 sentences max).\n\nDashboard context:\n${dashboardContext}\n\nShared workspace context:\n${sharedWorkspaceContext || 'No additional workspace context available.'}\n\nQuestion: ${q}`,
+                text: `You are Bob. Answer briefly about this user's dashboard using the JSON context and relevant shared workspace facts. Be clear and practical (2–5 sentences max). If the user explicitly asks you to create/complete a task, save a note, search notes, inspect workspace items, or make a roadmap, use the appropriate Bob workspace tool. Only report actions confirmed by tool results.\n\nDashboard context:\n${dashboardContext}\n\nShared workspace context:\n${sharedWorkspaceContext || 'No additional workspace context available.'}\n\nQuestion: ${q}`,
               },
             ],
           },
         ],
-        config: { maxOutputTokens: 220 },
+        systemInstruction: 'You are Bob, a concise and honest research companion. Use workspace tools for explicit actions; never claim a change succeeded unless the tool confirms it. Opening the roadmap builder is not the same as saving a roadmap.',
+        maxOutputTokens: 300,
       });
-      const text =
-        (result as { text?: string }).text ||
-        (result as any)?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join('') ||
-        'I could not read the dashboard just now.';
-      setDashReply(String(text).trim());
+      setDashReply(result.text || 'I could not read the dashboard just now.');
     } catch {
       setDashReply('Something went wrong talking to Gemini. Try again in a moment.');
     } finally {
