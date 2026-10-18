@@ -46,7 +46,7 @@ export async function generateCompanionResponse(options: {
     config: {
       systemInstruction,
       maxOutputTokens,
-      tools: [{ functionDeclarations: COMPANION_TOOL_DECLARATIONS }],
+      tools: [{ functionDeclarations: COMPANION_TOOL_DECLARATIONS as any }],
     },
   });
 
@@ -79,7 +79,7 @@ export async function generateCompanionResponse(options: {
       config: {
         systemInstruction: systemInstruction + '\nTool-use rules: Report only actions confirmed by tool results. If a tool fails, say so plainly. Do not claim a roadmap is saved when the builder only opened.',
         maxOutputTokens,
-        tools: [{ functionDeclarations: COMPANION_TOOL_DECLARATIONS }],
+        tools: [{ functionDeclarations: COMPANION_TOOL_DECLARATIONS as any }],
       },
     });
   }
