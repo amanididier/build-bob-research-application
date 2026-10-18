@@ -176,7 +176,7 @@ export const ChatPage: React.FC = () => {
     }
 
     try {
-      const recallRequested = /\b(what do you remember|what do you know about me|what have we discussed|previous conversation|where did we stop|continue where we left off)\b/i.test(userInput);
+      const recallRequested = /\b(what do you remember|what can you remember|what do you know about me|what have we discussed|what did we discuss|what did we decide|what did i say|what did i tell you|what were we working on|previous conversation|where did we stop|where were we|where did we leave off|continue where we left off|pick up where we left off|our last chat)\b/i.test(userInput);
       const preferenceStopwords = new Set(['about', 'after', 'also', 'and', 'are', 'can', 'did', 'for', 'from', 'have', 'how', 'into', 'like', 'me', 'more', 'my', 'the', 'that', 'this', 'what', 'when', 'where', 'with', 'you', 'your', 'remember']);
       const preferenceTerms = userInput.toLowerCase().split(/\W+/).filter((word) => word.length > 3 && !preferenceStopwords.has(word));
       const rememberedFacts = loadCompanionMemory().filter((fact) =>
