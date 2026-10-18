@@ -136,7 +136,7 @@ function hasSingleTaskCompletionIntent(query: string): boolean {
 }
 
 function hasWorkspaceReadIntent(query: string): boolean {
-  return /\b(my|this|current|active|saved|open|selected|pending|overdue|completed|existing)\b.{0,45}\b(project|tasks?|notes?|roadmap|tabs?|sources?)\b|\b(list|show|find|search|check|what|which|summari[sz]e)\b.{0,45}\b(tasks?|notes?|roadmap|project|tabs?|sources?)\b/i.test(query);
+  return /\b(my|this|current|active|saved|open|selected|pending|overdue|completed|existing)\b.{0,45}\b(project|tasks?|notes?|roadmap|tabs?|sources?)\b|\b(list|show|find|search|check|what|which|summari[sz]e)\b.{0,45}\b(tasks?|notes?|roadmap|project|tabs?|sources?|research(?: memory)?|evidence)\b/i.test(query);
 }
 
 /** Tools are offered only for workspace-related requests, not ordinary conversation. */
