@@ -114,7 +114,8 @@ export const DashboardPage: React.FC = () => {
       today.setHours(0, 0, 0, 0);
       const date = new Date(timestamp);
       date.setHours(0, 0, 0, 0);
-      return (date.getTime() - today.getTime()) / 86400000 <= 7;
+      const daysAway = (date.getTime() - today.getTime()) / 86400000;
+      return daysAway >= 0 && daysAway <= 7;
     })
     .slice(0, 5);
   const focusTask =
