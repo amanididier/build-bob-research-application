@@ -152,6 +152,7 @@ export class VoiceController {
     this.startVad(stream);
     this.armCallIdleTimer();
     await this.startLegacySTT();
+    if (!this.isVoiceModeActive) stt.stop();
   }
 
   private async startLegacySTT(): Promise<void> {
@@ -306,19 +307,27 @@ export class VoiceController {
             });
 
             if (connected) {
+              if (!this.isVoiceModeActive) {
+                liveProvider.stop();
+                return false;
+              }
+              if (this.isUsingFallback) return true;
               this.isUsingLive = true;
               return true;
             }
           } catch {
-            voiceDiagnostics.event('Primary Gemini Live quota reached / network interruption. Switched to fallback agent mode.');
+            voiceDiagnostics.event('Gemini Live connection attempt failed; checking fallback availability.');
           }
         } else {
-          voiceDiagnostics.event('Primary Gemini Live quota reached / network interruption. Switched to fallback agent mode.');
+          voiceDiagnostics.event('Gemini Live is unavailable or no API key is configured; checking fallback availability.');
         }
+
+        if (!this.isVoiceModeActive) return false;
+        if (this.isUsingFallback) return true;
 
         // Secondary legacy fallback
         await this.failoverToLegacyCall(stream);
-        return true;
+        return this.isVoiceModeActive;
       }
 
       // Prompt / Dictation mode: default live transcription pipeline with Gemini STT fallback
