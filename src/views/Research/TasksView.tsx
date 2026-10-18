@@ -3,7 +3,6 @@ import { useApp } from '../../context/AppContext';
 import { Check, Lock, Sparkles, Star } from 'lucide-react';
 import { TaskStepExecutionView } from '../../components/roadmap/TaskStepExecutionView';
 import type { PhasedTask } from '../../components/roadmap/RoadmapWizardModal';
-import { loadRoadmapForProject } from '../../lib/roadmap/roadmapStorage';
 
 interface TasksViewProps {
   isSidePanel?: boolean;
@@ -14,14 +13,21 @@ const COMPLETED_KEY = 'bob_phased_completed_v1';
 const STARS_KEY = 'bob_roadmap_stars_v1';
 
 function loadPhased(projectId: string): PhasedTask[] | null {
-  // Prefer the canonical project-scoped roadmap so older execution-view saves
-  // cannot overwrite a newer roadmap for the same project.
-  const canonical = loadRoadmapForProject(projectId);
-  if (Array.isArray(canonical?.tasks)) return canonical.tasks as PhasedTask[];
-
   try {
+    // The shared RoadmapSheet is canonical; prefer its latest plan over any
+    // older per-view roadmap left behind by the legacy wizard.
+    const shared = JSON.parse(localStorage.getItem('bob_phased_roadmap_v2') || 'null');
+    if (
+      shared &&
+      (!shared.projectId || shared.projectId === projectId) &&
+      Array.isArray(shared.tasks) &&
+      shared.tasks.length
+    ) {
+      return shared.tasks;
+    }
+
     const all = JSON.parse(localStorage.getItem(PHASED_KEY) || '{}');
-    return Array.isArray(all[projectId]) ? all[projectId] : null;
+    return Array.isArray(all[projectId]) && all[projectId].length ? all[projectId] : null;
   } catch {
     return null;
   }
@@ -185,37 +191,27 @@ export const TasksView: React.FC<TasksViewProps> = ({ isSidePanel = false }) => 
     setActiveTaskIndex(0);
   }, [projectId]);
 
-  // Keep the sequential execution view connected to the adaptive RoadmapSheet.
-  // RoadmapSheet persists the full plan before emitting these events.
+  // Listen for roadmap created elsewhere
   useEffect(() => {
-    const syncRoadmap = () => {
-      try {
-        const roadmap = loadRoadmapForProject(projectId);
-        if (!Array.isArray(roadmap?.tasks)) return;
-
-        const loaded = roadmap.tasks as PhasedTask[];
+    const onRoadmap = () => {
+      const loaded = loadPhased(projectId);
+      if (loaded?.length) {
         setPhasedTasks(loaded);
-        savePhased(projectId, loaded);
-        setHasRoadmap(loaded.length > 0);
-        setCompletedTaskIds((previous) => {
-          const validIds = new Set(loaded.map((task) => task.id));
-          const next = previous.filter((id) => validIds.has(id));
-          saveCompleted(projectId, next);
-          return next;
-        });
+        setHasRoadmap(true);
         setActiveTaskIndex(0);
-      } catch (error) {
-        console.warn('[Bob roadmap] Could not sync roadmap into the execution view:', error);
+        setCompletedTaskIds([]);
+        saveCompleted(projectId, []);
+        setStars(0);
+        saveStars(projectId, 0);
       }
     };
-
-    window.addEventListener('bob:roadmap-updated', syncRoadmap);
-    window.addEventListener('bob:roadmap-finished', syncRoadmap);
-    window.addEventListener('bob-roadmap-saved', syncRoadmap);
+    window.addEventListener('bob-roadmap-saved', onRoadmap);
+    window.addEventListener('bob:roadmap-updated', onRoadmap);
+    window.addEventListener('bob:roadmap-finished', onRoadmap);
     return () => {
-      window.removeEventListener('bob:roadmap-updated', syncRoadmap);
-      window.removeEventListener('bob:roadmap-finished', syncRoadmap);
-      window.removeEventListener('bob-roadmap-saved', syncRoadmap);
+      window.removeEventListener('bob-roadmap-saved', onRoadmap);
+      window.removeEventListener('bob:roadmap-updated', onRoadmap);
+      window.removeEventListener('bob:roadmap-finished', onRoadmap);
     };
   }, [projectId]);
 
@@ -266,24 +262,16 @@ export const TasksView: React.FC<TasksViewProps> = ({ isSidePanel = false }) => 
   };
 
   const openCreateRoadmap = () => {
-    const recentContext = [
-      project?.title ? `Active project: ${project.title}` : '',
-      ...(messages || [])
-        .slice(-10)
-        .map((message) => `${message.role === 'user' ? 'User' : 'Bob'}: ${message.text}`),
-    ]
-      .filter(Boolean)
+    const recentContext = (messages || [])
+      .slice(-8)
+      .map((message) => `${message.role === 'user' ? 'User' : 'Bob'}: ${message.text}`)
       .join('\n')
-      .slice(-4500);
-
-    // Use the adaptive, AI-powered roadmap flow that is shared with TasksPage,
-    // the tools menu, and research chat instead of the legacy prefilled wizard.
+      .slice(-2400);
     window.dispatchEvent(new CustomEvent('bob-open-roadmap', {
       detail: {
-        // Keep the goal blank: a project name is context, not the user's actual goal.
+        title: project?.title || 'Project Roadmap',
         context: recentContext,
-        origin: 'tasks',
-        projectId,
+        origin: 'research-tasks',
       },
     }));
   };
@@ -324,6 +312,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ isSidePanel = false }) => 
         >
           Preview sample steps
         </button>
+
 
       </div>
     );
