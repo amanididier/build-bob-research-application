@@ -40,6 +40,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { resolveGeminiApiKey } from '../../lib/ai/keyManager';
 import { GoogleGenAI } from '@google/genai';
+import { saveRoadmapForProject } from '../../lib/roadmap/roadmapStorage';
 import bobBuilder from '../../assets/images/bob-builder.png';
 import bobOrb from '../../assets/images/bob_mascot_orb_1791540734514.jpg';
 
@@ -554,13 +555,14 @@ Due Date: ${s.dueDate}
   // Implement roadmap steps directly into Tasks Page
   const handleFinishAndImplementIntoTasks = () => {
     const enabledSteps = arrangedSteps.filter(s => s.enabled);
+    const roadmapProjectId = activeProject?.id || activeResearchId || 'urugendo';
     
     // 1. Add each arranged step into AppContext tasks with unique ID & source connection
     enabledSteps.forEach((step, idx) => {
       addTask(
         step.title,
         step.dueDate,
-        activeProject?.id || activeResearchId || 'urugendo',
+        roadmapProjectId,
         { sourceConnection: 'Bob Roadmap · ' + (step.phase || ('Phase ' + (idx + 1))), isAiGenerated: true }
       );
     });
@@ -590,30 +592,28 @@ Due Date: ${s.dueDate}
       ]
     }));
 
-    // 3. Persist to localStorage for both TasksPage and TasksView
-    try {
-      localStorage.setItem('bob_phased_roadmap_v2', JSON.stringify({
-        goal: goalQuery || 'Project Roadmap',
-        projectId: activeProject?.id || activeResearchId || 'urugendo',
-        situation: selectedSituation,
-        tools: selectedTools,
-        cadence: selectedCadence,
-        time: selectedTimeOption,
-        tasks: phasedTasksData,
-        steps: enabledSteps,
-        createdAt: Date.now()
-      }));
+    // 3. Persist a separate canonical roadmap for this project.
+    const savedRoadmap = saveRoadmapForProject(roadmapProjectId, {
+      goal: goalQuery || 'Project Roadmap',
+      situation: selectedSituation,
+      tools: selectedTools,
+      cadence: selectedCadence,
+      time: selectedTimeOption,
+      tasks: phasedTasksData,
+      steps: enabledSteps,
+      createdAt: Date.now(),
+    });
 
-      // Fire synchronization event so TasksPage and TasksView re-render immediately
-      window.dispatchEvent(new CustomEvent('bob:roadmap-updated', { detail: phasedTasksData }));
-      window.dispatchEvent(new CustomEvent('bob:roadmap-finished', { 
-        detail: { 
-          goal: goalQuery || 'Project Roadmap', 
-          count: enabledSteps.length,
-          origin: originSource 
-        } 
-      }));
-    } catch {}
+    // Fire synchronization events so every roadmap consumer can reload the scoped record.
+    window.dispatchEvent(new CustomEvent('bob:roadmap-updated', { detail: savedRoadmap }));
+    window.dispatchEvent(new CustomEvent('bob:roadmap-finished', {
+      detail: {
+        goal: goalQuery || 'Project Roadmap',
+        projectId: roadmapProjectId,
+        count: enabledSteps.length,
+        origin: originSource,
+      },
+    }));
 
     triggerThinking('Roadmap Implemented', `Added ${enabledSteps.length} structured steps to your Tasks page.`, 'Ready to execute');
     propsOnFinish?.(enabledSteps);
