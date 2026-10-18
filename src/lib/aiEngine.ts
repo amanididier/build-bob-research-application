@@ -316,8 +316,10 @@ ${(() => {
     return bits.length ? bits.join('. ') + '.' : '';
   } catch { return ''; }
 })()}
-Available context:
-${memory.contextText}`;
+Available research memory:
+${memory.contextText}
+
+${sharedContext || 'No additional shared workspace context available.'}`;
 
       // A. Try SDK across candidate models
       for (const model of uniqueModels) {
