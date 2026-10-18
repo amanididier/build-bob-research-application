@@ -182,8 +182,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
     return 'dashboard';
   });
+  useEffect(() => {
+    try {
+      localStorage.setItem('bob_current_page', currentPage);
+    } catch {}
+  }, [currentPage]);
+
   const [researchSubView, setResearchSubView] = useState<ResearchSubView>('chat');
   const [activeResearchId, setActiveResearchId] = useState<string>('urugendo');
+  useEffect(() => {
+    try {
+      localStorage.setItem('bob_active_research_id', activeResearchId);
+    } catch {}
+  }, [activeResearchId]);
   const [isSidebarClosed, setIsSidebarClosed] = useState<boolean>(() => currentPage === 'home');
 
   // Modals
@@ -702,7 +713,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
   }, [tasks]);
 
-  // Load notebook notes from local storage; use examples only for a brand-new workspace.
+  // Notes persist locally so Bob and the Notes page share the same saved workspace.
   const [notes, setNotes] = useState<ResearchNoteItem[]>(() => {
     try {
       const saved = localStorage.getItem('bob_notes_v1');
@@ -736,7 +747,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       color: 'emerald',
       createdAt: 'Yesterday, 3:20 PM',
     },
-  ];
+    ];
   });
 
   useEffect(() => {
@@ -744,6 +755,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem('bob_notes_v1', JSON.stringify(notes));
     } catch {}
   }, [notes]);
+
+  // Keep React's in-memory workspace state in sync when Bob's explicit AI tools
+  // update the canonical localStorage records.
+  useEffect(() => {
+    const refreshWorkspaceFromStorage = (event?: Event) => {
+      const detail = (event as CustomEvent<{ kind?: string }> | undefined)?.detail;
+      const kind = detail?.kind;
+      try {
+        if (!kind || kind === 'tasks') {
+          const savedTasks = localStorage.getItem('bob_tasks_v2');
+          if (savedTasks) {
+            const parsed = JSON.parse(savedTasks);
+            if (Array.isArray(parsed)) setTasks(parsed);
+          }
+        }
+        if (!kind || kind === 'notes') {
+          const savedNotes = localStorage.getItem('bob_notes_v1');
+          if (savedNotes) {
+            const parsed = JSON.parse(savedNotes);
+            if (Array.isArray(parsed)) setNotes(parsed);
+          }
+        }
+      } catch (error) {
+        console.warn('[bob] workspace refresh failed:', error);
+      }
+    };
+    window.addEventListener('bob:workspace-updated', refreshWorkspaceFromStorage);
+    return () => window.removeEventListener('bob:workspace-updated', refreshWorkspaceFromStorage);
+  }, []);
 
   // Real-time synchronization with Bob Desktop bridge / Extension
   useEffect(() => {
@@ -1011,43 +1051,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return newTasks.length;
   };
 
-  const syncNoteToMemory = (note: ResearchNoteItem) => {
-    localMemoryBank.upsertNoteMemory(note.id, {
-      type: 'note',
-      title: note.title,
-      content: note.selectedText,
-      sourceUrl: note.sourceUrl,
-      projectId: note.projectId,
-      tags: ['notebook', note.color],
-      relevanceWeight: note.relevance / 100,
-    });
-  };
-
-  // Hydrate Bob's retrieval memory from persisted and extension-synced notebook notes.
-  // upsertNoteMemory is idempotent for each note ID, so edits replace stale retrieval text.
-  useEffect(() => {
-    notes.forEach(syncNoteToMemory);
-    refreshMemoryStats();
-  }, [notes]);
-
   const addNote = (noteData: Omit<ResearchNoteItem, 'id' | 'createdAt'>) => {
     const newNote: ResearchNoteItem = {
       ...noteData,
-      id: `n-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      createdAt: new Date().toISOString(),
+      id: `n-${Date.now()}`,
+      createdAt: 'Just now',
     };
     setNotes((prev) => [newNote, ...prev]);
-    syncNoteToMemory(newNote);
+
+    localMemoryBank.addMemory({
+      type: 'note',
+      title: newNote.title,
+      content: newNote.selectedText,
+      sourceUrl: newNote.sourceUrl,
+      projectId: newNote.projectId,
+      tags: ['notebook', newNote.color],
+      relevanceWeight: newNote.relevance / 100,
+    });
     refreshMemoryStats();
   };
 
   const updateNote = (noteId: string, updates: Partial<Pick<ResearchNoteItem, 'title' | 'selectedText' | 'sourceTitle' | 'sourceUrl' | 'color'>>) => {
-    const current = notes.find((note) => note.id === noteId);
-    if (!current) return;
-    const updatedNote = { ...current, ...updates };
-    setNotes((prev) => prev.map((note) => note.id === noteId ? updatedNote : note));
-    syncNoteToMemory(updatedNote);
-    refreshMemoryStats();
+    setNotes((prev) => prev.map((note) => note.id === noteId ? { ...note, ...updates } : note));
   };
 
   const polishNote = async (noteId: string) => {
@@ -1057,16 +1082,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     triggerThinking('Polishing Note', 'Structuring takeaways and findings...', 'Formatting');
     const polished = await bobAi.polishResearchNote(target.title, target.selectedText);
 
-    const updatedNote: ResearchNoteItem = {
-      ...target,
-      title: polished.polishedTitle,
-      selectedText: polished.polishedContent,
-      relevance: 98,
-      isPolished: true,
-    };
-    setNotes((prev) => prev.map((note) => note.id === noteId ? updatedNote : note));
-    syncNoteToMemory(updatedNote);
-    refreshMemoryStats();
+    setNotes((prev) =>
+      prev.map((n) =>
+        n.id === noteId
+          ? {
+              ...n,
+              title: polished.polishedTitle,
+              selectedText: polished.polishedContent,
+              relevance: 98,
+              isPolished: true,
+            }
+          : n
+      )
+    );
   };
 
   const markNotificationsRead = () => {
