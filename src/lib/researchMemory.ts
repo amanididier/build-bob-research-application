@@ -109,30 +109,45 @@ export class LocalResearchMemoryBank {
       return this.getAllMemories(projectId).slice(0, limit);
     }
 
-    const queryWords = query.toLowerCase().split(/\W+/).filter((w) => w.length > 2);
+    const stopwords = new Set([
+      'about', 'after', 'again', 'also', 'and', 'are', 'because', 'been', 'being',
+      'but', 'can', 'could', 'did', 'does', 'doing', 'for', 'from', 'had', 'has',
+      'have', 'her', 'here', 'him', 'his', 'how', 'into', 'its', 'just', 'like',
+      'may', 'more', 'most', 'not', 'our', 'out', 'please', 'should', 'some',
+      'than', 'that', 'the', 'their', 'them', 'then', 'there', 'these', 'they',
+      'this', 'those', 'through', 'too', 'very', 'was', 'were', 'what', 'when',
+      'where', 'which', 'who', 'why', 'will', 'with', 'would', 'you', 'your',
+    ]);
+    const queryWords = [...new Set(
+      query.toLowerCase().split(/\W+/).filter((w) => w.length > 2 && !stopwords.has(w))
+    )];
     const pool = this.getAllMemories(projectId);
 
+    // Research memories must earn their place through relevance to this query.
+    // Recency and a manually assigned weight may rank matching memories, but must
+    // never inject an unrelated memory into an ordinary conversation.
+    if (queryWords.length === 0) return [];
+
     const scored = pool.map((item) => {
-      const textToScan = `${item.title} ${item.content} ${item.tags.join(' ')}`.toLowerCase();
+      const title = String(item.title || '').toLowerCase();
+      const textToScan = `${item.title} ${item.content} ${(item.tags || []).join(' ')}`.toLowerCase();
       let matchScore = 0;
 
       for (const word of queryWords) {
         if (textToScan.includes(word)) {
           matchScore += 2;
-          // exact title match gets higher weight
-          if (item.title.toLowerCase().includes(word)) matchScore += 3;
+          if (title.includes(word)) matchScore += 3;
         }
       }
 
-      // Weight by initial relevance and recency
       const recencyBonus = Math.max(0, 1 - (Date.now() - item.timestamp) / (1000 * 60 * 60 * 24 * 7));
-      const totalScore = matchScore * 1.5 + item.relevanceWeight * 2 + recencyBonus;
+      const totalScore = matchScore * 1.5 + item.relevanceWeight * 0.25 + recencyBonus * 0.25;
 
-      return { item, totalScore };
+      return { item, matchScore, totalScore };
     });
 
     return scored
-      .filter((s) => s.totalScore > 0.5)
+      .filter((s) => s.matchScore > 0)
       .sort((a, b) => b.totalScore - a.totalScore)
       .slice(0, limit)
       .map((s) => s.item);
