@@ -103,10 +103,24 @@ export const ChatPage: React.FC = () => {
   const [messageTurnCount, setMessageTurnCount] = useState(0);
   const [isRoadmapActive, setIsRoadmapActive] = useState(false);
   const [roadmapGoal, setRoadmapGoal] = useState('Project Roadmap');
+  const [roadmapContext, setRoadmapContext] = useState('');
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const sendingRef = useRef(false);
 
   const activeProject = projects.find(p => p.id === activeResearchId) || projects[0];
+
+  // Workspace tools can request the interactive planner from inside a model turn.
+  // Listen at the page level because RoadmapSheet is mounted only while it is open.
+  useEffect(() => {
+    const onRoadmapRequest = (event: Event) => {
+      const detail = (event as CustomEvent<{ title?: string; context?: string }>).detail || {};
+      setRoadmapGoal(typeof detail.title === 'string' ? detail.title : 'Project Roadmap');
+      setRoadmapContext(typeof detail.context === 'string' ? detail.context : '');
+      setIsRoadmapActive(true);
+    };
+    window.addEventListener('bob-open-roadmap', onRoadmapRequest);
+    return () => window.removeEventListener('bob-open-roadmap', onRoadmapRequest);
+  }, []);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -264,6 +278,7 @@ When the user clearly asks you to add or complete a task, save a note, search sa
       <RoadmapSheet
         isOpen={true}
         initialGoal={roadmapGoal}
+        initialContext={roadmapContext}
         onClose={() => setIsRoadmapActive(false)}
         onFinish={(steps) => {
           setIsRoadmapActive(false);
