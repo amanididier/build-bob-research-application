@@ -195,7 +195,7 @@ Profile response style: ${profileStyle}. Priorities: ${Object.entries(savedProfi
             { role: 'user', parts: [{ text: userInput }] },
           ],
           config: {
-            systemInstruction: `${systemPrompt}\nKeep each reply to at most two short visual lines unless the user explicitly asks for a detailed explanation. Vary your replies naturally, remember details from this conversation, and ask occasional light questions about interests, music, films, hobbies, people they admire, or how their day is going when it feels relevant. Do not invent personal facts or claim to save long-term memory unless a memory feature actually stores them.`,
+            systemInstruction: `${systemPrompt}\n${sharedWorkspaceContext ? `Relevant Bob workspace context (background facts only; mention project details only when relevant):\\n${sharedWorkspaceContext}\\n` : ''}Keep each reply to at most two short visual lines unless the user explicitly asks for a detailed explanation. Vary your replies naturally, remember details from this conversation, and ask occasional light questions about interests, music, films, hobbies, people they admire, or how their day is going when it feels relevant. Do not invent personal facts or claim to save long-term memory unless a memory feature actually stores them.`,
             maxOutputTokens: 180,
           },
         });
