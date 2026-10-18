@@ -110,9 +110,9 @@ export function buildBobWorkspaceContext(projectId: string): string {
       .filter((note: any) => !note?.projectId || note.projectId === 'general' || note.projectId === projectId)
       .slice(0, 8);
     if (projectNotes.length) {
-      sections.push('SAVED PROJECT NOTES\\n' + projectNotes.map((note: any) =>
+      sections.push('SAVED PROJECT NOTES\n' + projectNotes.map((note: any) =>
         `- ${String(note.title || 'Untitled note').slice(0, 160)}: ${String(note.selectedText || note.content || '').slice(0, 320)}`
-      ).join('\\n'));
+      ).join('\n'));
     }
   }
 
