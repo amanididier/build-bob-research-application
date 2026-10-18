@@ -1050,6 +1050,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     refreshMemoryStats();
   };
 
+  // Apply only validated workspace actions dispatched by Bob's function-calling layer.
+  // Tool execution writes storage first; this listener mirrors the same IDs into React state.
+  useEffect(() => {
+    const onWorkspaceToolAction = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (!detail || typeof detail !== 'object') return;
+
+      if (detail.type === 'add_task' && detail.task && typeof detail.task.id === 'string') {
+        const task = detail.task as ResearchTaskItem;
+        setTasks((prev) => prev.some((item) => item.id === task.id) ? prev : [task, ...prev]);
+        return;
+      }
+
+      if (detail.type === 'complete_task' && typeof detail.taskId === 'string') {
+        setTasks((prev) => prev.map((task) =>
+          task.id === detail.taskId && (!detail.projectId || task.projectId === detail.projectId)
+            ? { ...task, completed: true }
+            : task
+        ));
+        return;
+      }
+
+      if (detail.type === 'create_note' && detail.note && typeof detail.note.id === 'string') {
+        const note = detail.note as ResearchNoteItem;
+        setNotes((prev) => prev.some((item) => item.id === note.id) ? prev : [note, ...prev]);
+        syncNoteToMemory(note);
+        refreshMemoryStats();
+      }
+    };
+
+    window.addEventListener('bob:workspace-tool-action', onWorkspaceToolAction);
+    return () => window.removeEventListener('bob:workspace-tool-action', onWorkspaceToolAction);
+  }, []);
+
   const polishNote = async (noteId: string) => {
     const target = notes.find((n) => n.id === noteId);
     if (!target) return;
