@@ -124,7 +124,9 @@ export class GeminiLiveProvider {
       );
       if (ok) {
         this.connected = true;
-        this.model = models[0];
+        // The raw WebSocket service may have selected a fallback model after
+        // rejecting the preferred one. Report the model actually acknowledged.
+        this.model = geminiLiveService.getModel() || this.model || models[0];
         return true;
       }
     } catch (e) {
