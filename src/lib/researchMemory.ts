@@ -31,7 +31,7 @@ export interface MemoryBankStats {
 
 const STORAGE_KEY = 'bob_local_research_memory_v1';
 
-// Seed default initial research memory bank if empty
+// Start empty for new users; only real user-created research is stored here.
 export class LocalResearchMemoryBank {
   private memoryCache: MemoryNode[] = [];
 
