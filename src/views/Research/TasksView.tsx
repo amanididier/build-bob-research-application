@@ -260,6 +260,22 @@ export const TasksView: React.FC<TasksViewProps> = ({ isSidePanel = false }) => 
     });
   };
 
+  useEffect(() => {
+    const onWorkspaceToolAction = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (
+        detail?.type === 'complete_task' &&
+        detail.projectId === projectId &&
+        typeof detail.roadmapTaskId === 'string' &&
+        phasedTasks.some((task) => task.id === detail.roadmapTaskId)
+      ) {
+        handleTaskCompleted(detail.roadmapTaskId);
+      }
+    };
+    window.addEventListener('bob:workspace-tool-action', onWorkspaceToolAction);
+    return () => window.removeEventListener('bob:workspace-tool-action', onWorkspaceToolAction);
+  }, [projectId, phasedTasks, handleTaskCompleted]);
+
   const handleAskBobHelp = (query: string) => {
     navigateTo('research', 'chat');
     sendMessage(`Help me with this step: ${query}`);
