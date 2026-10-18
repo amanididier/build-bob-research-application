@@ -273,6 +273,7 @@ class BobAiManager {
     const startTime = performance.now();
     const memory = localMemoryBank.buildPromptContext(query, projectId);
     const sharedContext = buildSharedCompanionContext(projectId);
+    const shouldUseCompanionTools = /\\b(add|create|make|save|remember|complete|finish|mark|check off|list|show|search|find|open|build|generate|plan|roadmap|workspace|current project|what tasks|what notes)\\b/i.test(query);
     let dailyFocus = '';
     try { dailyFocus = localStorage.getItem('bob_custom_focus_goal') || ''; } catch {}
     const citations = memory.citedNodes.map((m) => ({
@@ -330,7 +331,7 @@ ${sharedContext || 'No additional shared workspace context available.'}`;
         try {
           const ai = new GoogleGenAI({ apiKey: geminiKey });
           // If onChunk callback provided (e.g. Call mode TTS), stream chunks immediately!
-          if (onChunk) {
+          if (onChunk && !shouldUseCompanionTools) {
             try {
               const responseStream = await ai.models.generateContentStream({
                 model,
@@ -364,7 +365,7 @@ ${sharedContext || 'No additional shared workspace context available.'}`;
             }
           }
 
-          const result = onChunk
+          const result = onChunk && !shouldUseCompanionTools
             ? await ai.models.generateContent({
                 model,
                 contents: [
