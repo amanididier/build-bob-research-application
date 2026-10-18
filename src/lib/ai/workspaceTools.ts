@@ -359,13 +359,48 @@ export async function executeBobWorkspaceTool(
 
       const task = candidates[0];
       const taskId = safeText(task.id, 100);
+      const taskTitle = safeText(task.title, 180);
       const updatedTasks = tasks.map((item) => safeText(item.id, 100) === taskId ? { ...item, completed: true } : item);
       if (!writeJson('bob_tasks_v2', updatedTasks)) {
         return { ok: false, error: 'The task list could not be updated in local storage.' };
       }
-      const dispatched = dispatchWorkspaceAction({ type: 'complete_task', taskId, projectId });
+
+      // If this task mirrors a roadmap milestone, update the execution-view
+      // completion ledger too, even when that page is not currently mounted.
+      let roadmapTaskId = '';
+      const roadmap = loadRoadmapForProject(projectId);
+      const matchingMilestone = (Array.isArray(roadmap?.tasks) ? roadmap.tasks : [])
+        .find((milestone: JsonRecord) => safeText(milestone.title, 180).toLowerCase() === taskTitle.toLowerCase());
+      if (matchingMilestone?.id) {
+        roadmapTaskId = safeText(matchingMilestone.id, 100);
+        const rawCompleted = readJson('bob_phased_completed_v1');
+        const completedMap: JsonRecord = rawCompleted && typeof rawCompleted === 'object' && !Array.isArray(rawCompleted)
+          ? rawCompleted as JsonRecord
+          : {};
+        const currentCompleted = Array.isArray(completedMap[projectId]) ? completedMap[projectId] as string[] : [];
+        if (!currentCompleted.includes(roadmapTaskId)) {
+          const nextCompleted = [...currentCompleted, roadmapTaskId];
+          writeJson('bob_phased_completed_v1', { ...completedMap, [projectId]: nextCompleted });
+          const finished = nextCompleted.length;
+          const phaseCount = Array.isArray(roadmap?.tasks) ? roadmap.tasks.length : 0;
+          const earned = phaseCount <= 1 ? 5 : Math.min(5, Math.round((finished / phaseCount) * 5));
+          const rawStars = readJson('bob_roadmap_stars_v1');
+          const starsMap: JsonRecord = rawStars && typeof rawStars === 'object' && !Array.isArray(rawStars)
+            ? rawStars as JsonRecord
+            : {};
+          writeJson('bob_roadmap_stars_v1', { ...starsMap, [projectId]: earned });
+        }
+      }
+
+      const dispatched = dispatchWorkspaceAction({
+        type: 'complete_task',
+        taskId,
+        taskTitle,
+        roadmapTaskId,
+        projectId,
+      });
       return dispatched
-        ? { ok: true, action: 'task_completed', taskTitle: safeText(task.title, 180), message: 'The task has been marked complete in the active project.' }
+        ? { ok: true, action: 'task_completed', taskTitle, roadmapMilestoneCompleted: Boolean(roadmapTaskId), message: 'The task has been marked complete in the active project.' }
         : { ok: false, error: 'Could not notify the task list UI about the completion.' };
     }
 
