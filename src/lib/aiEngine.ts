@@ -617,7 +617,9 @@ ${workspaceContext || 'No additional workspace records are available for this pr
           if (executedWorkspaceTool) {
             const answer = executedWorkspaceWrite
               ? 'I updated your workspace, but I could not finish the explanation. Please check the relevant Tasks or Notes page.'
-              : 'I checked the workspace, but could not finish the answer. Please try asking again.';
+              : hasWriteTools
+                ? 'I could not verify that workspace action, so I did not change anything. Please clarify the task or note and try again.'
+                : 'I checked the workspace, but could not finish the answer. Please try asking again.';
             onChunk?.(answer);
             return {
               answer,
