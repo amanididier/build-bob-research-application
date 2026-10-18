@@ -537,7 +537,7 @@ ${workspaceContext || 'No additional workspace records are available for this pr
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             model: localModelName,
-            prompt: `You are Bob, an intelligent research assistant.\nContext:\n${memory.contextText}\n\nUser Question: ${query}`,
+            prompt: `You are Bob, an intelligent research assistant.\nLocal research memory:\n${memory.contextText}\n\nActive workspace context:\n${workspaceContext}\n\nUser Question: ${query}`,
             stream: false
           })
         });
