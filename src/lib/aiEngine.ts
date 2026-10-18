@@ -67,8 +67,10 @@ export function buildBobWorkspaceContext(projectId: string): string {
   };
 
   const sections: string[] = [];
-  const currentPage = readJson('bob_current_page');
-  if (typeof currentPage === 'string' && currentPage) sections.push('CURRENT APP VIEW\n' + currentPage);
+  const currentPage = (() => {
+    try { return localStorage.getItem('bob_current_page') || ''; } catch { return ''; }
+  })();
+  if (currentPage) sections.push('CURRENT APP VIEW\n' + currentPage);
   const projects = readJson('bob_research_sessions_v3');
   const projectList = Array.isArray(projects) ? projects : [];
   const project = projectList.find((item: any) => item?.id === projectId);
