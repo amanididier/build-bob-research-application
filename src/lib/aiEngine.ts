@@ -15,6 +15,7 @@ import { ModelTier } from '../types';
 import { resolveGeminiApiKey } from './ai/keyManager';
 import { loadRoadmapForProject } from './roadmap/roadmapStorage';
 import { executeBobWorkspaceTool, getBobWorkspaceToolDeclarations } from './ai/workspaceTools';
+import { loadMemory as loadUserMemory, selectRelevantFacts } from './memory/memoryManager';
 
 export interface ModelDownloadStatus {
   tier: ModelTier;
@@ -442,6 +443,51 @@ class BobAiManager {
     const startTime = performance.now();
     const memory = localMemoryBank.buildPromptContext(query, projectId);
     const workspaceContext = buildBobWorkspaceContext(projectId);
+
+    // Keep conversational continuity scoped to this project. If the caller
+    // already supplied a transcript (e.g. companion chat), prefer that.
+    let recentProjectConversation = '';
+    if (!additionalContext?.trim() && typeof localStorage !== 'undefined') {
+      try {
+        const sessions = JSON.parse(localStorage.getItem('bob_session_messages_v3') || '{}');
+        const savedMessages = Array.isArray(sessions?.[projectId]) ? [...sessions[projectId]] : [];
+        const last = savedMessages[savedMessages.length - 1];
+        // AppContext persists the just-sent user turn before requesting a reply.
+        // Exclude that duplicate because the current query is sent separately.
+        if (last?.role === 'user' && String(last.text || '').trim() === query.trim()) {
+          savedMessages.pop();
+        }
+        recentProjectConversation = savedMessages
+          .slice(-8)
+          .map((item: any) => `${item.role === 'user' ? 'User' : 'Bob'}: ${String(item.text || '').slice(0, 900)}`)
+          .join('\n')
+          .slice(-2800);
+      } catch {}
+    }
+    const conversationContext = additionalContext?.trim() || recentProjectConversation;
+
+    // Global user memory is separate from project research memory. Retrieve only
+    // facts that match this message, and summaries only for explicit recall requests.
+    const userMemory = loadUserMemory();
+    const relevantUserFacts = selectRelevantFacts(userMemory.important_facts || [], query, { limit: 4 });
+    const recallRequested = /\b(remember|recall|previous|earlier|last time|last conversation|what did we|what were we|where did we stop|continue where|what did i say|what did i tell you|our last chat|we discussed|we decided)\b/i.test(query);
+    const summaryItems = (userMemory.conversation_summaries || []).map((item: any) =>
+      typeof item === 'string' ? item : String(item?.summary || '')
+    ).filter((summary: string) => summary.trim());
+    const summaryTerms = query.toLowerCase().split(/\W+/).filter((word: string) =>
+      word.length > 3 && !['what', 'when', 'where', 'were', 'have', 'tell', 'about', 'last', 'time', 'before', 'from', 'with', 'that', 'this', 'them', 'then', 'continue', 'remember', 'previous', 'earlier', 'discussed', 'decided'].includes(word)
+    );
+    const matchedSummaries = summaryItems.map((summary: string, index: number) => ({
+      summary, index,
+      score: summaryTerms.reduce((score: number, term: string) => score + (summary.toLowerCase().includes(term) ? 1 : 0), 0),
+    })).filter((item: {summary:string;index:number;score:number}) => item.score > 0)
+      .sort((a: {summary:string;index:number;score:number}, b: {summary:string;index:number;score:number}) => b.score - a.score || b.index - a.index);
+    const relevantConversationSummaries = recallRequested
+      ? (matchedSummaries.length
+          ? matchedSummaries.slice(0, 3).map((item: {summary:string}) => item.summary)
+          : summaryItems.slice(-2).reverse())
+      : [];
+
     let dailyFocus = '';
     try { dailyFocus = localStorage.getItem('bob_custom_focus_goal') || ''; } catch {}
     const citations = memory.citedNodes.map((m) => ({
@@ -495,6 +541,8 @@ Response style (strict):
 - Treat retrieved memory as quiet background context, not the default subject of the conversation. Mention a memory only when it materially helps answer the current message or the user asks to recall it.
 - Do not begin by reciting remembered facts, prior projects, or a summary of the user's history. Answer the latest message directly; use project-specific memory only when it fits the active project and question.
 - When memory is relevant, apply it naturally without announcing that you are using memory. If the project or intent is unclear and the distinction matters, ask one focused question rather than assuming.
+- Use recent project conversation only to resolve references or continue an active thread; do not drag old topics into a new subject.
+- Global conversation summaries are provided only when the user explicitly asks to recall or continue earlier work. Keep them scoped to what the user asked about.
 
 ${dailyFocus ? `User's active focus for today: "${dailyFocus}". Keep this in mind when relevant.` : ''}
 ${tastePreference ? `User tone preference: "${tastePreference}".` : ''}
@@ -511,9 +559,12 @@ ${(() => {
     return bits.length ? bits.join('. ') + '.' : '';
   } catch { return ''; }
 })()}
-${additionalContext ? `Additional context from this Bob surface (reference data; the latest user message takes priority):\n${additionalContext.slice(-3500)}` : ''}
+${conversationContext ? `Recent conversation context (use only to resolve references or continue a thread; if the latest message starts a new subject, answer it directly):\n${conversationContext.slice(-3500)}` : ''}
 
-Relevant local research memory:
+${relevantUserFacts.length ? `Relevant long-term user facts (quiet context; apply only when useful, do not recite them):\n- ${relevantUserFacts.join('\n- ')}` : ''}
+${relevantConversationSummaries.length ? `Earlier conversation summaries (use only because the user asked to recall or continue prior work):\n- ${relevantConversationSummaries.join('\n- ')}` : ''}
+
+Relevant local research memory (only use when it matches the current question):
 ${memory.contextText}
 
 Active Bob workspace context (scoped to this project):
