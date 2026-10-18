@@ -317,7 +317,7 @@ export class GeminiLiveService {
         } else {
           // Check for quota exhaustion / rate limits (e.g. 1008 policy violation, 429 code)
           const reason = event.reason || `Close code: ${event.code}`;
-          voiceDiagnostics.event('Primary Gemini Live quota reached / network interruption. Switched to fallback agent mode.');
+          voiceDiagnostics.event('Gemini Live connection closed unexpectedly; the controller will use its fallback path.');
           this.callbacks.onClosed?.(reason);
         }
       };
