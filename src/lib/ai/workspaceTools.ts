@@ -362,7 +362,10 @@ export async function executeBobWorkspaceTool(
       const task = candidates[0];
       const taskId = safeText(task.id, 100);
       const taskTitle = safeText(task.title, 180);
-      const updatedTasks = tasks.map((item) => safeText(item.id, 100) === taskId ? { ...item, completed: true } : item);
+      const completedAt = new Date().toISOString();
+      const updatedTasks = tasks.map((item) =>
+        safeText(item.id, 100) === taskId ? { ...item, completed: true, completedAt } : item
+      );
       if (!writeJson('bob_tasks_v2', updatedTasks)) {
         return { ok: false, error: 'The task list could not be updated in local storage.' };
       }
