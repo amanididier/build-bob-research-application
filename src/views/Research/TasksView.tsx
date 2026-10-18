@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Check, Lock, Sparkles, Star } from 'lucide-react';
 import { TaskStepExecutionView } from '../../components/roadmap/TaskStepExecutionView';
-import { RoadmapWizardModal, PhasedTask } from '../../components/roadmap/RoadmapWizardModal';
+import type { PhasedTask } from '../../components/roadmap/RoadmapWizardModal';
 
 interface TasksViewProps {
   isSidePanel?: boolean;
@@ -15,7 +15,20 @@ const STARS_KEY = 'bob_roadmap_stars_v1';
 function loadPhased(projectId: string): PhasedTask[] | null {
   try {
     const all = JSON.parse(localStorage.getItem(PHASED_KEY) || '{}');
-    return all[projectId] || null;
+    if (Array.isArray(all[projectId]) && all[projectId].length) return all[projectId];
+
+    // The shared RoadmapSheet is the canonical planner. Reuse its saved plan
+    // instead of making the Research Tasks view maintain a separate roadmap.
+    const shared = JSON.parse(localStorage.getItem('bob_phased_roadmap_v2') || 'null');
+    if (
+      shared &&
+      (!shared.projectId || shared.projectId === projectId) &&
+      Array.isArray(shared.tasks) &&
+      shared.tasks.length
+    ) {
+      return shared.tasks;
+    }
+    return null;
   } catch {
     return null;
   }
@@ -153,7 +166,6 @@ export const TasksView: React.FC<TasksViewProps> = ({ isSidePanel = false }) => 
     toggleTask,
     activeResearchId,
     projects,
-    addTask,
     triggerThinking,
     sendMessage,
     navigateTo,
@@ -166,7 +178,6 @@ export const TasksView: React.FC<TasksViewProps> = ({ isSidePanel = false }) => 
   const [phasedTasks, setPhasedTasks] = useState<PhasedTask[]>(() => loadPhased(projectId) || []);
   const [completedTaskIds, setCompletedTaskIds] = useState<string[]>(() => loadCompleted(projectId));
   const [activeTaskIndex, setActiveTaskIndex] = useState(0);
-  const [isRoadmapWizardOpen, setIsRoadmapWizardOpen] = useState(false);
   const [stars, setStars] = useState(() => loadStars(projectId));
   const [showConfetti, setShowConfetti] = useState(false);
   const [hasRoadmap, setHasRoadmap] = useState(() => (loadPhased(projectId) || []).length > 0);
@@ -191,7 +202,13 @@ export const TasksView: React.FC<TasksViewProps> = ({ isSidePanel = false }) => 
       }
     };
     window.addEventListener('bob-roadmap-saved', onRoadmap);
-    return () => window.removeEventListener('bob-roadmap-saved', onRoadmap);
+    window.addEventListener('bob:roadmap-updated', onRoadmap);
+    window.addEventListener('bob:roadmap-finished', onRoadmap);
+    return () => {
+      window.removeEventListener('bob-roadmap-saved', onRoadmap);
+      window.removeEventListener('bob:roadmap-updated', onRoadmap);
+      window.removeEventListener('bob:roadmap-finished', onRoadmap);
+    };
   }, [projectId]);
 
   const phaseCount = phasedTasks.length;
@@ -241,13 +258,18 @@ export const TasksView: React.FC<TasksViewProps> = ({ isSidePanel = false }) => 
   };
 
   const openCreateRoadmap = () => {
-    const hasChat = (messages || []).some((m) => m.role === 'user');
-    if (!hasChat) {
-      // Fresh session: wizard will collect goal in simple words
-      setIsRoadmapWizardOpen(true);
-      return;
-    }
-    setIsRoadmapWizardOpen(true);
+    const recentContext = (messages || [])
+      .slice(-8)
+      .map((message) => `${message.role === 'user' ? 'User' : 'Bob'}: ${message.text}`)
+      .join('\n')
+      .slice(-2400);
+    window.dispatchEvent(new CustomEvent('bob-open-roadmap', {
+      detail: {
+        title: project?.title || 'Project Roadmap',
+        context: recentContext,
+        origin: 'tasks',
+      },
+    }));
   };
 
   const seedDemo = () => {
@@ -287,24 +309,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ isSidePanel = false }) => 
           Preview sample steps
         </button>
 
-        <RoadmapWizardModal
-          isOpen={isRoadmapWizardOpen}
-          onClose={() => setIsRoadmapWizardOpen(false)}
-          onFinishRoadmap={(data) => {
-            const tasksOut = data.tasks?.length ? data.tasks : SEED;
-            setPhasedTasks(tasksOut);
-            savePhased(projectId, tasksOut);
-            setHasRoadmap(true);
-            setCompletedTaskIds([]);
-            saveCompleted(projectId, []);
-            setActiveTaskIndex(0);
-            data.tasks?.forEach((t) => addTask(t.title, data.deadline, projectId));
-            setIsRoadmapWizardOpen(false);
-            try {
-              window.dispatchEvent(new Event('bob-roadmap-saved'));
-            } catch {}
-          }}
-        />
+
       </div>
     );
   }
@@ -437,23 +442,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ isSidePanel = false }) => 
         </div>
       )}
 
-      <RoadmapWizardModal
-        isOpen={isRoadmapWizardOpen}
-        onClose={() => setIsRoadmapWizardOpen(false)}
-        onFinishRoadmap={(data) => {
-          const tasksOut = data.tasks?.length ? data.tasks : SEED;
-          setPhasedTasks(tasksOut);
-          savePhased(projectId, tasksOut);
-          setHasRoadmap(true);
-          setCompletedTaskIds([]);
-          saveCompleted(projectId, []);
-          setStars(0);
-          saveStars(projectId, 0);
-          setActiveTaskIndex(0);
-          data.tasks?.forEach((t) => addTask(t.title, data.deadline, projectId));
-          setIsRoadmapWizardOpen(false);
-        }}
-      />
+
     </div>
   );
 };
