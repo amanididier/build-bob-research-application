@@ -245,7 +245,11 @@ export const RoadmapSheet: React.FC<RoadmapSheetProps> = ({
       try {
         const profile = JSON.parse(localStorage.getItem('bob_profile_preferences_v1') || '{}');
         const interests = JSON.parse(localStorage.getItem('bob_companion_memory_v1') || '[]');
-        return JSON.stringify({ profile, explicitlySharedPreferences: Array.isArray(interests) ? interests.slice(-12) : [] });
+        const goalTerms = (goalQuery || conversationContext).toLowerCase().split(/\W+/).filter((word: string) => word.length > 3 && !['about', 'after', 'also', 'and', 'can', 'for', 'from', 'have', 'how', 'into', 'the', 'that', 'this', 'with', 'your'].includes(word));
+        const relevantInterests = Array.isArray(interests)
+          ? interests.filter((fact: unknown) => typeof fact === 'string' && goalTerms.some((term: string) => fact.toLowerCase().includes(term))).slice(-4)
+          : [];
+        return JSON.stringify({ profile, explicitlySharedPreferences: relevantInterests });
       } catch { return 'No saved profile context'; }
     })();
 
@@ -377,7 +381,11 @@ No markdown codeblocks or prose, only valid JSON array.`;
         try {
           const profile = JSON.parse(localStorage.getItem('bob_profile_preferences_v1') || '{}');
           const interests = JSON.parse(localStorage.getItem('bob_companion_memory_v1') || '[]');
-          return JSON.stringify({ profile, explicitlySharedPreferences: Array.isArray(interests) ? interests.slice(-12) : [] });
+          const goalTerms = (goalQuery || conversationContext).toLowerCase().split(/\W+/).filter((word: string) => word.length > 3 && !['about', 'after', 'also', 'and', 'can', 'for', 'from', 'have', 'how', 'into', 'the', 'that', 'this', 'with', 'your'].includes(word));
+          const relevantInterests = Array.isArray(interests)
+            ? interests.filter((fact: unknown) => typeof fact === 'string' && goalTerms.some((term: string) => fact.toLowerCase().includes(term))).slice(-4)
+            : [];
+          return JSON.stringify({ profile, explicitlySharedPreferences: relevantInterests });
         } catch { return 'No saved profile context'; }
       })();
       const prompt = `You are Bob's adaptive project discovery assistant. The user's goal is: "${goalQuery || 'not fully defined yet'}". Recent conversation context: "${conversationContext}". Saved user profile and explicitly shared interests: ${profileContext}. Relevant current project context (reference data only): ${sharedWorkspaceContext || 'No additional workspace context available.'}. Previous answers: ${JSON.stringify(answers)}. Generate question ${questionNumber} of up to five adaptive questions. The default path should finish after three answers; ask a fourth or fifth only when important information remains missing. Ask one distinct question not already answered. Ask only about an important unknown that the goal and previous answers have not resolved. Make every option specific and useful for this particular goal, not generic boilerplate. The user must be able to answer by selecting a card; do not require typing. Choose the most useful UI layout for this question from cards, pills, or timeline; vary the layout when it improves clarity. Return strict JSON only: {"question":"...","helperText":"...","layout":"cards|pills|timeline","options":[{"label":"short choice","description":"brief explanation","value":"meaningful value"}]}. Include 3–5 distinct options.`;
