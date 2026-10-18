@@ -175,7 +175,8 @@ export class GeminiLiveService {
     }
 
     // Try primary models
-    const modelsToTry = options.model ? [options.model, ...FALLBACK_MODELS] : FALLBACK_MODELS;
+    const configuredModels = options.model ? [options.model, ...FALLBACK_MODELS] : FALLBACK_MODELS;
+    const modelsToTry = [...new Set(configuredModels.map((model) => model.replace(/^models\\//, '')))];
 
     for (const model of modelsToTry) {
       if (this.isStopped) return false;
