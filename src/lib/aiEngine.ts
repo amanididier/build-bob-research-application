@@ -390,7 +390,8 @@ class BobAiManager {
     query: string,
     projectId: string = 'urugendo',
     onChunk?: (chunkText: string) => void,
-    tastePreference?: string
+    tastePreference?: string,
+    conversationContext?: string
   ): Promise<AiSynthesisResponse> {
     const startTime = performance.now();
     const memory = localMemoryBank.buildPromptContext(query, projectId);
@@ -440,6 +441,8 @@ ${(() => {
     return bits.length ? bits.join('. ') + '.' : '';
   } catch { return ''; }
 })()}
+${conversationContext ? `Recent companion conversation (reference data; the latest user message takes priority):\n${conversationContext.slice(-3500)}` : ''}
+
 Relevant local research memory:
 ${memory.contextText}
 
