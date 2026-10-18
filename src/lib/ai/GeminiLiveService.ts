@@ -175,7 +175,9 @@ export class GeminiLiveService {
     }
 
     // Try primary models
-    const configuredModels = options.model ? [options.model, ...FALLBACK_MODELS] : FALLBACK_MODELS;
+    const configuredModels = options.mode === 'dictation'
+      ? [options.model || 'gemini-3.5-transcribe-live']
+      : options.model ? [options.model, ...FALLBACK_MODELS] : FALLBACK_MODELS;
     const modelsToTry = [...new Set(configuredModels.map((model) => model.replace(/^models\//, '')))];
 
     for (const model of modelsToTry) {
@@ -232,16 +234,18 @@ export class GeminiLiveService {
         const setupPayload = {
           setup: {
             model: model.startsWith('models/') ? model : `models/${model}`,
-            responseModalities: ['AUDIO'],
-            speechConfig: {
-              voiceConfig: {
-                prebuiltVoiceConfig: {
-                  voiceName: options.voiceName || 'Puck'
+            responseModalities: options.mode === 'dictation' ? ['TEXT'] : ['AUDIO'],
+            ...(options.mode === 'dictation' ? {} : {
+              speechConfig: {
+                voiceConfig: {
+                  prebuiltVoiceConfig: {
+                    voiceName: options.voiceName || 'Puck'
+                  }
                 }
               }
-            },
+            }),
             inputAudioTranscription: {},
-            outputAudioTranscription: {},
+            ...(options.mode === 'dictation' ? {} : { outputAudioTranscription: {} }),
             systemInstruction: {
               parts: [
                 {
