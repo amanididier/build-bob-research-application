@@ -21,6 +21,9 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
       - name: Inspect Bob AI Garden reference archive
         shell: bash
         run: |
@@ -35,9 +38,6 @@ jobs:
                 ;;
             esac
           done < <(unzip -Z1 "public/bob-s-ai-garden-main (1).zip")
-
-      - name: Check out repository
-        uses: actions/checkout@v4
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
