@@ -100,3 +100,49 @@ These checks confirm the workflow run passed; they do not prove all UI interacti
 3. Fix synchronization/persistence gaps in the shared data layer before adapting page UI.
 4. Adapt one end-to-end workflow first: open project → ask Bob to research → save evidence/note → create task → verify the right pages update and survive reload.
 5. Run relevant tests, typecheck and production build; report exact files changed and remaining issues.
+
+
+## Bob production architecture trace (Task 2)
+
+**Scope note:** These findings are from tracing the current `main` branch's AppContext, AI engine/workspace tools, research-memory service, roadmap storage, task view, and Supabase client setup. They describe the inspected paths, not a claim that every file in the repository has been exhaustively reviewed.
+
+### Source-of-truth map
+
+| Data domain | Current observed source/persistence | Consumers and sync behavior | Risk / implication |
+|---|---|---|---|
+| Projects | `bob_research_sessions_v3` in browser localStorage; React `projects` state in `src/context/AppContext.tsx` | AI workspace context/tools read the key; desktop bridge syncs project summaries and can import new extension projects | React state and direct localStorage writes coexist; project source/task counts can be stale unless updated from underlying records |
+| Active project | `bob_active_research_id` plus React `activeResearchId` | Used by chat, workspace tools, roadmap, tasks and extension bridge | Must stay consistent across pages and bridge messages; fallback IDs need careful handling when a project is deleted |
+| Chat history | `bob_session_messages_v3`, keyed by project ID | AppContext chat, AI prompt context, desktop/extension bridge | Local browser storage is durable only in that browser profile; bridge merge deduplicates by ID or role/text, which may conflate identical repeated messages |
+| Tasks | `bob_tasks_v2` plus React `tasks` state | AppContext persists state; AI context/tools read/write the same key; task UI renders project tasks | The workspace tool writes storage then emits an event for React state; this is an integration seam to regression-test. Tasks are not shown as part of the inspected desktop bridge sync contract |
+| Notes | `bob_notes_v1` plus React `notes` state | Notebook UI, AI context/tools, extension note import; note changes are mirrored into `bob_local_research_memory_v1` | The same note is represented in the note list and retrieval memory; upsert tags reduce stale duplicates, but note and memory storage are still separate records |
+| Local research memory | `bob_local_research_memory_v1` managed by `LocalResearchMemoryBank` | AI retrieval, workspace tool search and memory stats | Local-only keyword-weighted retrieval; it is not a cloud research database or verified external evidence store |
+| Selected tabs | `bob_tabs_catalog_v2`; bridge also stores `bob_desktop_tabs` | AI context, workspace tools, Tabs view and bridge events | Two tab-related keys exist; confirm which is canonical for each path before changing tab behavior |
+| Roadmap | `bob_phased_roadmaps_by_project_v1` with legacy mirror `bob_phased_roadmap_v2`; execution completion/stars use additional project-keyed maps | Roadmap UI, task execution view and AI workspace tools | Roadmap milestones and general task records are distinct structures; matching by title is used in at least one completion path and can be fragile |
+| Auth | Supabase clients exist in `src/lib/supabaseClient.ts` and `lib/supabase-browser.ts`, with persisted auth sessions | Sign-in/session paths | In the inspected app data paths, project/task/note/chat/roadmap records are still read and written to localStorage; the presence of Supabase auth does not mean workspace data is synced to Supabase |
+
+### Confirmed integration behavior
+
+1. `src/context/AppContext.tsx` is the central React state provider for projects, per-project chat messages, tasks and notes. It persists these to localStorage and syncs some content through the desktop/Chrome bridge.
+2. `src/lib/aiEngine.ts` assembles a bounded project-specific prompt snapshot directly from localStorage keys and the project roadmap. It also imports the function-calling tools. The AI context is therefore coupled to those key names and record shapes.
+3. `src/lib/ai/workspaceTools.ts` reads/writes the same task and note keys directly. Writes dispatch `bob:workspace-tool-action`; AppContext mirrors tool mutations into React state, and TasksView separately handles roadmap completion events. The existing tests cover intent gating, project isolation, task/note writes and completion ambiguity.
+4. `src/lib/researchMemory.ts` persists a local memory cache and filters legacy known demo memories. AppContext upserts notebook notes into this memory so they can be retrieved later.
+5. `src/lib/roadmap/roadmapStorage.ts` keeps project-specific roadmaps but mirrors the latest roadmap into a legacy single-roadmap key for older consumers.
+6. `src/lib/research/researchOrchestrator.ts` extracts finding-like lines from Bob's generated answer and creates graph/evidence records with fixed confidence/importance values. This extraction is not itself external source verification; UI must not present those values as independently verified evidence without stronger provenance.
+7. The desktop bridge path can sync projects, notes, messages and tab state through preload APIs or local HTTP polling. In the inspected sync flow, tasks and roadmaps are not included in the same explicit cross-surface synchronization path.
+
+### Priority gaps before adapting the reference UI
+
+- **No single data service boundary:** React UI, AI tools and AI context each read/write localStorage directly. This makes schema drift and partial updates easier.
+- **Cross-surface coverage is uneven:** projects/chat/notes/tabs have bridge behavior, but tasks/roadmaps do not share an equivalent documented bridge contract in the inspected paths.
+- **Persistence is device/profile-local for workspace records:** Supabase auth exists, but the traced workspace records are not shown syncing to database tables. Data will not automatically follow a user to another browser/device.
+- **Evidence provenance needs a clear boundary:** extracted AI response bullets are useful candidate findings, not automatically verified evidence. Preserve source URLs and separate sourced evidence from generated synthesis.
+- **Roadmap/task synchronization is multi-ledger:** roadmap tasks, general tasks, completion IDs and star counts are stored separately. Any UI adaptation must avoid silently duplicating tasks or reporting mismatched completion totals.
+
+## Updated implementation sequence
+
+1. **Architecture trace — completed for the core data paths listed above.** Remaining work is to check any page-specific data consumers before modifying shared contracts.
+2. Define a minimal shared workspace data boundary around existing storage keys first; avoid a broad migration or destructive key rename.
+3. Close the highest-value synchronization gaps for the selected end-to-end workflow, keeping project IDs stable and preserving existing saved data.
+4. Implement and verify one end-to-end flow: active project → grounded research response/source → saved note/evidence → task creation → dashboard/task/note refresh → reload persistence.
+5. Only then adapt the reference Dashboard/Summary/Tasks patterns to Bob's real records.
+6. Run workspace regression tests, TypeScript validation, web build and extension packaging; report actual results and any unverified runtime cases.
