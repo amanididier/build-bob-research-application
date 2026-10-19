@@ -21,6 +21,21 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
+      - name: Inspect Bob AI Garden reference archive
+        shell: bash
+        run: |
+          echo "=== ARCHIVE FILE LIST ==="
+          unzip -Z1 "public/bob-s-ai-garden-main (1).zip"
+          echo "=== SOURCE FILE HEADERS ==="
+          while IFS= read -r file; do
+            case "$file" in
+              *.tsx|*.ts|*.jsx|*.js|*.json|*.css|*.html)
+                echo "--- FILE: $file ---"
+                unzip -p "public/bob-s-ai-garden-main (1).zip" "$file" | sed -n '1,180p'
+                ;;
+            esac
+          done < <(unzip -Z1 "public/bob-s-ai-garden-main (1).zip")
+
       - name: Check out repository
         uses: actions/checkout@v4
 
