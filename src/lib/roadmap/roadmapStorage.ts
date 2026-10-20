@@ -132,8 +132,8 @@ export function saveRoadmapForProject(
   const resolvedProjectId = projectId || roadmap.projectId || 'new-research';
   const saved: StoredBobRoadmap = { ...roadmap, projectId: resolvedProjectId };
 
-  syncRoadmapToCanonical(resolvedProjectId, saved);
   if (typeof window === 'undefined') return saved;
+  syncRoadmapToCanonical(resolvedProjectId, saved);
 
   const all = readMap();
   all[resolvedProjectId] = saved;
