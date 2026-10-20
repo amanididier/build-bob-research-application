@@ -5,7 +5,7 @@ import {
 } from '../src/lib/storage/canonicalRepository';
 import { canonicalWorkspace } from '../src/lib/storage/canonicalRepository';
 import { migrateLegacyWorkspace, getLegacyMigrationId } from '../src/lib/storage/migrateLegacyWorkspace';
-import { syncRoadmapToCanonical } from '../src/lib/roadmap/roadmapStorage';
+import { syncRoadmapToCanonical, syncRoadmapProgressToCanonical } from '../src/lib/roadmap/roadmapStorage';
 import { NoteEntity, ProjectEntity, LinkEntity, SourceEntity, TaskEntity, WorkspaceEntity } from '../src/lib/storage/canonicalModel';
 import { canonicalNotesForLegacyUi, canonicalProjectsForLegacyUi, canonicalTasksForLegacyUi, readLegacyCollectionOrCanonical, reconcileLegacyMirroredEntities } from '../src/lib/storage/legacyUiAdapters';
 
@@ -193,6 +193,15 @@ function testCanonicalProjectAdapterAndRoadmapSync() {
   assert.equal(isolated.get('phase_roadmap_workspace-a_Plan'), null,
     'unused roadmap phases should be removed from canonical storage');
   assert.equal(isolated.get<TaskEntity>('roadmap-task_workspace-a_task-c')?.title, 'Ship first version');
+  syncRoadmapProgressToCanonical('workspace-a', [
+    { id: 'task-c', phase: 'Build', title: 'Ship first version', steps: [] },
+  ], ['task-c'], isolated);
+  assert.equal(isolated.get<TaskEntity>('roadmap-task_workspace-a_task-c')?.status, 'completed',
+    'execution-view completion should mirror to the canonical roadmap task');
+  assert.equal(isolated.get('phase_roadmap_workspace-a_Build')?.kind, 'phase',
+    'the roadmap phase should remain represented canonically');
+  assert.equal((isolated.get<any>('phase_roadmap_workspace-a_Build') as any)?.status, 'completed',
+    'a phase should be marked completed when all its roadmap tasks are completed');
 }
 
 function testLegacyMirrorDeletionReconciliation() {
