@@ -43,3 +43,10 @@ Move Bob toward a consistent workspace data model without making a risky one-sho
 - Project deletion does not cascade-delete project notes/tasks; unresolved references are retained by design and should be handled by a deliberate relationship lifecycle policy.
 
 These are separate architecture decisions, not hidden unfinished work in the current foundation scope. Before removing legacy writes or claiming a single native database, add an async persistence adapter, fixture migration/rollback tests, and desktop packaged-runtime verification.
+
+
+## Native adapter follow-up (October 2026)
+
+The desktop process now has an isolated, versioned canonical JSON store and an async preload bridge with atomic writes and revision checks. The browser-to-native migration helper preserves the exact browser source and refuses to overwrite existing native entities. Regression tests are included in CI.
+
+The app has **not** switched all consumers to this adapter. Existing synchronous repository calls and legacy dual-writes remain active so that current UI behavior is not broken by an unsafe storage cutover. The next migration task is to convert each remaining synchronous consumer to the async repository, then test restart/recovery and packaged Electron behavior before disabling legacy writes. The adapter is file-backed JSON, not SQLite.
