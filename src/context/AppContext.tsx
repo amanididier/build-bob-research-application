@@ -192,7 +192,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [currentPage]);
   const [researchSubView, setResearchSubView] = useState<ResearchSubView>('chat');
   const [activeResearchId, setActiveResearchId] = useState<string>(() => {
-    if (typeof window === 'undefined') return 'my-research-project';
+    if (typeof window === 'undefined') return 'new-research';
     try {
       const savedActive = localStorage.getItem('bob_active_research_id');
       if (savedActive) return savedActive;
@@ -217,7 +217,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Onboarding & User Profile state
   const [userName, setUserName] = useState<string>(() => {
-    return (typeof window !== 'undefined' && localStorage.getItem('bob_user_name')) || 'Amani';
+    return (typeof window !== 'undefined' && localStorage.getItem('bob_user_name')) || '';
   });
 
   const [userEmail, setUserEmailState] = useState<string>(() => {
@@ -229,7 +229,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (auth?.email) return auth.email;
       } catch {}
     }
-    return 'ishimweamanid@gmail.com';
+    return '';
   });
 
   const setUserEmail = (email: string) => {
@@ -322,7 +322,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     step: 'Generating response',
   });
 
-  const [unreadNotifications, setUnreadNotifications] = useState(3);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   // Start new installs with a neutral workspace. Existing saved projects are preserved.
   const [projects, setProjects] = useState<ResearchProjectItem[]>(() => {
@@ -337,8 +337,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     return [
       {
-        id: 'my-research-project',
-        title: 'My Research Project',
+        id: 'new-research',
+        title: 'New research',
         sourceCount: 0,
         openTasks: 0,
         status: 'new project',
