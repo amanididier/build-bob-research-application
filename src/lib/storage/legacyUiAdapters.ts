@@ -91,7 +91,7 @@ export function canonicalNotesForLegacyUi(repository: CanonicalWorkspaceReposito
 
 /** Convert canonical tasks to the existing task-list shape for a safe read fallback. */
 export function canonicalTasksForLegacyUi(repository: CanonicalWorkspaceRepository = canonicalWorkspace): LegacyUiTask[] {
-  return repository.list<TaskEntity>({ kind: 'task', limit: 500 }).map((task) => {
+  return repository.list<TaskEntity>({ kind: 'task', limit: 500 }).filter((task) => !task.tags.includes('roadmap-generated')).map((task) => {
     const bodyLines = (task.body ?? '').split('\n');
     const context = bodyLines.find((line) => line.startsWith('Context: '))?.slice('Context: '.length) ?? '';
     const bodyDue = bodyLines.find((line) => line.startsWith('Due: '))?.slice('Due: '.length);
