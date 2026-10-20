@@ -1,4 +1,4 @@
-import { canonicalWorkspace } from './canonicalRepository';
+import { CanonicalWorkspaceRepository, KeyValueStorage, canonicalWorkspace } from './canonicalRepository';
 import { NoteEntity, TaskEntity, ProjectEntity, nowIso } from './canonicalModel';
 
 export interface LegacyMigrationReport {
@@ -15,9 +15,9 @@ const LEGACY_KEYS = {
   tasks: 'bob_tasks_v2',
 };
 
-function readArray(key: string, report: LegacyMigrationReport): unknown[] {
-  if (typeof window === 'undefined') return [];
-  const raw = window.localStorage.getItem(key);
+function readArray(key: string, report: LegacyMigrationReport, storage: KeyValueStorage | null): unknown[] {
+  if (!storage) return [];
+  const raw = storage.getItem(key);
   if (raw === null) return [];
   try {
     const value: unknown = JSON.parse(raw);
@@ -47,7 +47,10 @@ function cleanString(value: unknown, fallback = ''): string {
  * Legacy keys are deliberately retained as rollback sources. This migration does not
  * change the active UI storage path; switching consumers is a separate verified step.
  */
-export function migrateLegacyWorkspace(): LegacyMigrationReport {
+export function migrateLegacyWorkspace(options: {
+  storage?: KeyValueStorage | null;
+  repository?: CanonicalWorkspaceRepository;
+} = {}): LegacyMigrationReport {
   const report: LegacyMigrationReport = {
     alreadyRan: false,
     imported: { projects: 0, notes: 0, tasks: 0 },
@@ -55,22 +58,27 @@ export function migrateLegacyWorkspace(): LegacyMigrationReport {
     warnings: [],
   };
 
-  if (typeof window === 'undefined') {
+  let storage = options.storage;
+  if (storage === undefined) {
+    try { storage = typeof window !== 'undefined' ? window.localStorage : null; } catch { storage = null; }
+  }
+  if (!storage) {
     report.warnings.push('Migration requires a browser storage context.');
     return report;
   }
-  if (canonicalWorkspace.hasMigration(MIGRATION_ID)) {
+  const repository = options.repository ?? canonicalWorkspace;
+  if (repository.hasMigration(MIGRATION_ID)) {
     report.alreadyRan = true;
     return report;
   }
 
   const now = nowIso();
-  const existing = canonicalWorkspace.snapshot().entities;
+  const existing = repository.snapshot().entities;
   const seenIds = new Set(Object.keys(existing));
   // Preserve referential integrity when legacy IDs are namespaced in the canonical store.
   const projectIdMap = new Map<string, string>();
 
-  for (const raw of readArray(LEGACY_KEYS.projects, report)) {
+  for (const raw of readArray(LEGACY_KEYS.projects, report, storage)) {
     const item = asObject(raw);
     if (!item || !cleanString(item.id) || !cleanString(item.title)) {
       report.skipped.invalid += 1;
@@ -86,12 +94,12 @@ export function migrateLegacyWorkspace(): LegacyMigrationReport {
       color: cleanString(item.dotColor) || undefined, tags: [],
       createdAt: now, updatedAt: now, schemaVersion: 1,
     };
-    canonicalWorkspace.save(project);
+    repository.save(project);
     seenIds.add(id);
     report.imported.projects += 1;
   }
 
-  for (const raw of readArray(LEGACY_KEYS.notes, report)) {
+  for (const raw of readArray(LEGACY_KEYS.notes, report, storage)) {
     const item = asObject(raw);
     if (!item || !cleanString(item.id) || !cleanString(item.title)) {
       report.skipped.invalid += 1;
@@ -109,12 +117,12 @@ export function migrateLegacyWorkspace(): LegacyMigrationReport {
       createdAt: cleanString(item.createdAt, now), updatedAt: cleanString(item.updatedAt, cleanString(item.createdAt, now)),
       schemaVersion: 1,
     };
-    canonicalWorkspace.save(note);
+    repository.save(note);
     seenIds.add(id);
     report.imported.notes += 1;
   }
 
-  for (const raw of readArray(LEGACY_KEYS.tasks, report)) {
+  for (const raw of readArray(LEGACY_KEYS.tasks, report, storage)) {
     const item = asObject(raw);
     if (!item || !cleanString(item.id) || !cleanString(item.title)) {
       report.skipped.invalid += 1;
@@ -133,7 +141,7 @@ export function migrateLegacyWorkspace(): LegacyMigrationReport {
       createdAt: cleanString(item.createdAt, now), updatedAt: cleanString(item.updatedAt, cleanString(item.createdAt, now)),
       schemaVersion: 1,
     };
-    canonicalWorkspace.save(task);
+    repository.save(task);
     seenIds.add(id);
     report.imported.tasks += 1;
   }
@@ -147,7 +155,7 @@ export function migrateLegacyWorkspace(): LegacyMigrationReport {
   // Do not permanently close a partial migration. On a later run, already imported
   // entities are recognized as duplicates while repaired records can still be imported.
   if (report.skipped.invalid === 0) {
-    canonicalWorkspace.markMigration(MIGRATION_ID);
+    repository.markMigration(MIGRATION_ID);
   }
   return report;
 }
