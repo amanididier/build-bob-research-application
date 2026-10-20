@@ -42,3 +42,25 @@ This boundary is intentional: importing data into a second store before consumer
 - Relationships are typed records, not embedded backlinks, so backlinks can be derived and repaired.
 - File metadata and local references are separate from file bytes; local-only storage remains possible.
 - Deleting an entity does not cascade-delete references automatically.
+
+
+## Stage completion assessment (October 2026)
+
+The canonical storage foundation stage is complete for the **reversible model-and-mirroring scope**. The repository has typed entities, CRUD/query/backlink behavior, repeatable non-destructive legacy import, legacy UI adapters, mirrored project/note/task changes with guarded deletion reconciliation, and project-scoped roadmap phase/task snapshots. The quality workflow verifies these paths, including persistence across repository instances.
+
+### Verified persistence boundary
+
+The canonical repository uses the renderer's `localStorage` key `bob_canonical_workspace_v1`. This is browser-profile storage and is also the active canonical adapter in the Electron-rendered UI. The Electron preload does **not** expose `bob.dbRun` or `bob.dbAll`, and the desktop main process's `bob-workspace.json` is a separate store; therefore canonical entities are **not** backed by that native JSON file or by SQLite. The existing `src/lib/db/database.ts` is a separate localStorage-backed compatibility database despite its historical key name. This was checked directly rather than assumed.
+
+This boundary is intentional for this stage: switching to a native main-process database requires an asynchronous storage contract and migration/rollback tests, not a synchronous IPC shim. It remains a clearly documented follow-up before promising one native database across desktop and web.
+
+### Stage exit checklist
+
+- [x] Canonical entity contracts and repository CRUD/query/backlinks.
+- [x] Non-destructive, idempotent legacy import with retry behavior for invalid source records.
+- [x] Legacy-first compatibility reads, canonical fallback for missing/corrupt collections, and preservation of valid empty collections.
+- [x] Project, note, task dual-write and tracked-deletion regression tests.
+- [x] Project-scoped roadmap phase/task mirror with nested step preservation and stale generated-record cleanup.
+- [x] Persistence/reload regression test using a new repository instance over the same storage.
+- [x] CI run passed for the latest project-deletion coverage.
+- [ ] Native SQLite/main-process adapter and canonical-only cutover are explicitly **not** part of this completed foundation stage; do not begin either without its own migration and rollback plan.
