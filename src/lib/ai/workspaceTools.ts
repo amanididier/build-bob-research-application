@@ -1,7 +1,7 @@
 import { Type } from '@google/genai';
 import { loadRoadmapForProject } from '../roadmap/roadmapStorage';
 import { localMemoryBank } from '../researchMemory';
-import { canonicalNotesForLegacyUi, canonicalTasksForLegacyUi } from '../storage/legacyUiAdapters';
+import { canonicalNotesForLegacyUi, canonicalTasksForLegacyUi, readLegacyCollectionOrCanonical } from '../storage/legacyUiAdapters';
 
 type JsonRecord = Record<string, any>;
 
@@ -33,20 +33,6 @@ function asRecords(value: unknown): JsonRecord[] {
 
 
 /** Prefer valid legacy collections during migration; read canonical records only when the legacy key is absent or invalid. */
-function readWorkspaceCollection(key: string, fallback: () => JsonRecord[]): JsonRecord[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (raw !== null) {
-      const parsed: unknown = JSON.parse(raw);
-      if (Array.isArray(parsed)) return asRecords(parsed);
-    }
-  } catch {
-    // Recover from a missing/corrupt legacy collection using the canonical mirror.
-  }
-  return fallback();
-}
-
 function safeText(value: unknown, max = 240): string {
   return typeof value === 'string' ? value.trim().slice(0, max) : '';
 }
@@ -196,8 +182,8 @@ export async function executeBobWorkspaceTool(
   if (typeof window === 'undefined') return { ok: false, error: 'Workspace tools are unavailable outside the app.' };
 
   const projects = asRecords(readJson('bob_research_sessions_v3'));
-  const tasks = readWorkspaceCollection('bob_tasks_v2', () => canonicalTasksForLegacyUi() as unknown as JsonRecord[]);
-  const notes = readWorkspaceCollection('bob_notes_v1', () => canonicalNotesForLegacyUi() as unknown as JsonRecord[]);
+  const tasks = readLegacyCollectionOrCanonical('bob_tasks_v2', () => canonicalTasksForLegacyUi() as unknown as JsonRecord[]);
+  const notes = readLegacyCollectionOrCanonical('bob_notes_v1', () => canonicalNotesForLegacyUi() as unknown as JsonRecord[]);
   const activeProject = projects.find((project) => safeText(project.id, 100) === projectId);
 
   switch (name) {
