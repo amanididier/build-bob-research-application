@@ -355,6 +355,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
   }, [activeResearchId]);
 
+  // Mirror the current project list into canonical storage without removing the
+  // legacy key yet; this keeps existing project screens and desktop consumers compatible.
+  useEffect(() => {
+    try {
+      const now = new Date().toISOString();
+      for (const project of projects) {
+        const legacyId = String(project.id || '').trim();
+        if (!legacyId) continue;
+        const safeId = legacyId.replace(/[^a-zA-Z0-9_-]/g, '_');
+        const status = project.status === 'paused' || project.status === 'completed' || project.status === 'archived'
+          ? project.status
+          : 'active';
+        const canonicalProject: ProjectEntity = {
+          id: 'project_' + safeId,
+          kind: 'project',
+          title: String(project.title || 'New research'),
+          description: String(project.summary || ''),
+          status,
+          color: String(project.dotColor || '#4385f5'),
+          tags: [],
+          createdAt: now,
+          updatedAt: now,
+          schemaVersion: 1,
+        };
+        canonicalWorkspace.save(canonicalProject);
+      }
+      reconcileLegacyMirroredEntities('project', projects.map((project) => String(project.id || '')), canonicalWorkspace);
+      localStorage.setItem('bob_research_sessions_v3', JSON.stringify(projects));
+    } catch (error) {
+      console.warn('[Bob storage] Canonical project mirror failed; legacy projects remain available.', error);
+    }
+  }, [projects]);
+
   // Keep desktop bridge in sync with all current research projects so Chrome Side Panel sees them
   useEffect(() => {
     const bridgeProjects = projects.map((p) => ({
