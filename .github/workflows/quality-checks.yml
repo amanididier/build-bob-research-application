@@ -54,7 +54,7 @@ jobs:
         run: npm run test:async-canonical-storage
 
       - name: Type-check canonical storage foundation
-        run: npx tsc --noEmit --target ES2022 --module ESNext --moduleResolution bundler --lib DOM,ESNext --skipLibCheck --esModuleInterop src/lib/storage/canonicalModel.ts src/lib/storage/canonicalRepository.ts src/lib/storage/asyncCanonicalRepository.ts src/lib/storage/migrateLegacyWorkspace.ts scripts/test-canonical-storage.ts scripts/test-async-canonical-storage.ts
+        run: npx tsc --noEmit --target ES2022 --module ESNext --moduleResolution bundler --lib DOM,ESNext --skipLibCheck --esModuleInterop src/lib/storage/canonicalModel.ts src/lib/storage/canonicalRepository.ts src/lib/storage/asyncCanonicalRepository.ts src/lib/storage/initializeWorkspaceStorage.ts src/lib/storage/migrateLegacyWorkspace.ts scripts/test-canonical-storage.ts scripts/test-async-canonical-storage.ts
 
       - name: Check desktop bridge JavaScript syntax
         run: |
