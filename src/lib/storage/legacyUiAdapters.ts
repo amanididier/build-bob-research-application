@@ -92,7 +92,7 @@ export function canonicalTasksForLegacyUi(repository: CanonicalWorkspaceReposito
  * stores here because that could duplicate records or resurrect deleted legacy items.
  */
 export function readLegacyCollectionOrCanonical<T>(key: string, fallback: () => T[]): T[] {
-  if (typeof window === 'undefined') return [];
+  if (typeof window === 'undefined') return fallback();
   try {
     const raw = window.localStorage.getItem(key);
     if (raw !== null) {
