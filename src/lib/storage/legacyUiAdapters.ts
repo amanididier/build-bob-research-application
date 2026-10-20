@@ -1,5 +1,5 @@
 import { CanonicalWorkspaceRepository, canonicalWorkspace } from './canonicalRepository';
-import { NoteEntity, SourceEntity, TaskEntity } from './canonicalModel';
+import { NoteEntity, ProjectEntity, SourceEntity, TaskEntity } from './canonicalModel';
 
 export interface LegacyUiNote {
   id: string;
@@ -39,6 +39,28 @@ function sourceForNote(note: NoteEntity, repository: CanonicalWorkspaceRepositor
     if (source?.kind === 'source') return source;
   }
   return undefined;
+}
+
+/** Convert canonical projects to the shape consumed by the current project UI. */
+export function canonicalProjectsForLegacyUi(repository: CanonicalWorkspaceRepository = canonicalWorkspace): Array<{
+  id: string;
+  title: string;
+  sourceCount: number;
+  openTasks: number;
+  status: string;
+  dotColor: string;
+  summary: string;
+  pinned?: boolean;
+}> {
+  return repository.list<ProjectEntity>({ kind: 'project', limit: 500 }).map((project) => ({
+    id: legacyId(project.id, 'project_'),
+    title: project.title,
+    sourceCount: 0,
+    openTasks: repository.list<TaskEntity>({ kind: 'task', projectId: project.id }).filter((task) => task.status !== 'completed' && task.status !== 'cancelled').length,
+    status: project.status ?? 'active',
+    dotColor: project.color ?? '#4385f5',
+    summary: project.description ?? '',
+  }));
 }
 
 /** Convert canonical notes to the existing screen shape without changing the canonical records. */
@@ -111,7 +133,7 @@ export function readLegacyCollectionOrCanonical<T>(key: string, fallback: () => 
  * deleted accidentally. A missing/corrupt marker is initialized conservatively.
  */
 export function reconcileLegacyMirroredEntities(
-  kind: 'note' | 'task',
+  kind: 'project' | 'note' | 'task',
   legacyIds: string[],
   repository: CanonicalWorkspaceRepository = canonicalWorkspace,
 ): number {
