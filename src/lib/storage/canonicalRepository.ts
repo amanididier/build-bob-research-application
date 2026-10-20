@@ -14,6 +14,12 @@ export interface KeyValueStorage {
   setItem(key: string, value: string): void;
 }
 
+type NewWorkspaceEntity = WorkspaceEntity extends infer Entity
+  ? Entity extends WorkspaceEntity
+    ? Omit<Entity, 'id' | 'createdAt' | 'updatedAt' | 'schemaVersion'>
+    : never
+  : never;
+
 export interface EntityQuery {
   kind?: WorkspaceEntityKind;
   projectId?: EntityId;
@@ -143,10 +149,7 @@ export class CanonicalWorkspaceRepository {
     return saved;
   }
 
-  create<T extends Omit<WorkspaceEntity, 'id' | 'createdAt' | 'updatedAt' | 'schemaVersion'>>(
-    input: T,
-    idPrefix: string,
-  ): WorkspaceEntity {
+  create(input: NewWorkspaceEntity, idPrefix: string): WorkspaceEntity {
     const now = nowIso();
     const entity = {
       ...input,
@@ -154,7 +157,7 @@ export class CanonicalWorkspaceRepository {
       createdAt: now,
       updatedAt: now,
       schemaVersion: 1 as const,
-    } as WorkspaceEntity;
+    } as unknown as WorkspaceEntity;
     return this.save(entity);
   }
 
