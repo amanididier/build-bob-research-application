@@ -5,8 +5,9 @@ import {
 } from '../src/lib/storage/canonicalRepository';
 import { canonicalWorkspace } from '../src/lib/storage/canonicalRepository';
 import { migrateLegacyWorkspace, getLegacyMigrationId } from '../src/lib/storage/migrateLegacyWorkspace';
+import { syncRoadmapToCanonical } from '../src/lib/roadmap/roadmapStorage';
 import { NoteEntity, ProjectEntity, LinkEntity, SourceEntity, TaskEntity, WorkspaceEntity } from '../src/lib/storage/canonicalModel';
-import { canonicalNotesForLegacyUi, canonicalTasksForLegacyUi, readLegacyCollectionOrCanonical, reconcileLegacyMirroredEntities } from '../src/lib/storage/legacyUiAdapters';
+import { canonicalNotesForLegacyUi, canonicalProjectsForLegacyUi, canonicalTasksForLegacyUi, readLegacyCollectionOrCanonical, reconcileLegacyMirroredEntities } from '../src/lib/storage/legacyUiAdapters';
 
 class MemoryStorage {
   private values = new Map<string, string>();
@@ -127,6 +128,52 @@ function testCanonicalLegacyUiAdapters() {
   assert.equal(uiTask.dueDate, 'Flexible');
 }
 
+
+function testCanonicalProjectAdapterAndRoadmapSync() {
+  const localStorage = new MemoryStorage();
+  (globalThis as any).localStorage = localStorage;
+  (globalThis as any).window = { localStorage };
+  const isolated = new CanonicalWorkspaceRepository(localStorage, 'roadmap_test');
+
+  const project = base<ProjectEntity>({
+    id: 'project_workspace-a', kind: 'project', title: 'Workspace A',
+    description: 'Project summary', status: 'active', color: '#123456', tags: [],
+  });
+  isolated.save(project);
+  const [uiProject] = canonicalProjectsForLegacyUi(isolated);
+  assert.equal(uiProject.id, 'workspace-a');
+  assert.equal(uiProject.title, 'Workspace A');
+  assert.equal(uiProject.summary, 'Project summary');
+  assert.equal(uiProject.dotColor, '#123456');
+
+  syncRoadmapToCanonical('workspace-a', {
+    goal: 'Test roadmap',
+    tasks: [
+      { id: 'task-a', phase: 'Plan', title: 'Research requirements', estimatedTime: '1 hour', priority: 1,
+        steps: [{ id: 'step-a', title: 'Interview users', instruction: 'Ask about current workflow', tool: 'other' }] },
+      { id: 'task-b', phase: 'Build', title: 'Build prototype', estimatedTime: '2 hours', priority: 2, steps: [] },
+    ],
+  }, isolated);
+
+  assert.equal(isolated.list({ kind: 'phase', projectId: 'project_workspace-a' }).length, 2);
+  const [canonicalTask] = isolated.list<TaskEntity>({ kind: 'task', projectId: 'project_workspace-a' })
+    .filter((task) => task.id === 'roadmap-task_workspace-a_task-a');
+  assert.equal(canonicalTask.title, 'Research requirements');
+  assert.equal(canonicalTask.phaseId, 'phase_roadmap_workspace-a_Plan');
+  assert.equal(JSON.parse(canonicalTask.body || '{}').steps[0].title, 'Interview users');
+  assert.deepEqual(canonicalTasksForLegacyUi(isolated), [],
+    'roadmap tasks should not leak into the regular task list fallback');
+
+  syncRoadmapToCanonical('workspace-a', {
+    goal: 'Updated roadmap',
+    tasks: [{ id: 'task-c', phase: 'Build', title: 'Ship first version', priority: 1, steps: [] }],
+  }, isolated);
+  assert.equal(isolated.get('roadmap-task_workspace-a_task-a'), null,
+    'superseded roadmap tasks should be removed from canonical storage');
+  assert.equal(isolated.get('phase_roadmap_workspace-a_Plan'), null,
+    'unused roadmap phases should be removed from canonical storage');
+  assert.equal(isolated.get<TaskEntity>('roadmap-task_workspace-a_task-c')?.title, 'Ship first version');
+}
 
 function testLegacyMirrorDeletionReconciliation() {
   const localStorage = new MemoryStorage();
@@ -267,6 +314,7 @@ function main() {
   testRepositoryCrudAndSearch();
   testBacklinks();
   testCanonicalLegacyUiAdapters();
+  testCanonicalProjectAdapterAndRoadmapSync();
 testLegacyMirrorDeletionReconciliation();
   testLegacyCollectionFallbackRules();
   testMigrationIsNonDestructiveAndIdempotent();
