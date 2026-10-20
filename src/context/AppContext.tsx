@@ -324,28 +324,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [unreadNotifications, setUnreadNotifications] = useState(0);
 
-  // Start new installs with a neutral workspace. Existing saved projects are preserved.
+  // Prefer valid legacy projects for compatibility, then recover from canonical storage.
+  // Keep a neutral empty-workspace project only when neither store has projects.
   const [projects, setProjects] = useState<ResearchProjectItem[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('bob_research_sessions_v3');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      } catch {}
-    }
-    return [
-      {
-        id: 'new-research',
-        title: 'New research',
-        sourceCount: 0,
-        openTasks: 0,
-        status: 'new project',
-        dotColor: '#4385f5',
-        summary: '',
-      }
-    ];
+    const saved = readLegacyCollectionOrCanonical<ResearchProjectItem>(
+      'bob_research_sessions_v3',
+      () => canonicalProjectsForLegacyUi(),
+    );
+    if (saved.length > 0) return saved;
+    return [{
+      id: 'new-research',
+      title: 'New research',
+      sourceCount: 0,
+      openTasks: 0,
+      status: 'new project',
+      dotColor: '#4385f5',
+      summary: '',
+    }];
   });
 
   useEffect(() => {
