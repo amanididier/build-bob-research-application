@@ -30,3 +30,16 @@ Move Bob toward a consistent workspace data model without making a risky one-sho
 - Do not remove or rewrite legacy collections.
 - Do not claim SQLite persistence is active.
 - Do not migrate roadmap phases or task-view presentation state by guesswork.
+
+
+## Stage exit assessment (October 2026)
+
+**Completed:** the reversible canonical foundation and compatibility mirrors described above are implemented and covered by the passing quality workflow. The latest verification run includes project deletion reconciliation and the roadmap sync tests.
+
+**Explicitly not completed (and not to be implied):**
+- The Electron preload has no `dbRun`/`dbAll` methods. Canonical records currently live in renderer `localStorage`, not in `apps/desktop/main.cjs`'s separate `bob-workspace.json` and not in native SQLite.
+- Legacy collections remain dual-written and are still the active source when valid. This is a safe transition state, not a canonical-only cutover.
+- Roadmap task completion/star presentation state remains in its existing legacy keys; canonical roadmap tasks represent the saved roadmap snapshot.
+- Project deletion does not cascade-delete project notes/tasks; unresolved references are retained by design and should be handled by a deliberate relationship lifecycle policy.
+
+These are separate architecture decisions, not hidden unfinished work in the current foundation scope. Before removing legacy writes or claiming a single native database, add an async persistence adapter, fixture migration/rollback tests, and desktop packaged-runtime verification.
