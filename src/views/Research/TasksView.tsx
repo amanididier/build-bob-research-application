@@ -3,7 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { Check, Lock, Sparkles, Star } from 'lucide-react';
 import { TaskStepExecutionView } from '../../components/roadmap/TaskStepExecutionView';
 import type { PhasedTask } from '../../components/roadmap/RoadmapWizardModal';
-import { loadRoadmapForProject } from '../../lib/roadmap/roadmapStorage';
+import { loadRoadmapForProject, syncRoadmapProgressToCanonical } from '../../lib/roadmap/roadmapStorage';
 
 interface TasksViewProps {
   isSidePanel?: boolean;
@@ -44,12 +44,13 @@ function loadCompleted(projectId: string): string[] {
   }
 }
 
-function saveCompleted(projectId: string, ids: string[]) {
+function saveCompleted(projectId: string, ids: string[], tasks: PhasedTask[] = []) {
   try {
     const all = JSON.parse(localStorage.getItem(COMPLETED_KEY) || '{}');
     all[projectId] = ids;
     localStorage.setItem(COMPLETED_KEY, JSON.stringify(all));
   } catch {}
+  syncRoadmapProgressToCanonical(projectId, tasks as unknown as Array<Record<string, any>>, ids);
 }
 
 function loadStars(projectId: string): number {
@@ -96,6 +97,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ isSidePanel = false }) => 
     const done = loadCompleted(projectId);
     setPhasedTasks(loaded || []);
     setCompletedTaskIds(done);
+    syncRoadmapProgressToCanonical(projectId, (loaded || []) as unknown as Array<Record<string, any>>, done);
     setStars(loadStars(projectId));
     setHasRoadmap(!!(loaded && loaded.length));
     setActiveTaskIndex(0);
@@ -116,7 +118,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ isSidePanel = false }) => 
         setCompletedTaskIds((previous) => {
           const validIds = new Set(loaded.map((task) => task.id));
           const next = previous.filter((id) => validIds.has(id));
-          saveCompleted(projectId, next);
+          saveCompleted(projectId, next, loaded);
           return next;
         });
         setActiveTaskIndex(0);
@@ -158,7 +160,7 @@ export const TasksView: React.FC<TasksViewProps> = ({ isSidePanel = false }) => 
     setCompletedTaskIds((prev) => {
       if (prev.includes(taskId)) return prev;
       const next = [...prev, taskId];
-      saveCompleted(projectId, next);
+      saveCompleted(projectId, next, phasedTasks);
       const finished = next.length;
       const earned =
         phaseCount <= 1
