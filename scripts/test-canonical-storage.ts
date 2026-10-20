@@ -181,6 +181,35 @@ function testMigrationCanRecoverAfterInvalidRecords() {
   assert.equal(canonicalWorkspace.list({ kind: 'task' }).filter((item) => item.id === 'task_repaired-task').length, 1);
 }
 
+function testMigrationCanRetryCorruptCollection() {
+  const localStorage = new MemoryStorage();
+  (globalThis as any).localStorage = localStorage;
+  (globalThis as any).window = { localStorage };
+
+  localStorage.setItem('bob_research_sessions_v3', JSON.stringify([
+    { id: 'corrupt-recovery-project', title: 'Corrupt recovery project' },
+  ]));
+  const originalCorruptValue = '{invalid json';
+  localStorage.setItem('bob_tasks_v2', originalCorruptValue);
+
+  const first = migrateLegacyWorkspace();
+  assert.equal(first.imported.projects, 1);
+  assert.equal(first.skipped.invalid, 1, 'corrupt collection should be reported as invalid');
+  assert.equal(canonicalWorkspace.hasMigration(getLegacyMigrationId()), false,
+    'corrupt collections must not permanently close migration');
+  assert.equal(localStorage.getItem('bob_tasks_v2'), originalCorruptValue,
+    'corrupt legacy bytes must be preserved for recovery');
+
+  localStorage.setItem('bob_tasks_v2', JSON.stringify([
+    { id: 'after-corruption', title: 'Task after recovery', projectId: 'corrupt-recovery-project', completed: false },
+  ]));
+  const second = migrateLegacyWorkspace();
+  assert.equal(second.imported.tasks, 1, 'repaired collection should be imported on retry');
+  assert.equal(second.skipped.duplicates, 1, 'the project imported before recovery must not be duplicated');
+  assert.equal(canonicalWorkspace.hasMigration(getLegacyMigrationId()), true);
+  assert.equal(canonicalWorkspace.list({ kind: 'task' }).filter((item) => item.id === 'task_after-corruption').length, 1);
+}
+
 function main() {
   assert.equal(CANONICAL_WORKSPACE_STORAGE_KEY, 'bob_canonical_workspace_v1');
   testRepositoryCrudAndSearch();
@@ -189,7 +218,8 @@ function main() {
   testLegacyCollectionFallbackRules();
   testMigrationIsNonDestructiveAndIdempotent();
   testMigrationCanRecoverAfterInvalidRecords();
-  console.log('Canonical storage tests passed: CRUD, search filters, snapshots, timestamps, backlinks, non-destructive migration, project relationships, idempotency, canonical-to-legacy UI adapters, missing/corrupt collection fallback, valid-empty preservation, and retryable partial migration recovery.');
+  testMigrationCanRetryCorruptCollection();
+  console.log('Canonical storage tests passed: CRUD, search filters, snapshots, timestamps, backlinks, non-destructive migration, project relationships, idempotency, canonical-to-legacy UI adapters, missing/corrupt collection fallback, valid-empty preservation, retryable partial migration recovery, and corrupt-JSON migration recovery.');
 }
 
 main();
