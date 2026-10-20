@@ -104,3 +104,60 @@ export function readLegacyCollectionOrCanonical<T>(key: string, fallback: () => 
   }
   return fallback();
 }
+
+/**
+ * Reconcile canonical records that were previously mirrored from the legacy UI.
+ * We track only IDs this adapter has mirrored, so canonical-only entities are not
+ * deleted accidentally. A missing/corrupt marker is initialized conservatively.
+ */
+export function reconcileLegacyMirroredEntities(
+  kind: 'note' | 'task',
+  legacyIds: string[],
+  repository: CanonicalWorkspaceRepository = canonicalWorkspace,
+): number {
+  if (typeof window === 'undefined') return 0;
+
+  const safeIds = legacyIds
+    .filter((id): id is string => typeof id === 'string' && Boolean(id.trim()))
+    .map((id) => id.trim().replace(/[^a-zA-Z0-9_-]/g, '_'));
+  const currentCanonicalIds = [...new Set(safeIds.map((id) => `${kind}_${id}`))];
+  const markerKey = `bob_canonical_mirrored_${kind}_ids_v1`;
+
+  try {
+    const rawPrevious = window.localStorage.getItem(markerKey);
+    if (rawPrevious === null) {
+      window.localStorage.setItem(markerKey, JSON.stringify(currentCanonicalIds));
+      return 0;
+    }
+
+    let previous: unknown;
+    try {
+      previous = JSON.parse(rawPrevious);
+    } catch {
+      // Never delete records based on an unreadable tracking marker.
+      window.localStorage.setItem(markerKey, JSON.stringify(currentCanonicalIds));
+      return 0;
+    }
+    if (!Array.isArray(previous) || !previous.every((id) => typeof id === 'string')) {
+      window.localStorage.setItem(markerKey, JSON.stringify(currentCanonicalIds));
+      return 0;
+    }
+
+    const current = new Set(currentCanonicalIds);
+    let deleted = 0;
+    for (const id of previous as string[]) {
+      if (current.has(id) || !id.startsWith(kind + '_')) continue;
+      if (repository.delete(id)) deleted += 1;
+      if (kind === 'note') {
+        const legacyId = id.slice('note_'.length);
+        repository.delete(`source_legacy-note-${legacyId}`);
+      }
+    }
+
+    window.localStorage.setItem(markerKey, JSON.stringify(currentCanonicalIds));
+    return deleted;
+  } catch (error) {
+    console.warn('[Bob storage] Could not reconcile mirrored records:', error);
+    return 0;
+  }
+}
