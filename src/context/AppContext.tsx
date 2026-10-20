@@ -790,6 +790,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ? undefined
           : 'project_' + String(note.projectId).replace(/[^a-zA-Z0-9_-]/g, '_');
         const sourceIds: string[] = [];
+        const parsedCreatedAt = Date.parse(String(note.createdAt || ''));
+        const canonicalCreatedAt = Number.isFinite(parsedCreatedAt)
+          ? new Date(parsedCreatedAt).toISOString()
+          : new Date().toISOString();
         const sourceTitle = String(note.sourceTitle || '').trim();
         const sourceUrl = String(note.sourceUrl || '').trim();
         if (sourceTitle || sourceUrl) {
@@ -806,7 +810,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               relevance: note.relevance,
               color: note.color,
             },
-            createdAt: new Date(note.createdAt || Date.now()).toISOString(),
+            createdAt: canonicalCreatedAt,
             updatedAt: new Date().toISOString(),
             schemaVersion: 1,
           };
@@ -823,7 +827,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           tags: [],
           sourceIds,
           attachmentIds: [],
-          createdAt: new Date(note.createdAt || Date.now()).toISOString(),
+          createdAt: canonicalCreatedAt,
           updatedAt: new Date().toISOString(),
           schemaVersion: 1,
         };
