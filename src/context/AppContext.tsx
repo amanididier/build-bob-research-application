@@ -6,6 +6,7 @@ import { researchOrchestrator } from '../lib/research/researchOrchestrator';
 import { canonicalWorkspace } from '../lib/storage/canonicalRepository';
 import { migrateLegacyWorkspace } from '../lib/storage/migrateLegacyWorkspace';
 import { NoteEntity, SourceEntity, TaskEntity } from '../lib/storage/canonicalModel';
+import { canonicalNotesForLegacyUi, canonicalTasksForLegacyUi } from '../lib/storage/legacyUiAdapters';
 
 export type AppPage =
   | 'home'
@@ -718,7 +719,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
     } catch {}
-    return [];
+    // Recovery/read-through path: only used when the legacy key is missing or unreadable.
+    // A valid saved empty array remains authoritative so intentionally cleared tasks stay cleared.
+    return canonicalTasksForLegacyUi();
   });
 
   // Keep legacy task storage as the active UI source of truth while mirroring
@@ -816,7 +819,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
     } catch {}
-    return [];
+    // Recovery/read-through path: only used when the legacy key is missing or unreadable.
+    // A valid saved empty array remains authoritative so intentionally cleared notes stay cleared.
+    return canonicalNotesForLegacyUi();
   });
 
   // Begin the notes migration with a reversible dual-write: legacy storage remains the
