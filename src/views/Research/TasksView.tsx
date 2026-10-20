@@ -240,13 +240,6 @@ export const TasksView: React.FC<TasksViewProps> = ({ isSidePanel = false }) => 
         >
           Create roadmap
         </button>
-        <button
-          type="button"
-          onClick={seedDemo}
-          className="mt-3 text-[12px] font-medium text-[var(--m)] hover:text-[var(--t)]"
-        >
-          Preview sample steps
-        </button>
 
       </div>
     );
