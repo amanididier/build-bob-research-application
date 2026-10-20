@@ -176,6 +176,48 @@ export class AsyncCanonicalWorkspaceRepository {
     return this.storage.read().then((store) => JSON.parse(JSON.stringify(store)) as CanonicalWorkspaceStore);
   }
 
+  async get<T extends CanonicalWorkspaceStore['entities'][string] = CanonicalWorkspaceStore['entities'][string]>(id: string): Promise<T | null> {
+    const store = await this.storage.read();
+    return (store.entities[id] as T | undefined) ?? null;
+  }
+
+  async list<T extends CanonicalWorkspaceStore['entities'][string] = CanonicalWorkspaceStore['entities'][string]>(query: {
+    kind?: T['kind']; projectId?: string; scope?: string; text?: string; tags?: string[]; limit?: number;
+  } = {}): Promise<T[]> {
+    const store = await this.storage.read();
+    const needle = query.text?.trim().toLocaleLowerCase();
+    const wantedTags = query.tags?.map((tag) => tag.toLocaleLowerCase()) ?? [];
+    return (Object.values(store.entities) as T[])
+      .filter((entity) => !query.kind || entity.kind === query.kind)
+      .filter((entity) => !query.projectId || ('projectId' in entity && entity.projectId === query.projectId))
+      .filter((entity) => !query.scope || ('scope' in entity && entity.scope === query.scope))
+      .filter((entity) => !wantedTags.length || ('tags' in entity && Array.isArray(entity.tags) && wantedTags.every((tag) => entity.tags.some((saved) => saved.toLocaleLowerCase() === tag))))
+      .filter((entity) => {
+        if (!needle) return true;
+        const record = entity as unknown as Record<string, unknown>;
+        return ['title', 'body', 'description', 'excerpt'].map((key) => typeof record[key] === 'string' ? record[key] as string : '').filter(Boolean).join(' ').toLocaleLowerCase().includes(needle);
+      })
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, Math.max(1, query.limit ?? 500));
+  }
+
+  async backlinks(entityId: string): Promise<CanonicalWorkspaceStore['entities'][string][]> {
+    const store = await this.storage.read();
+    const linkedIds = Object.values(store.entities).filter((entity) => entity.kind === 'link' && entity.toId === entityId)
+      .map((entity) => (entity as Extract<CanonicalWorkspaceStore['entities'][string], { kind: 'link' }>).fromId);
+    return linkedIds.map((id) => store.entities[id]).filter((entity) => Boolean(entity));
+  }
+
+  async hasMigration(migrationId: string): Promise<boolean> {
+    return (await this.storage.read()).migrations.includes(migrationId);
+  }
+
+  async markMigration(migrationId: string): Promise<void> {
+    const store = await this.storage.read();
+    if (store.migrations.includes(migrationId)) return;
+    await this.storage.write({ ...store, revision: store.revision + 1, migrations: [...store.migrations, migrationId] }, store.revision);
+  }
+
   async save<T extends CanonicalWorkspaceStore['entities'][string]>(entity: T): Promise<T> {
     const store = await this.storage.read();
     const now = new Date().toISOString();
