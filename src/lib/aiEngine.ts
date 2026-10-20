@@ -11,6 +11,7 @@ import { detectSystemHardware, SystemHardwareInfo } from './hardware';
 import { ModelTier } from '../types';
 import { resolveGeminiApiKey } from './ai/keyManager';
 import { loadRoadmapForProject } from './roadmap/roadmapStorage';
+import { canonicalNotesForLegacyUi, canonicalTasksForLegacyUi, readLegacyCollectionOrCanonical } from './storage/legacyUiAdapters';
 import { executeBobWorkspaceTool, getBobWorkspaceToolDeclarations } from './ai/workspaceTools';
 import { loadMemory as loadUserMemory, selectRelevantFacts } from './memory/memoryManager';
 
@@ -97,26 +98,22 @@ export function buildBobWorkspaceContext(projectId: string): string {
     if (recent.length) sections.push('RECENT PROJECT CONVERSATION\n' + recent.join('\n'));
   }
 
-  const allTasks = readJson('bob_tasks_v2');
-  if (Array.isArray(allTasks)) {
-    const projectTasks = allTasks.filter((task: any) => task?.projectId === projectId).slice(0, 12);
-    if (projectTasks.length) {
-      sections.push('PROJECT TASKS\n' + projectTasks.map((task: any) =>
-        `- [${task.completed ? 'done' : 'open'}] ${String(task.title || 'Untitled task').slice(0, 180)} (due: ${String(task.dueDate || 'not set')})`
-      ).join('\n'));
-    }
+  const allTasks = readLegacyCollectionOrCanonical('bob_tasks_v2', () => canonicalTasksForLegacyUi());
+  const projectTasks = allTasks.filter((task: any) => task?.projectId === projectId).slice(0, 12);
+  if (projectTasks.length) {
+    sections.push('PROJECT TASKS\\n' + projectTasks.map((task: any) =>
+      `- [${task.completed ? 'done' : 'open'}] ${String(task.title || 'Untitled task').slice(0, 180)} (due: ${String(task.dueDate || 'not set')})`
+    ).join('\\n'));
   }
 
-  const allNotes = readJson('bob_notes_v1');
-  if (Array.isArray(allNotes)) {
-    const projectNotes = allNotes
-      .filter((note: any) => !note?.projectId || note.projectId === 'general' || note.projectId === projectId)
-      .slice(0, 8);
-    if (projectNotes.length) {
-      sections.push('SAVED PROJECT NOTES\n' + projectNotes.map((note: any) =>
-        `- ${String(note.title || 'Untitled note').slice(0, 160)}: ${String(note.selectedText || note.content || '').slice(0, 320)}`
-      ).join('\n'));
-    }
+  const allNotes = readLegacyCollectionOrCanonical('bob_notes_v1', () => canonicalNotesForLegacyUi());
+  const projectNotes = allNotes
+    .filter((note: any) => !note?.projectId || note.projectId === 'general' || note.projectId === projectId)
+    .slice(0, 8);
+  if (projectNotes.length) {
+    sections.push('SAVED PROJECT NOTES\\n' + projectNotes.map((note: any) =>
+      `- ${String(note.title || 'Untitled note').slice(0, 160)}: ${String(note.selectedText || note.content || '').slice(0, 320)}`
+    ).join('\\n'));
   }
 
   const roadmap = loadRoadmapForProject(projectId);
