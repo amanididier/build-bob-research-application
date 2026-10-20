@@ -5,7 +5,8 @@ import {
 } from '../src/lib/storage/canonicalRepository';
 import { canonicalWorkspace } from '../src/lib/storage/canonicalRepository';
 import { migrateLegacyWorkspace, getLegacyMigrationId } from '../src/lib/storage/migrateLegacyWorkspace';
-import { NoteEntity, ProjectEntity, LinkEntity, WorkspaceEntity } from '../src/lib/storage/canonicalModel';
+import { NoteEntity, ProjectEntity, LinkEntity, SourceEntity, TaskEntity, WorkspaceEntity } from '../src/lib/storage/canonicalModel';
+import { canonicalNotesForLegacyUi, canonicalTasksForLegacyUi } from '../src/lib/storage/legacyUiAdapters';
 
 class MemoryStorage {
   private values = new Map<string, string>();
@@ -87,12 +88,52 @@ function testMigrationIsNonDestructiveAndIdempotent() {
   assert.equal(canonicalWorkspace.list({ kind: 'note' }).length, 1);
 }
 
+
+function testCanonicalLegacyUiAdapters() {
+  const now = new Date().toISOString();
+  const source: SourceEntity = {
+    id: 'source_legacy-ui-note', kind: 'source', title: 'Original source',
+    sourceType: 'url', url: 'https://example.com/evidence',
+    metadata: { legacyNoteId: 'legacy-ui-note', relevance: 91, color: 'blue' },
+    createdAt: now, updatedAt: now, schemaVersion: 1,
+  };
+  const note: NoteEntity = {
+    id: 'note_legacy-ui-note', kind: 'note', title: 'Canonical note', body: 'Markdown evidence',
+    projectId: 'project_alpha', scope: 'project', tags: [], sourceIds: [source.id], attachmentIds: [],
+    createdAt: now, updatedAt: now, schemaVersion: 1,
+  };
+  const task: TaskEntity = {
+    id: 'task_legacy-ui-task', kind: 'task', title: 'Canonical task',
+    body: 'Context: Evidence review\\nDue: Flexible', projectId: 'project_alpha',
+    status: 'completed', completedAt: now, tags: ['ai-generated'], scope: 'project',
+    createdAt: now, updatedAt: now, schemaVersion: 1,
+  };
+  repo.save(source); repo.save(note); repo.save(task);
+  const [uiNote] = canonicalNotesForLegacyUi(repo).filter((item) => item.id === 'legacy-ui-note');
+  assert.equal(uiNote.title, 'Canonical note');
+  assert.equal(uiNote.selectedText, 'Markdown evidence');
+  assert.equal(uiNote.sourceTitle, 'Original source');
+  assert.equal(uiNote.sourceUrl, 'https://example.com/evidence');
+  assert.equal(uiNote.projectId, 'alpha');
+  assert.equal(uiNote.relevance, 91);
+  assert.equal(uiNote.color, 'blue');
+
+  const [uiTask] = canonicalTasksForLegacyUi(repo).filter((item) => item.id === 'legacy-ui-task');
+  assert.equal(uiTask.title, 'Canonical task');
+  assert.equal(uiTask.projectId, 'alpha');
+  assert.equal(uiTask.completed, true);
+  assert.equal(uiTask.isAiGenerated, true);
+  assert.equal(uiTask.sourceConnection, 'Evidence review');
+  assert.equal(uiTask.dueDate, 'Flexible');
+}
+
 function main() {
   assert.equal(CANONICAL_WORKSPACE_STORAGE_KEY, 'bob_canonical_workspace_v1');
   testRepositoryCrudAndSearch();
   testBacklinks();
+  testCanonicalLegacyUiAdapters();
   testMigrationIsNonDestructiveAndIdempotent();
-  console.log('Canonical storage tests passed: CRUD, search filters, snapshots, timestamps, backlinks, non-destructive migration, project relationships, and idempotency.');
+  console.log('Canonical storage tests passed: CRUD, search filters, snapshots, timestamps, backlinks, non-destructive migration, project relationships, idempotency, and canonical-to-legacy UI adapters.');
 }
 
 main();
