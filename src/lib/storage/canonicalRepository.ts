@@ -49,16 +49,31 @@ function normalizeStore(value: unknown): CanonicalWorkspaceStore {
   };
 }
 
+/**
+ * The canonical repository is intentionally opt-in while existing screens are migrated.
+ * Storage is resolved lazily so importing this module during SSR/tests does not permanently
+ * bind the singleton to a null storage adapter.
+ */
 export class CanonicalWorkspaceRepository {
   constructor(
-    private readonly storage: KeyValueStorage | null = typeof window !== 'undefined' ? window.localStorage : null,
+    private readonly storageOverride?: KeyValueStorage | null,
     private readonly storageKey = CANONICAL_WORKSPACE_STORAGE_KEY,
   ) {}
 
-  private readStore(): CanonicalWorkspaceStore {
-    if (!this.storage) return emptyStore();
+  private getStorage(): KeyValueStorage | null {
+    if (this.storageOverride !== undefined) return this.storageOverride;
     try {
-      const raw = this.storage.getItem(this.storageKey);
+      return typeof window !== 'undefined' ? window.localStorage : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private readStore(): CanonicalWorkspaceStore {
+    const storage = this.getStorage();
+    if (!storage) return emptyStore();
+    try {
+      const raw = storage.getItem(this.storageKey);
       return raw ? normalizeStore(JSON.parse(raw)) : emptyStore();
     } catch (error) {
       console.warn('[Bob storage] Could not read canonical workspace store:', error);
@@ -67,9 +82,10 @@ export class CanonicalWorkspaceRepository {
   }
 
   private writeStore(store: CanonicalWorkspaceStore): boolean {
-    if (!this.storage) return false;
+    const storage = this.getStorage();
+    if (!storage) return false;
     try {
-      this.storage.setItem(this.storageKey, JSON.stringify(store));
+      storage.setItem(this.storageKey, JSON.stringify(store));
       return true;
     } catch (error) {
       console.warn('[Bob storage] Could not persist canonical workspace store:', error);
@@ -111,6 +127,7 @@ export class CanonicalWorkspaceRepository {
   }
 
   save<T extends WorkspaceEntity>(entity: T): T {
+    if (!entity.id || !entity.kind) throw new Error('A workspace entity must have an id and kind.');
     const store = this.readStore();
     const now = nowIso();
     const existing = store.entities[entity.id];
