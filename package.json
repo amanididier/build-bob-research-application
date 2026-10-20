@@ -14,7 +14,8 @@
     "dev:web": "next dev --port 3001",
     "build:web": "next build",
     "start:web": "next start",
-    "test:workspace-tools": "tsx scripts/test-workspace-tools.ts"
+    "test:workspace-tools": "tsx scripts/test-workspace-tools.ts",
+    "test:canonical-storage": "tsx scripts/test-canonical-storage.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
