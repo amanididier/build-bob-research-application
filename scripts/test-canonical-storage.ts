@@ -54,6 +54,26 @@ function testRepositoryCrudAndSearch() {
   assert.equal(repo.delete('missing'), false);
 }
 
+function testRepositoryPersistenceAcrossInstances() {
+  const durableStorage = new MemoryStorage();
+  const firstInstance = new CanonicalWorkspaceRepository(durableStorage, 'restart_test');
+  firstInstance.save(base<ProjectEntity>({
+    id: 'project_restart-safe', kind: 'project', title: 'Survives a reload',
+    description: 'Persistence regression test', status: 'active', tags: [],
+  }));
+
+  const reloadedInstance = new CanonicalWorkspaceRepository(durableStorage, 'restart_test');
+  assert.equal(reloadedInstance.get<ProjectEntity>('project_restart-safe')?.title, 'Survives a reload',
+    'a new repository instance must recover records already persisted by the previous instance');
+  assert.equal(reloadedInstance.snapshot().revision, 1,
+    'repository revision should survive a repository-instance restart');
+
+  assert.equal(reloadedInstance.delete('project_restart-safe'), true);
+  const thirdInstance = new CanonicalWorkspaceRepository(durableStorage, 'restart_test');
+  assert.equal(thirdInstance.get('project_restart-safe'), null,
+    'deletions must persist across repository-instance restarts');
+}
+
 function testBacklinks() {
   const now = new Date().toISOString();
   const noteA: NoteEntity = { id: 'note_a', kind: 'note', title: 'A', body: 'Source note', scope: 'personal', tags: [], sourceIds: [], attachmentIds: [], createdAt: now, updatedAt: now, schemaVersion: 1 };
@@ -320,6 +340,7 @@ function testMigrationCanRetryCorruptCollection() {
 function main() {
   assert.equal(CANONICAL_WORKSPACE_STORAGE_KEY, 'bob_canonical_workspace_v1');
   testRepositoryCrudAndSearch();
+  testRepositoryPersistenceAcrossInstances();
   testBacklinks();
   testCanonicalLegacyUiAdapters();
   testCanonicalProjectAdapterAndRoadmapSync();
@@ -328,7 +349,7 @@ testLegacyMirrorDeletionReconciliation();
   testMigrationIsNonDestructiveAndIdempotent();
   testMigrationCanRecoverAfterInvalidRecords();
   testMigrationCanRetryCorruptCollection();
-  console.log('Canonical storage tests passed: CRUD, search filters, snapshots, timestamps, backlinks, non-destructive migration, project relationships, idempotency, canonical-to-legacy UI adapters, missing/corrupt collection fallback, legacy precedence, valid-empty preservation, retryable partial migration recovery, and corrupt-JSON migration recovery.');
+  console.log('Canonical storage tests passed: CRUD, persistence across repository restarts, search filters, snapshots, timestamps, backlinks, non-destructive migration, project relationships, idempotency, canonical-to-legacy UI adapters, missing/corrupt collection fallback, legacy precedence, valid-empty preservation, retryable partial migration recovery, and corrupt-JSON migration recovery.');
 }
 
 main();
