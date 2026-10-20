@@ -5,7 +5,7 @@ import {
 } from '../src/lib/storage/canonicalRepository';
 import { canonicalWorkspace } from '../src/lib/storage/canonicalRepository';
 import { migrateLegacyWorkspace, getLegacyMigrationId } from '../src/lib/storage/migrateLegacyWorkspace';
-import { NoteEntity, ProjectEntity, LinkEntity } from '../src/lib/storage/canonicalModel';
+import { NoteEntity, ProjectEntity, LinkEntity, WorkspaceEntity } from '../src/lib/storage/canonicalModel';
 
 class MemoryStorage {
   private values = new Map<string, string>();
@@ -18,9 +18,9 @@ class MemoryStorage {
 const storage = new MemoryStorage();
 const repo = new CanonicalWorkspaceRepository(storage, 'test_workspace');
 
-function base<T extends { id: string; kind: string }>(entity: T) {
+function base<T extends WorkspaceEntity>(entity: Omit<T, 'createdAt' | 'updatedAt' | 'schemaVersion'>): T {
   const now = new Date().toISOString();
-  return { ...entity, createdAt: now, updatedAt: now, schemaVersion: 1 as const };
+  return { ...entity, createdAt: now, updatedAt: now, schemaVersion: 1 as const } as T;
 }
 
 function testRepositoryCrudAndSearch() {
