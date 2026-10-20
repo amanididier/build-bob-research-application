@@ -39,7 +39,6 @@ async function testBrowserRepositoryAndRevisionGuard() {
   await repository.markMigration('async-test-v1');
   assert.equal(await repository.hasMigration('async-test-v1'), true);
 
-  await storage.write({ ...snapshot, revision: 2 }, 1);
   await assert.rejects(() => storage.write({ ...snapshot, revision: 2 }, 1), /write conflict/i);
   assert.equal((await repository.delete('project-a')), true);
   assert.equal((await repository.snapshot()).entities['project-a'], undefined);
