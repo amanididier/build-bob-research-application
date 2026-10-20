@@ -63,4 +63,13 @@ This boundary is intentional for this stage: switching to a native main-process 
 - [x] Project-scoped roadmap phase/task mirror with nested step preservation, execution completion/status synchronization, and stale generated-record cleanup.
 - [x] Persistence/reload regression test using a new repository instance over the same storage.
 - [x] CI run passed for the latest project-deletion coverage.
-- [ ] Native SQLite/main-process adapter and canonical-only cutover are explicitly **not** part of this completed foundation stage; do not begin either without its own migration and rollback plan.
+- [x] Native main-process file adapter, async renderer bridge, revision-conflict handling, and guarded browser-to-native migration tooling added with regression tests.\n- [ ] Full app runtime cutover to the async native repository and canonical-only reads/writes remains open until all synchronous consumers are converted and packaged desktop verification passes.\n- [ ] Native SQLite is not implemented; the current native adapter is file-backed JSON.
+
+
+## Native adapter implementation (October 2026 follow-up)
+
+The desktop main process now exposes a dedicated canonical-workspace file store at `bob-canonical-workspace.json`, separate from the older `bob-workspace.json`. The store is validated, writes are revision-checked, and writes use a temporary file followed by rename. A corrupt native store is surfaced as an error instead of being silently replaced with an empty store.
+
+The renderer preload exposes asynchronous read/write IPC, and `src/lib/storage/asyncCanonicalRepository.ts` adds an asynchronous native adapter, browser adapter, a small async repository, and a guarded browser-to-native migration helper. The migration creates an exact localStorage backup, refuses to overwrite a non-empty native store, verifies copied entities, and never deletes the browser source. Automated tests cover revision conflicts, backup preservation, idempotency, and refusal to overwrite native data.
+
+**Important runtime boundary:** existing screens still call the synchronous `CanonicalWorkspaceRepository` and continue to use localStorage. The new asynchronous adapter is not yet the active repository for all screens. It is unsafe to claim the native file is the single source of truth until the remaining synchronous consumers are converted and the desktop packaged app is tested end to end. This follow-up does not claim SQLite; the native adapter is file-backed JSON.
