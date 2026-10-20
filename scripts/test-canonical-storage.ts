@@ -6,7 +6,7 @@ import {
 import { canonicalWorkspace } from '../src/lib/storage/canonicalRepository';
 import { migrateLegacyWorkspace, getLegacyMigrationId } from '../src/lib/storage/migrateLegacyWorkspace';
 import { NoteEntity, ProjectEntity, LinkEntity, SourceEntity, TaskEntity, WorkspaceEntity } from '../src/lib/storage/canonicalModel';
-import { canonicalNotesForLegacyUi, canonicalTasksForLegacyUi, readLegacyCollectionOrCanonical } from '../src/lib/storage/legacyUiAdapters';
+import { canonicalNotesForLegacyUi, canonicalTasksForLegacyUi, readLegacyCollectionOrCanonical, reconcileLegacyMirroredEntities } from '../src/lib/storage/legacyUiAdapters';
 
 class MemoryStorage {
   private values = new Map<string, string>();
@@ -127,6 +127,54 @@ function testCanonicalLegacyUiAdapters() {
   assert.equal(uiTask.dueDate, 'Flexible');
 }
 
+
+function testLegacyMirrorDeletionReconciliation() {
+  const localStorage = new MemoryStorage();
+  (globalThis as any).localStorage = localStorage;
+  (globalThis as any).window = { localStorage };
+
+  const now = new Date().toISOString();
+  repo.save(base<NoteEntity>({
+    id: 'note_reconcile-me', kind: 'note', title: 'Mirrored note', body: 'Will be deleted',
+    scope: 'personal', tags: [], sourceIds: ['source_legacy-note-reconcile-me'], attachmentIds: [],
+  }));
+  repo.save(base<SourceEntity>({
+    id: 'source_legacy-note-reconcile-me', kind: 'source', title: 'Mirrored source',
+    sourceType: 'manual', metadata: { legacyNoteId: 'reconcile-me' },
+  }));
+  repo.save(base<TaskEntity>({
+    id: 'task_reconcile-me', kind: 'task', title: 'Mirrored task', status: 'open',
+    tags: [], scope: 'personal',
+  }));
+  repo.save(base<TaskEntity>({
+    id: 'task_canonical-only', kind: 'task', title: 'Canonical-only task', status: 'open',
+    tags: [], scope: 'personal',
+  }));
+
+  assert.equal(reconcileLegacyMirroredEntities('note', ['reconcile-me'], repo), 0,
+    'first run records mirrored IDs without deleting anything');
+  assert.equal(reconcileLegacyMirroredEntities('task', ['reconcile-me'], repo), 0);
+  assert.equal(reconcileLegacyMirroredEntities('note', [], repo), 1,
+    'a removed legacy note should be removed from the canonical mirror');
+  assert.equal(repo.get('note_reconcile-me'), null);
+  assert.equal(repo.get('source_legacy-note-reconcile-me'), null,
+    'the source created solely for the removed legacy note should be removed too');
+  assert.equal(reconcileLegacyMirroredEntities('task', [], repo), 1,
+    'a removed legacy task should be removed from the canonical mirror');
+  assert.equal(repo.get('task_reconcile-me'), null);
+  assert.equal(repo.get('task_canonical-only')?.kind, 'task',
+    'canonical-only records must never be deleted by legacy reconciliation');
+
+  repo.save(base<TaskEntity>({
+    id: 'task_keep-on-corrupt-marker', kind: 'task', title: 'Keep me', status: 'open',
+    tags: [], scope: 'personal',
+  }));
+  localStorage.setItem('bob_canonical_mirrored_task_ids_v1', '{broken');
+  assert.equal(reconcileLegacyMirroredEntities('task', [], repo), 0,
+    'corrupt tracking metadata must fail safe instead of deleting data');
+  assert.equal(repo.get('task_keep-on-corrupt-marker')?.kind, 'task');
+}
+
 function testLegacyCollectionFallbackRules() {
   const localStorage = new MemoryStorage();
   (globalThis as any).localStorage = localStorage;
@@ -219,6 +267,7 @@ function main() {
   testRepositoryCrudAndSearch();
   testBacklinks();
   testCanonicalLegacyUiAdapters();
+testLegacyMirrorDeletionReconciliation();
   testLegacyCollectionFallbackRules();
   testMigrationIsNonDestructiveAndIdempotent();
   testMigrationCanRecoverAfterInvalidRecords();
