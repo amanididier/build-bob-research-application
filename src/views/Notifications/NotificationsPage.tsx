@@ -1,56 +1,19 @@
-import React, { useState } from 'react';
-import { useApp } from '../../context/AppContext';
-import { Sparkles, CheckCircle2, ArrowUpRight, Bell, Check } from 'lucide-react';
+import React from 'react';
+import { Bell } from 'lucide-react';
 
 export const NotificationsPage: React.FC = () => {
-  const { navigateTo, unreadNotifications, markNotificationsRead } = useApp();
-  const [notifications, setNotifications] = useState([
-    {
-      id: 'notif-1',
-      title: 'Bob found a connection',
-      desc: 'Three sources in your transport research support the same booking-friction signal.',
-      time: '2 minutes ago · Research',
-      color: 'yellow',
-      iconChar: '✦',
-      unread: true,
-      action: () => navigateTo('research', 'chat', 'urugendo'),
-    },
-    {
-      id: 'notif-2',
-      title: 'Task due soon',
-      desc: '“Validate the core problem” is due today and is connected to 5 sources.',
-      time: '34 minutes ago · Tasks',
-      color: 'blue',
-      iconChar: '✓',
-      unread: true,
-      action: () => navigateTo('tasks'),
-    },
-    {
-      id: 'notif-3',
-      title: 'Research summary ready',
-      desc: 'Your Urugendo summary has been updated with the latest connected tabs.',
-      time: 'Yesterday · Summary',
-      color: 'green',
-      iconChar: '↗',
-      unread: true,
-      action: () => navigateTo('research', 'summary', 'urugendo'),
-    },
-    {
-      id: 'notif-4',
-      title: 'New browser context',
-      desc: 'Bob connected 4 pages from your latest research session.',
-      time: 'Yesterday · Chrome',
-      color: 'gray',
-      iconChar: '◌',
-      unread: false,
-      action: () => navigateTo('chrome'),
-    },
-  ]);
-
-  const handleMarkAll = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
-    markNotificationsRead();
-  };
+  // Notifications are intentionally empty until real workspace events are persisted.
+  // Never present fabricated activity as if it happened in the user's workspace.
+  const notifications: Array<{
+    id: string;
+    title: string;
+    desc: string;
+    time: string;
+    color: string;
+    iconChar: string;
+    unread: boolean;
+    action?: () => void;
+  }> = [];
 
   return (
     <div className="max-w-[850px] mx-auto px-6 md:px-10 py-7 pb-36">
@@ -80,6 +43,17 @@ export const NotificationsPage: React.FC = () => {
       </div>
 
       {/* Notification List */}
+      {notifications.length === 0 ? (
+        <div className="bg-[var(--s)] border border-[var(--line)] rounded-[20px] px-6 py-14 text-center">
+          <div className="mx-auto mb-4 w-12 h-12 rounded-2xl bg-[var(--s2)] grid place-items-center text-[var(--m)]">
+            <Bell className="w-5 h-5" />
+          </div>
+          <h2 className="text-[15px] font-semibold text-[var(--t)] m-0">You're all caught up</h2>
+          <p className="text-[12px] leading-relaxed text-[var(--m)] max-w-sm mx-auto mt-2 mb-0">
+            New activity will appear here when Bob has real updates from your workspace.
+          </p>
+        </div>
+      ) : (
       <div className="bg-[var(--s)] border border-[var(--line)] rounded-[20px] divide-y divide-[var(--line)] overflow-hidden shadow-[0_5px_25px_rgba(0,0,0,0.02)]">
         {notifications.map((n) => (
           <div
@@ -124,6 +98,7 @@ export const NotificationsPage: React.FC = () => {
           </div>
         ))}
       </div>
+      )}
     </div>
   );
 };
