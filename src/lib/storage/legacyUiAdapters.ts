@@ -86,3 +86,21 @@ export function canonicalTasksForLegacyUi(repository: CanonicalWorkspaceReposito
     };
   });
 }
+/**
+ * Read a legacy collection when it is valid, otherwise fall back to canonical data.
+ * A valid empty array is intentional and remains authoritative; we never merge both
+ * stores here because that could duplicate records or resurrect deleted legacy items.
+ */
+export function readLegacyCollectionOrCanonical<T>(key: string, fallback: () => T[]): T[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (raw !== null) {
+      const parsed: unknown = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed as T[];
+    }
+  } catch {
+    // Missing or unreadable legacy data can be recovered from the canonical mirror.
+  }
+  return fallback();
+}
