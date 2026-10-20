@@ -60,7 +60,7 @@ This boundary is intentional for this stage: switching to a native main-process 
 - [x] Non-destructive, idempotent legacy import with retry behavior for invalid source records.
 - [x] Legacy-first compatibility reads, canonical fallback for missing/corrupt collections, and preservation of valid empty collections.
 - [x] Project, note, task dual-write and tracked-deletion regression tests.
-- [x] Project-scoped roadmap phase/task mirror with nested step preservation and stale generated-record cleanup.
+- [x] Project-scoped roadmap phase/task mirror with nested step preservation, execution completion/status synchronization, and stale generated-record cleanup.
 - [x] Persistence/reload regression test using a new repository instance over the same storage.
 - [x] CI run passed for the latest project-deletion coverage.
 - [ ] Native SQLite/main-process adapter and canonical-only cutover are explicitly **not** part of this completed foundation stage; do not begin either without its own migration and rollback plan.
