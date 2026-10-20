@@ -15,12 +15,19 @@ const LEGACY_KEYS = {
   tasks: 'bob_tasks_v2',
 };
 
-function readArray(key: string): unknown[] {
+function readArray(key: string, report: LegacyMigrationReport): unknown[] {
   if (typeof window === 'undefined') return [];
+  const raw = window.localStorage.getItem(key);
+  if (raw === null) return [];
   try {
-    const value = JSON.parse(window.localStorage.getItem(key) || '[]');
-    return Array.isArray(value) ? value : [];
+    const value: unknown = JSON.parse(raw);
+    if (Array.isArray(value)) return value;
+    report.skipped.invalid += 1;
+    report.warnings.push(`Legacy collection "${key}" is not an array; its contents were left untouched for recovery.`);
+    return [];
   } catch {
+    report.skipped.invalid += 1;
+    report.warnings.push(`Legacy collection "${key}" contains invalid JSON; its contents were left untouched for recovery.`);
     return [];
   }
 }
@@ -63,7 +70,7 @@ export function migrateLegacyWorkspace(): LegacyMigrationReport {
   // Preserve referential integrity when legacy IDs are namespaced in the canonical store.
   const projectIdMap = new Map<string, string>();
 
-  for (const raw of readArray(LEGACY_KEYS.projects)) {
+  for (const raw of readArray(LEGACY_KEYS.projects, report)) {
     const item = asObject(raw);
     if (!item || !cleanString(item.id) || !cleanString(item.title)) {
       report.skipped.invalid += 1;
@@ -84,7 +91,7 @@ export function migrateLegacyWorkspace(): LegacyMigrationReport {
     report.imported.projects += 1;
   }
 
-  for (const raw of readArray(LEGACY_KEYS.notes)) {
+  for (const raw of readArray(LEGACY_KEYS.notes, report)) {
     const item = asObject(raw);
     if (!item || !cleanString(item.id) || !cleanString(item.title)) {
       report.skipped.invalid += 1;
@@ -107,7 +114,7 @@ export function migrateLegacyWorkspace(): LegacyMigrationReport {
     report.imported.notes += 1;
   }
 
-  for (const raw of readArray(LEGACY_KEYS.tasks)) {
+  for (const raw of readArray(LEGACY_KEYS.tasks, report)) {
     const item = asObject(raw);
     if (!item || !cleanString(item.id) || !cleanString(item.title)) {
       report.skipped.invalid += 1;
