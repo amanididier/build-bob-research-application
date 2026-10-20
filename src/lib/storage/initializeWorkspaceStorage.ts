@@ -6,7 +6,17 @@ import {
   NativeMigrationResult,
   NativeWorkspaceStoreBridge,
 } from './asyncCanonicalRepository';
-import { KeyValueStorage } from './canonicalRepository';
+import { CanonicalWorkspaceRepository, KeyValueStorage } from './canonicalRepository';
+
+export class WorkspaceStorageConflictError extends Error {
+  readonly result: NativeMigrationResult;
+
+  constructor(result: NativeMigrationResult) {
+    super('The native workspace already contains different data. Startup was stopped to prevent hiding or overwriting workspace records. Preserve both stores and resolve the migration conflict before opening the main workspace.');
+    this.name = 'WorkspaceStorageConflictError';
+    this.result = result;
+  }
+}
 
 export interface WorkspaceStorageInitialization {
   repository: AsyncCanonicalWorkspaceRepository;
@@ -46,18 +56,22 @@ export async function initializeWorkspaceStorage(options: {
   const hasNativeBridge = Boolean(bridge?.workspaceStoreRead && bridge?.workspaceStoreWrite);
 
   let legacyMigration: LegacyMigrationReport | null = null;
-  if (options.importLegacy !== false && browserStorage && !hasNativeBridge) {
-    // The legacy migration uses the canonical singleton; ensure it sees the provided
-    // browser store in tests and nonstandard embeds before importing.
-    legacyMigration = migrateLegacyWorkspace();
-  } else if (options.importLegacy !== false && browserStorage && hasNativeBridge) {
-    legacyMigration = migrateLegacyWorkspace();
+  if (options.importLegacy !== false && browserStorage) {
+    // Bind the import to the exact browser adapter selected by this initializer.
+    // This keeps injected/test storage and real browser storage behavior identical.
+    const browserRepository = new CanonicalWorkspaceRepository(browserStorage);
+    legacyMigration = migrateLegacyWorkspace({ storage: browserStorage, repository: browserRepository });
   }
 
   const storage = createAsyncCanonicalWorkspaceStorage(browserStorage, bridge);
   let nativeMigration: NativeMigrationResult | null = null;
   if (hasNativeBridge && browserStorage) {
     nativeMigration = await migrateBrowserCanonicalStoreToNative(storage, browserStorage);
+    if (nativeMigration.status === 'native-store-not-empty') {
+      // Never let a caller accidentally render a partial native workspace while browser
+      // records are stranded in the legacy store. The caller must present recovery.
+      throw new WorkspaceStorageConflictError(nativeMigration);
+    }
   }
 
   return {
