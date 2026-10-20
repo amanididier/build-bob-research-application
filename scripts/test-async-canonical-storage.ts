@@ -7,6 +7,7 @@ import {
 } from '../src/lib/storage/asyncCanonicalRepository';
 import { CANONICAL_WORKSPACE_STORAGE_KEY, KeyValueStorage } from '../src/lib/storage/canonicalRepository';
 import { CanonicalWorkspaceStore, ProjectEntity } from '../src/lib/storage/canonicalModel';
+import { initializeWorkspaceStorage } from '../src/lib/storage/initializeWorkspaceStorage';
 
 class MemoryStorage implements KeyValueStorage {
   values = new Map<string, string>();
@@ -110,6 +111,33 @@ async function testNonDestructiveNativeMigration() {
   assert.equal(((await native.read()).entities['project-extra'] as ProjectEntity).title, 'Existing native data');
 }
 
+async function testWorkspaceStorageInitialization() {
+  const browser = new MemoryStorage();
+  const project = makeProject('project-bootstrap', 'Bootstrapped project');
+  browser.setItem(CANONICAL_WORKSPACE_STORAGE_KEY, JSON.stringify({
+    schemaVersion: 1, revision: 1, entities: { [project.id]: project }, migrations: [],
+  }));
+  let nativeStore = emptyStore();
+  const initialized = await initializeWorkspaceStorage({
+    browserStorage: browser,
+    nativeBridge: {
+      workspaceStoreRead: async () => JSON.parse(JSON.stringify(nativeStore)),
+      workspaceStoreWrite: async (next, expectedRevision) => {
+        if (nativeStore.revision !== expectedRevision) {
+          return { ok: false, conflict: true, currentRevision: nativeStore.revision };
+        }
+        nativeStore = JSON.parse(JSON.stringify(next));
+        return { ok: true, revision: nativeStore.revision };
+      },
+    },
+    importLegacy: false,
+  });
+  assert.equal(initialized.backend, 'native');
+  assert.equal(initialized.nativeMigration?.status, 'migrated');
+  assert.equal((await initialized.repository.get('project-bootstrap'))?.kind, 'project');
+  assert.equal(browser.getItem(CANONICAL_WORKSPACE_STORAGE_KEY) !== null, true);
+}
+
 async function testCorruptBrowserDataIsPreserved() {
   const browser = new MemoryStorage();
   const raw = '{invalid-json';
@@ -126,8 +154,9 @@ async function main() {
   await testBrowserRepositoryAndRevisionGuard();
   await testNativeBridgeAndCompareAndSwap();
   await testNonDestructiveNativeMigration();
+  await testWorkspaceStorageInitialization();
   await testCorruptBrowserDataIsPreserved();
-  console.log('Async canonical storage tests passed: browser repository, revision conflict guard, native bridge, non-destructive migration, exact backup, idempotency, native-store conflict protection, and corrupt-source preservation.');
+  console.log('Async canonical storage tests passed: browser repository, revision conflict guard, native bridge, non-destructive migration, exact backup, idempotency, native-store conflict protection, startup adapter selection, and corrupt-source preservation.');
 }
 
 main().catch((error) => {
