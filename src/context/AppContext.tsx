@@ -914,7 +914,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 let changed = false;
 
                 for (const m of deskStore.messages) {
-                  const pid = m.projectId || 'urugendo';
+                  const pid = m.projectId || activeResearchId || 'new-research';
                   if (!next[pid]) next[pid] = [];
 
                   const exists = next[pid].some(
