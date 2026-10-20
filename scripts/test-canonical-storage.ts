@@ -181,6 +181,10 @@ function testLegacyMirrorDeletionReconciliation() {
   (globalThis as any).window = { localStorage };
 
   const now = new Date().toISOString();
+  repo.save(base<ProjectEntity>({
+    id: 'project_reconcile-me', kind: 'project', title: 'Mirrored project',
+    description: '', status: 'active', tags: [],
+  }));
   repo.save(base<NoteEntity>({
     id: 'note_reconcile-me', kind: 'note', title: 'Mirrored note', body: 'Will be deleted',
     scope: 'personal', tags: [], sourceIds: ['source_legacy-note-reconcile-me'], attachmentIds: [],
@@ -198,9 +202,13 @@ function testLegacyMirrorDeletionReconciliation() {
     tags: [], scope: 'personal',
   }));
 
+  assert.equal(reconcileLegacyMirroredEntities('project', ['reconcile-me'], repo), 0);
   assert.equal(reconcileLegacyMirroredEntities('note', ['reconcile-me'], repo), 0,
     'first run records mirrored IDs without deleting anything');
   assert.equal(reconcileLegacyMirroredEntities('task', ['reconcile-me'], repo), 0);
+  assert.equal(reconcileLegacyMirroredEntities('project', [], repo), 1,
+    'a removed legacy project should be removed from the canonical mirror');
+  assert.equal(repo.get('project_reconcile-me'), null);
   assert.equal(reconcileLegacyMirroredEntities('note', [], repo), 1,
     'a removed legacy note should be removed from the canonical mirror');
   assert.equal(repo.get('note_reconcile-me'), null);
