@@ -44,7 +44,7 @@ export function saveRoadmapForProject(
   projectId: string,
   roadmap: StoredBobRoadmap
 ): StoredBobRoadmap {
-  const resolvedProjectId = projectId || roadmap.projectId || 'urugendo';
+  const resolvedProjectId = projectId || roadmap.projectId || 'new-research';
   const saved: StoredBobRoadmap = { ...roadmap, projectId: resolvedProjectId };
 
   if (typeof window === 'undefined') return saved;
