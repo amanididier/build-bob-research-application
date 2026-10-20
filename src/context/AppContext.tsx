@@ -5,8 +5,8 @@ import { voiceController } from '../lib/voice/voiceController';
 import { researchOrchestrator } from '../lib/research/researchOrchestrator';
 import { canonicalWorkspace } from '../lib/storage/canonicalRepository';
 import { migrateLegacyWorkspace } from '../lib/storage/migrateLegacyWorkspace';
-import { NoteEntity, SourceEntity, TaskEntity } from '../lib/storage/canonicalModel';
-import { canonicalNotesForLegacyUi, canonicalTasksForLegacyUi, readLegacyCollectionOrCanonical, reconcileLegacyMirroredEntities } from '../lib/storage/legacyUiAdapters';
+import { NoteEntity, ProjectEntity, SourceEntity, TaskEntity } from '../lib/storage/canonicalModel';
+import { canonicalNotesForLegacyUi, canonicalProjectsForLegacyUi, canonicalTasksForLegacyUi, readLegacyCollectionOrCanonical, reconcileLegacyMirroredEntities } from '../lib/storage/legacyUiAdapters';
 
 export type AppPage =
   | 'home'
