@@ -131,11 +131,17 @@ export function migrateLegacyWorkspace(): LegacyMigrationReport {
     report.imported.tasks += 1;
   }
 
-  if (report.imported.projects + report.imported.notes + report.imported.tasks === 0 &&
-      report.skipped.invalid > 0) {
-    report.warnings.push('No valid records were imported; legacy data remains untouched.');
+  if (report.skipped.invalid > 0) {
+    report.warnings.push(
+      'Some legacy records were invalid and were left untouched. Repair them and rerun migration; successfully imported records are protected from duplication.'
+    );
   }
-  canonicalWorkspace.markMigration(MIGRATION_ID);
+
+  // Do not permanently close a partial migration. On a later run, already imported
+  // entities are recognized as duplicates while repaired records can still be imported.
+  if (report.skipped.invalid === 0) {
+    canonicalWorkspace.markMigration(MIGRATION_ID);
+  }
   return report;
 }
 
