@@ -6,7 +6,7 @@ import {
 import { canonicalWorkspace } from '../src/lib/storage/canonicalRepository';
 import { migrateLegacyWorkspace, getLegacyMigrationId } from '../src/lib/storage/migrateLegacyWorkspace';
 import { NoteEntity, ProjectEntity, LinkEntity, SourceEntity, TaskEntity, WorkspaceEntity } from '../src/lib/storage/canonicalModel';
-import { canonicalNotesForLegacyUi, canonicalTasksForLegacyUi } from '../src/lib/storage/legacyUiAdapters';
+import { canonicalNotesForLegacyUi, canonicalTasksForLegacyUi, readLegacyCollectionOrCanonical } from '../src/lib/storage/legacyUiAdapters';
 
 class MemoryStorage {
   private values = new Map<string, string>();
@@ -127,13 +127,69 @@ function testCanonicalLegacyUiAdapters() {
   assert.equal(uiTask.dueDate, 'Flexible');
 }
 
+function testLegacyCollectionFallbackRules() {
+  const localStorage = new MemoryStorage();
+  (globalThis as any).localStorage = localStorage;
+  (globalThis as any).window = { localStorage };
+  const fallback = () => [{ id: 'canonical-record' }];
+
+  assert.deepEqual(readLegacyCollectionOrCanonical('missing_collection', fallback), fallback(),
+    'missing legacy collection should fall back to canonical records');
+
+  localStorage.setItem('broken_collection', '{not valid json');
+  assert.deepEqual(readLegacyCollectionOrCanonical('broken_collection', fallback), fallback(),
+    'corrupt legacy JSON should fall back to canonical records');
+
+  localStorage.setItem('wrong_shape_collection', JSON.stringify({ records: [] }));
+  assert.deepEqual(readLegacyCollectionOrCanonical('wrong_shape_collection', fallback), fallback(),
+    'non-array legacy data should fall back to canonical records');
+
+  localStorage.setItem('intentionally_empty_collection', '[]');
+  assert.deepEqual(readLegacyCollectionOrCanonical('intentionally_empty_collection', fallback), [],
+    'a valid empty legacy array is authoritative and must not resurrect deleted canonical records');
+}
+
+function testMigrationCanRecoverAfterInvalidRecords() {
+  const localStorage = new MemoryStorage();
+  (globalThis as any).localStorage = localStorage;
+  (globalThis as any).window = { localStorage };
+
+  const projects = [{ id: 'recovery-project', title: 'Recovery project' }];
+  const notes = [{ id: 'recovery-note', title: 'Recovery note', selectedText: 'Keep this evidence.', projectId: 'recovery-project' }];
+  localStorage.setItem('bob_research_sessions_v3', JSON.stringify(projects));
+  localStorage.setItem('bob_notes_v1', JSON.stringify(notes));
+  localStorage.setItem('bob_tasks_v2', JSON.stringify([{ id: '', title: 'Invalid task without an ID' }]));
+
+  const first = migrateLegacyWorkspace();
+  assert.deepEqual(first.imported, { projects: 1, notes: 1, tasks: 0 });
+  assert.equal(first.skipped.invalid, 1);
+  assert.equal(canonicalWorkspace.hasMigration(getLegacyMigrationId()), false,
+    'a partial migration must remain retryable');
+  assert.equal(JSON.parse(localStorage.getItem('bob_tasks_v2') || '[]')[0].title, 'Invalid task without an ID',
+    'invalid source data must not be deleted or rewritten');
+
+  localStorage.setItem('bob_tasks_v2', JSON.stringify([
+    { id: 'repaired-task', title: 'Recovered task', projectId: 'recovery-project', completed: false, dueDate: 'Flexible' },
+  ]));
+  const second = migrateLegacyWorkspace();
+  assert.equal(second.imported.tasks, 1, 'a repaired record should import on retry');
+  assert.equal(second.skipped.duplicates, 2, 'previously imported project and note should not be duplicated');
+  assert.equal(canonicalWorkspace.hasMigration(getLegacyMigrationId()), true,
+    'migration should be marked complete once every source record is valid');
+  assert.equal(canonicalWorkspace.list({ kind: 'project' }).filter((item) => item.id === 'project_recovery-project').length, 1);
+  assert.equal(canonicalWorkspace.list({ kind: 'note' }).filter((item) => item.id === 'note_recovery-note').length, 1);
+  assert.equal(canonicalWorkspace.list({ kind: 'task' }).filter((item) => item.id === 'task_repaired-task').length, 1);
+}
+
 function main() {
   assert.equal(CANONICAL_WORKSPACE_STORAGE_KEY, 'bob_canonical_workspace_v1');
   testRepositoryCrudAndSearch();
   testBacklinks();
   testCanonicalLegacyUiAdapters();
+  testLegacyCollectionFallbackRules();
   testMigrationIsNonDestructiveAndIdempotent();
-  console.log('Canonical storage tests passed: CRUD, search filters, snapshots, timestamps, backlinks, non-destructive migration, project relationships, idempotency, and canonical-to-legacy UI adapters.');
+  testMigrationCanRecoverAfterInvalidRecords();
+  console.log('Canonical storage tests passed: CRUD, search filters, snapshots, timestamps, backlinks, non-destructive migration, project relationships, idempotency, canonical-to-legacy UI adapters, missing/corrupt collection fallback, valid-empty preservation, and retryable partial migration recovery.');
 }
 
 main();
