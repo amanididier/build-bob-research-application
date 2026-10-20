@@ -24,6 +24,7 @@ const WEB_URL = process.env.BOB_WEB_URL || 'https://build-bob-research-applicati
 
 let win = null
 let storePath = null
+let canonicalWorkspacePath = null
 let bridgeListening = false
 let pendingPanelRequest = null
 const PANEL_REQUEST_TTL_MS = 5 * 60 * 1000
@@ -103,6 +104,64 @@ function saveStore() {
   } catch (e) {
     log('Save store failed:', e.message)
   }
+}
+
+/**
+ * Canonical workspace data has its own versioned file so it cannot overwrite the
+ * existing desktop workspace store. Writes are atomic and revision-checked.
+ */
+function getCanonicalWorkspacePath() {
+  if (!canonicalWorkspacePath) {
+    canonicalWorkspacePath = path.join(app.getPath('userData'), 'bob-canonical-workspace.json')
+  }
+  return canonicalWorkspacePath
+}
+
+function emptyCanonicalWorkspaceStore() {
+  return { schemaVersion: 1, revision: 0, entities: {}, migrations: [] }
+}
+
+function validateCanonicalWorkspaceStore(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) ||
+      value.schemaVersion !== 1 || !Number.isInteger(value.revision) || value.revision < 0 ||
+      !value.entities || typeof value.entities !== 'object' || Array.isArray(value.entities) ||
+      !Array.isArray(value.migrations) ||
+      !value.migrations.every((entry) => typeof entry === 'string')) {
+    throw new Error('Invalid canonical workspace payload.')
+  }
+  for (const [entityId, entity] of Object.entries(value.entities)) {
+    if (!entity || typeof entity !== 'object' || Array.isArray(entity) ||
+        entity.id !== entityId || typeof entity.kind !== 'string' ||
+        entity.schemaVersion !== 1) {
+      throw new Error('Invalid canonical workspace entity: ' + entityId)
+    }
+  }
+  return value
+}
+
+function readCanonicalWorkspaceStore() {
+  const file = getCanonicalWorkspacePath()
+  if (!fs.existsSync(file)) return emptyCanonicalWorkspaceStore()
+  // Never silently replace a corrupt file with an empty store. A read error is surfaced
+  // to the renderer so recovery can preserve the original file for diagnosis.
+  const parsed = JSON.parse(fs.readFileSync(file, 'utf8'))
+  return validateCanonicalWorkspaceStore(parsed)
+}
+
+function writeCanonicalWorkspaceStore(nextStore, expectedRevision) {
+  const file = getCanonicalWorkspacePath()
+  const current = readCanonicalWorkspaceStore()
+  if (current.revision !== expectedRevision) {
+    return { ok: false, conflict: true, currentRevision: current.revision }
+  }
+  const validated = validateCanonicalWorkspaceStore(nextStore)
+  if (validated.revision !== expectedRevision + 1) {
+    throw new Error('Canonical workspace revision must increase by exactly one.')
+  }
+  const temporaryFile = file + '.tmp'
+  fs.writeFileSync(temporaryFile, JSON.stringify(validated, null, 2), { encoding: 'utf8', mode: 0o600 })
+  fs.renameSync(temporaryFile, file)
+  return { ok: true, revision: validated.revision }
 }
 
 function notify() {
@@ -837,6 +896,12 @@ function setupAutoUpdater() {
 }
 
 function registerIpc() {
+  ipcMain.handle('bob:workspaceStore:read', () => readCanonicalWorkspaceStore())
+  ipcMain.handle('bob:workspaceStore:write', (_event, payload) => {
+    if (!payload || typeof payload !== 'object') throw new Error('Missing canonical workspace write payload.')
+    return writeCanonicalWorkspaceStore(payload.store, payload.expectedRevision)
+  })
+
   ipcMain.handle('bob:get', () => store)
 
   // The renderer keeps the user's Gemini key in localStorage; push it into the
