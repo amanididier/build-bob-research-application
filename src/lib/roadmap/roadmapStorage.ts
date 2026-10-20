@@ -1,4 +1,106 @@
-export interface StoredBobRoadmap {
+import { CanonicalWorkspaceRepository, canonicalWorkspace } from '../storage/canonicalRepository';
+import { PhaseEntity, ProjectEntity, TaskEntity } from '../storage/canonicalModel';
+
+function safeEntityPart(value: string): string {
+  return value.trim().replace(/[^a-zA-Z0-9_-]/g, '_') || 'untitled';
+}
+
+/**
+ * Keep roadmap execution data represented in the canonical graph while retaining
+ * the original roadmap JSON for compatibility with current screens.
+ */
+export function syncRoadmapToCanonical(
+  projectId: string,
+  roadmap: StoredBobRoadmap,
+  repository: CanonicalWorkspaceRepository = canonicalWorkspace,
+): void {
+  if (!projectId) return;
+  const safeProjectId = safeEntityPart(projectId);
+  const canonicalProjectId = projectId.startsWith('project_') ? projectId : 'project_' + safeProjectId;
+  const rawTasks = Array.isArray(roadmap.tasks) ? roadmap.tasks : [];
+  const phasesByName = new Map<string, PhaseEntity>();
+  const now = new Date().toISOString();
+
+  rawTasks.forEach((rawTask, index) => {
+    if (!rawTask || typeof rawTask !== 'object') return;
+    const phaseName = typeof rawTask.phase === 'string' && rawTask.phase.trim()
+      ? rawTask.phase.trim()
+      : 'General';
+    if (!phasesByName.has(phaseName)) {
+      const phaseId = 'phase_roadmap_' + safeProjectId + '_' + safeEntityPart(phaseName);
+      phasesByName.set(phaseName, {
+        id: phaseId,
+        kind: 'phase',
+        projectId: canonicalProjectId,
+        title: phaseName,
+        description: '',
+        order: phasesByName.size,
+        status: 'planned',
+        createdAt: now,
+        updatedAt: now,
+        schemaVersion: 1,
+      });
+    }
+    const phase = phasesByName.get(phaseName)!;
+    const taskId = typeof rawTask.id === 'string' && rawTask.id.trim()
+      ? safeEntityPart(rawTask.id)
+      : 'item_' + index;
+    const task: TaskEntity = {
+      id: 'roadmap-task_' + safeProjectId + '_' + taskId,
+      kind: 'task',
+      title: typeof rawTask.title === 'string' && rawTask.title.trim() ? rawTask.title.trim() : 'Untitled roadmap task',
+      body: JSON.stringify({
+        estimatedTime: rawTask.estimatedTime ?? '',
+        priority: rawTask.priority ?? index + 1,
+        steps: Array.isArray(rawTask.steps) ? rawTask.steps : [],
+      }),
+      projectId: canonicalProjectId,
+      phaseId: phase.id,
+      status: 'open',
+      tags: ['roadmap-generated'],
+      scope: 'project',
+      createdAt: now,
+      updatedAt: now,
+      schemaVersion: 1,
+    };
+    repository.save(task);
+  });
+
+  const keepPhaseIds = new Set([...phasesByName.values()].map((phase) => phase.id));
+  for (const existing of repository.list<PhaseEntity>({ kind: 'phase', projectId: canonicalProjectId, limit: 500 })) {
+    if (existing.id.startsWith('phase_roadmap_' + safeProjectId + '_') && !keepPhaseIds.has(existing.id)) {
+      repository.delete(existing.id);
+    }
+  }
+  for (const existing of repository.list<TaskEntity>({ kind: 'task', projectId: canonicalProjectId, limit: 500 })) {
+    if (existing.id.startsWith('roadmap-task_' + safeProjectId + '_')) {
+      repository.delete(existing.id);
+    }
+  }
+  for (const phase of phasesByName.values()) repository.save(phase);
+  // Re-save task rows after pruning so the canonical roadmap is a complete snapshot.
+  rawTasks.forEach((rawTask, index) => {
+    if (!rawTask || typeof rawTask !== 'object') return;
+    const phaseName = typeof rawTask.phase === 'string' && rawTask.phase.trim() ? rawTask.phase.trim() : 'General';
+    const phase = phasesByName.get(phaseName)!;
+    const taskId = typeof rawTask.id === 'string' && rawTask.id.trim() ? safeEntityPart(rawTask.id) : 'item_' + index;
+    repository.save({
+      id: 'roadmap-task_' + safeProjectId + '_' + taskId,
+      kind: 'task',
+      title: typeof rawTask.title === 'string' && rawTask.title.trim() ? rawTask.title.trim() : 'Untitled roadmap task',
+      body: JSON.stringify({ estimatedTime: rawTask.estimatedTime ?? '', priority: rawTask.priority ?? index + 1, steps: Array.isArray(rawTask.steps) ? rawTask.steps : [] }),
+      projectId: canonicalProjectId,
+      phaseId: phase.id,
+      status: 'open',
+      tags: ['roadmap-generated'],
+      scope: 'project',
+      createdAt: now,
+      updatedAt: now,
+      schemaVersion: 1,
+    } as TaskEntity);
+  });
+}
+\nexport interface StoredBobRoadmap {
   projectId?: string;
   goal?: string;
   tasks?: Array<Record<string, any>>;
@@ -47,6 +149,7 @@ export function saveRoadmapForProject(
   const resolvedProjectId = projectId || roadmap.projectId || 'new-research';
   const saved: StoredBobRoadmap = { ...roadmap, projectId: resolvedProjectId };
 
+  syncRoadmapToCanonical(resolvedProjectId, saved);
   if (typeof window === 'undefined') return saved;
 
   const all = readMap();
