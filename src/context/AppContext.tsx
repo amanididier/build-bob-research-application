@@ -3,6 +3,9 @@ import { bobAi, ModelDownloadStatus, AiSynthesisResponse } from '../lib/aiEngine
 import { localMemoryBank, MemoryBankStats } from '../lib/researchMemory';
 import { voiceController } from '../lib/voice/voiceController';
 import { researchOrchestrator } from '../lib/research/researchOrchestrator';
+import { canonicalWorkspace } from '../lib/storage/canonicalRepository';
+import { migrateLegacyWorkspace } from '../lib/storage/migrateLegacyWorkspace';
+import { NoteEntity, SourceEntity } from '../lib/storage/canonicalModel';
 
 export type AppPage =
   | 'home'
@@ -774,7 +777,62 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return [];
   });
 
+  // Begin the notes migration with a reversible dual-write: legacy storage remains the
+  // UI's source of truth while each note is mirrored into canonical entities.
   useEffect(() => {
+    try {
+      migrateLegacyWorkspace();
+      for (const note of notes) {
+        const legacyId = String(note.id || '').trim();
+        if (!legacyId) continue;
+        const safeId = legacyId.replace(/[^a-zA-Z0-9_-]/g, '_');
+        const projectId = !note.projectId || note.projectId === 'general'
+          ? undefined
+          : 'project_' + String(note.projectId).replace(/[^a-zA-Z0-9_-]/g, '_');
+        const sourceIds: string[] = [];
+        const sourceTitle = String(note.sourceTitle || '').trim();
+        const sourceUrl = String(note.sourceUrl || '').trim();
+        if (sourceTitle || sourceUrl) {
+          const sourceId = 'source_legacy-note-' + safeId;
+          const source: SourceEntity = {
+            id: sourceId,
+            kind: 'source',
+            title: sourceTitle || sourceUrl || note.title || 'Note source',
+            sourceType: sourceUrl ? 'url' : 'manual',
+            url: sourceUrl || undefined,
+            projectId,
+            metadata: {
+              legacyNoteId: legacyId,
+              relevance: note.relevance,
+              color: note.color,
+            },
+            createdAt: new Date(note.createdAt || Date.now()).toISOString(),
+            updatedAt: new Date().toISOString(),
+            schemaVersion: 1,
+          };
+          canonicalWorkspace.save(source);
+          sourceIds.push(sourceId);
+        }
+        const canonicalNote: NoteEntity = {
+          id: 'note_' + safeId,
+          kind: 'note',
+          title: String(note.title || 'Untitled note'),
+          body: String(note.selectedText || ''),
+          projectId,
+          scope: projectId ? 'project' : 'personal',
+          tags: [],
+          sourceIds,
+          attachmentIds: [],
+          createdAt: new Date(note.createdAt || Date.now()).toISOString(),
+          updatedAt: new Date().toISOString(),
+          schemaVersion: 1,
+        };
+        canonicalWorkspace.save(canonicalNote);
+      }
+    } catch (error) {
+      // Keep legacy note persistence working even if canonical storage is unavailable.
+      console.warn('[Bob storage] Canonical note mirror failed; legacy notes remain available.', error);
+    }
     try {
       localStorage.setItem('bob_notes_v1', JSON.stringify(notes));
     } catch {}
