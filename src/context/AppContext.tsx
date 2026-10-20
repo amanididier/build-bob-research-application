@@ -5,7 +5,7 @@ import { voiceController } from '../lib/voice/voiceController';
 import { researchOrchestrator } from '../lib/research/researchOrchestrator';
 import { canonicalWorkspace } from '../lib/storage/canonicalRepository';
 import { migrateLegacyWorkspace } from '../lib/storage/migrateLegacyWorkspace';
-import { NoteEntity, SourceEntity } from '../lib/storage/canonicalModel';
+import { NoteEntity, SourceEntity, TaskEntity } from '../lib/storage/canonicalModel';
 
 export type AppPage =
   | 'home'
@@ -721,7 +721,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return [];
   });
 
+  // Keep legacy task storage as the active UI source of truth while mirroring
+  // changes into canonical storage. This is intentionally a dual-write migration.
   useEffect(() => {
+    try {
+      migrateLegacyWorkspace();
+      for (const task of tasks) {
+        const legacyId = String(task.id || '').trim();
+        if (!legacyId) continue;
+        const safeId = legacyId.replace(/[^a-zA-Z0-9_-]/g, '_');
+        const legacyProjectId = String(task.projectId || '').trim();
+        const projectId = !legacyProjectId || legacyProjectId === 'general'
+          ? undefined
+          : 'project_' + legacyProjectId.replace(/[^a-zA-Z0-9_-]/g, '_');
+        const now = new Date().toISOString();
+        const canonicalTask: TaskEntity = {
+          id: 'task_' + safeId,
+          kind: 'task',
+          title: String(task.title || 'Untitled task'),
+          body: [
+            task.sourceConnection ? 'Context: ' + task.sourceConnection : '',
+            task.dueDate && !Number.isFinite(Date.parse(task.dueDate)) ? 'Due: ' + task.dueDate : '',
+          ].filter(Boolean).join('\n') || undefined,
+          projectId,
+          dueAt: task.dueDate && Number.isFinite(Date.parse(task.dueDate))
+            ? new Date(task.dueDate).toISOString()
+            : undefined,
+          completedAt: task.completed
+            ? (task.completedAt && Number.isFinite(Date.parse(task.completedAt))
+              ? new Date(task.completedAt).toISOString()
+              : now)
+            : undefined,
+          status: task.completed ? 'completed' : 'open',
+          tags: task.isAiGenerated ? ['ai-generated'] : [],
+          scope: projectId ? 'project' : 'personal',
+          createdAt: now,
+          updatedAt: now,
+          schemaVersion: 1,
+        };
+        canonicalWorkspace.save(canonicalTask);
+      }
+    } catch (error) {
+      console.warn('[Bob storage] Canonical task mirror failed; legacy tasks remain available.', error);
+    }
     try {
       localStorage.setItem('bob_tasks_v2', JSON.stringify(tasks));
     } catch {}
