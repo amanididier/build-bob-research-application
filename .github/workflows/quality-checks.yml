@@ -47,6 +47,12 @@ jobs:
       - name: Test workspace tool behavior
         run: npm run test:workspace-tools
 
+      - name: Test canonical storage and migration
+        run: npm run test:canonical-storage
+
+      - name: Type-check canonical storage foundation
+        run: npx tsc --noEmit --target ES2020 --module ESNext --moduleResolution bundler --lib DOM,ESNext --skipLibCheck --esModuleInterop src/lib/storage/canonicalModel.ts src/lib/storage/canonicalRepository.ts src/lib/storage/migrateLegacyWorkspace.ts scripts/test-canonical-storage.ts
+
       - name: TypeScript validation
         run: npm run lint
 
