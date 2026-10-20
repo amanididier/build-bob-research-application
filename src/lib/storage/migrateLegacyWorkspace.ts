@@ -1,5 +1,5 @@
 import { canonicalWorkspace } from './canonicalRepository';
-import { NoteEntity, TaskEntity, ProjectEntity, makeEntityId, nowIso } from './canonicalModel';
+import { NoteEntity, TaskEntity, ProjectEntity, nowIso } from './canonicalModel';
 
 export interface LegacyMigrationReport {
   alreadyRan: boolean;
@@ -60,6 +60,8 @@ export function migrateLegacyWorkspace(): LegacyMigrationReport {
   const now = nowIso();
   const existing = canonicalWorkspace.snapshot().entities;
   const seenIds = new Set(Object.keys(existing));
+  // Preserve referential integrity when legacy IDs are namespaced in the canonical store.
+  const projectIdMap = new Map<string, string>();
 
   for (const raw of readArray(LEGACY_KEYS.projects)) {
     const item = asObject(raw);
@@ -67,7 +69,9 @@ export function migrateLegacyWorkspace(): LegacyMigrationReport {
       report.skipped.invalid += 1;
       continue;
     }
-    const id = 'project_' + cleanString(item.id).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const legacyId = cleanString(item.id);
+    const id = 'project_' + legacyId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    projectIdMap.set(legacyId, id);
     if (seenIds.has(id)) { report.skipped.duplicates += 1; continue; }
     const project: ProjectEntity = {
       id, kind: 'project', title: cleanString(item.title), description: cleanString(item.summary),
@@ -91,7 +95,7 @@ export function migrateLegacyWorkspace(): LegacyMigrationReport {
     const note: NoteEntity = {
       id, kind: 'note', title: cleanString(item.title),
       body: cleanString(item.body, cleanString(item.selectedText)),
-      projectId: cleanString(item.projectId) || undefined,
+      projectId: (() => { const legacyProjectId = cleanString(item.projectId); return !legacyProjectId || legacyProjectId === 'general' ? undefined : (projectIdMap.get(legacyProjectId) ?? legacyProjectId); })(),
       scope: cleanString(item.projectId) && item.projectId !== 'general' ? 'project' : 'personal',
       tags: Array.isArray(item.tags) ? item.tags.filter((tag: unknown): tag is string => typeof tag === 'string') : [],
       sourceIds: [], attachmentIds: [],
@@ -114,7 +118,7 @@ export function migrateLegacyWorkspace(): LegacyMigrationReport {
     const completed = item.completed === true || item.status === 'completed';
     const task: TaskEntity = {
       id, kind: 'task', title: cleanString(item.title), body: cleanString(item.description) || undefined,
-      projectId: cleanString(item.projectId) || undefined,
+      projectId: (() => { const legacyProjectId = cleanString(item.projectId); return !legacyProjectId || legacyProjectId === 'general' ? undefined : (projectIdMap.get(legacyProjectId) ?? legacyProjectId); })(),
       dueAt: cleanString(item.dueDate) && cleanString(item.dueDate) !== 'Flexible' ? cleanString(item.dueDate) : undefined,
       completedAt: completed ? cleanString(item.completedAt, now) : undefined,
       status: completed ? 'completed' : 'open',
