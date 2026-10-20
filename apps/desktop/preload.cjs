@@ -1,6 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('bob', {
+  workspaceStoreRead: () => ipcRenderer.invoke('bob:workspaceStore:read'),
+  workspaceStoreWrite: (store, expectedRevision) => ipcRenderer.invoke('bob:workspaceStore:write', { store, expectedRevision }),
   get: () => ipcRenderer.invoke('bob:get'),
   setGeminiKey: (key) => ipcRenderer.invoke('bob:setGeminiKey', key),
   setVerifiedModel: (model) => ipcRenderer.invoke('bob:setVerifiedModel', model),
