@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { getBobWorkspaceToolDeclarations, executeBobWorkspaceTool } from '../src/lib/ai/workspaceTools';
+import { canonicalWorkspace } from '../src/lib/storage/canonicalRepository';
+import { NoteEntity, TaskEntity } from '../src/lib/storage/canonicalModel';
 
 const store = new Map<string, string>();
 const emitted: Array<{ type: string; detail?: any }> = [];
@@ -79,7 +81,32 @@ async function main() {
   assert.equal(note.ok, true);
   assert.equal((JSON.parse(store.get('bob_notes_v1') || '[]') as any[]).some((item) => item.title === 'Saved test note'), true);
 
-  console.log('Workspace tool regression tests passed: intent gating, project isolation, selected tabs, safe due dates, task add/complete, ambiguity handling, and note persistence.');
+
+  // When legacy collections are absent, AI retrieval should safely read canonical records.
+  store.delete('bob_tasks_v2');
+  store.delete('bob_notes_v1');
+  const now = new Date().toISOString();
+  const canonicalTask: TaskEntity = {
+    id: 'task_canonical-fallback', kind: 'task', title: 'Canonical fallback task',
+    body: 'Context: migrated workspace', projectId: 'project_project-a', status: 'open',
+    tags: [], scope: 'project', createdAt: now, updatedAt: now, schemaVersion: 1,
+  };
+  const canonicalNote: NoteEntity = {
+    id: 'note_canonical-fallback', kind: 'note', title: 'Canonical fallback note',
+    body: 'Canonical evidence about durable storage.', projectId: 'project_project-a',
+    scope: 'project', tags: [], sourceIds: [], attachmentIds: [],
+    createdAt: now, updatedAt: now, schemaVersion: 1,
+  };
+  canonicalWorkspace.save(canonicalTask);
+  canonicalWorkspace.save(canonicalNote);
+  const canonicalTasks = await executeBobWorkspaceTool('list_tasks', { status: 'open' }, 'project-a');
+  assert.equal(canonicalTasks.total, 1);
+  assert.equal((canonicalTasks.tasks as any[])[0].title, 'Canonical fallback task');
+  const canonicalNotes = await executeBobWorkspaceTool('search_notes', { query: 'durable storage' }, 'project-a');
+  assert.equal(canonicalNotes.count, 1);
+  assert.equal((canonicalNotes.notes as any[])[0].title, 'Canonical fallback note');
+
+  console.log('Workspace tool regression tests passed: intent gating, project isolation, selected tabs, safe due dates, task add/complete, ambiguity handling, and note persistence, plus canonical read fallback.');
 }
 
 main().catch((error) => {
