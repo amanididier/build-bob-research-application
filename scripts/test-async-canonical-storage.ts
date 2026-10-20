@@ -30,7 +30,8 @@ async function testBrowserRepositoryAndRevisionGuard() {
   await repository.save(makeProject('project-a', 'First project'));
   const snapshot = await repository.snapshot();
   assert.equal(snapshot.revision, 1);
-  assert.equal(snapshot.entities['project-a']?.title, 'First project');
+  assert.equal(snapshot.entities['project-a']?.kind, 'project');
+  assert.equal((snapshot.entities['project-a'] as ProjectEntity).title, 'First project');
 
   await storage.write({ ...snapshot, revision: 2 }, 1);
   await assert.rejects(() => storage.write({ ...snapshot, revision: 2 }, 1), /write conflict/i);
@@ -54,7 +55,8 @@ async function testNativeBridgeAndCompareAndSwap() {
   const repository = new AsyncCanonicalWorkspaceRepository(native);
   await repository.save(makeProject('project-native', 'Native project'));
   assert.equal((await native.read()).revision, 1);
-  assert.equal((await native.read()).entities['project-native']?.title, 'Native project');
+  assert.equal((await native.read()).entities['project-native']?.kind, 'project');
+  assert.equal(((await native.read()).entities['project-native'] as ProjectEntity).title, 'Native project');
   await assert.rejects(() => native.write({ ...persisted, revision: 2 }, 0), /write conflict/i);
 }
 
@@ -86,7 +88,8 @@ async function testNonDestructiveNativeMigration() {
   assert.equal(result.entities, 1);
   assert.equal(browser.getItem(CANONICAL_WORKSPACE_STORAGE_KEY), raw, 'source browser data must remain unchanged');
   assert.equal(browser.getItem(result.backupKey!), raw, 'exact source bytes must be backed up');
-  assert.equal((await native.read()).entities['project-source']?.title, 'Source project');
+  assert.equal((await native.read()).entities['project-source']?.kind, 'project');
+  assert.equal(((await native.read()).entities['project-source'] as ProjectEntity).title, 'Source project');
 
   const repeat = await migrateBrowserCanonicalStoreToNative(native, browser);
   assert.equal(repeat.status, 'already-migrated');
@@ -98,7 +101,8 @@ async function testNonDestructiveNativeMigration() {
   };
   const conflict = await migrateBrowserCanonicalStoreToNative(native, browser);
   assert.equal(conflict.status, 'native-store-not-empty');
-  assert.equal((await native.read()).entities['project-extra']?.title, 'Existing native data');
+  assert.equal((await native.read()).entities['project-extra']?.kind, 'project');
+  assert.equal(((await native.read()).entities['project-extra'] as ProjectEntity).title, 'Existing native data');
 }
 
 async function testCorruptBrowserDataIsPreserved() {
