@@ -56,6 +56,11 @@ jobs:
       - name: Type-check canonical storage foundation
         run: npx tsc --noEmit --target ES2022 --module ESNext --moduleResolution bundler --lib DOM,ESNext --skipLibCheck --esModuleInterop src/lib/storage/canonicalModel.ts src/lib/storage/canonicalRepository.ts src/lib/storage/asyncCanonicalRepository.ts src/lib/storage/migrateLegacyWorkspace.ts scripts/test-canonical-storage.ts scripts/test-async-canonical-storage.ts
 
+      - name: Check desktop bridge JavaScript syntax
+        run: |
+          node --check apps/desktop/main.cjs
+          node --check apps/desktop/preload.cjs
+
       - name: TypeScript validation
         run: npm run lint
 
