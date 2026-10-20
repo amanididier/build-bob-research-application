@@ -104,7 +104,7 @@ function testCanonicalLegacyUiAdapters() {
   };
   const task: TaskEntity = {
     id: 'task_legacy-ui-task', kind: 'task', title: 'Canonical task',
-    body: 'Context: Evidence review\\nDue: Flexible', projectId: 'project_alpha',
+    body: 'Context: Evidence review\nDue: Flexible', projectId: 'project_alpha',
     status: 'completed', completedAt: now, tags: ['ai-generated'], scope: 'project',
     createdAt: now, updatedAt: now, schemaVersion: 1,
   };
