@@ -6,7 +6,7 @@ import { researchOrchestrator } from '../lib/research/researchOrchestrator';
 import { canonicalWorkspace } from '../lib/storage/canonicalRepository';
 import { migrateLegacyWorkspace } from '../lib/storage/migrateLegacyWorkspace';
 import { NoteEntity, SourceEntity, TaskEntity } from '../lib/storage/canonicalModel';
-import { canonicalNotesForLegacyUi, canonicalTasksForLegacyUi } from '../lib/storage/legacyUiAdapters';
+import { canonicalNotesForLegacyUi, canonicalTasksForLegacyUi, readLegacyCollectionOrCanonical } from '../lib/storage/legacyUiAdapters';
 
 export type AppPage =
   | 'home'
@@ -701,27 +701,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       { id: 't-2', title: 'Write problem statement on checkout friction', dueDate: 'Today · 8:00 PM', sourceConnection: 'Connected to 3 AI chats', completed: true, projectId: 'urugendo' },
       { id: 't-3', title: 'Compare 3 competitor ticket dispatch apps', dueDate: 'Tomorrow', sourceConnection: 'Connected to 4 tabs', completed: false, projectId: 'urugendo' },
     ];
-    try {
-      const stored = localStorage.getItem('bob_tasks_v2');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          return parsed.filter((task: Partial<ResearchTaskItem>) =>
-            !demoTasks.some((demo) =>
-              task?.id === demo.id &&
-              task?.title === demo.title &&
-              task?.dueDate === demo.dueDate &&
-              task?.sourceConnection === demo.sourceConnection &&
-              task?.completed === demo.completed &&
-              task?.projectId === demo.projectId
-            )
-          );
-        }
-      }
-    } catch {}
-    // Recovery/read-through path: only used when the legacy key is missing or unreadable.
-    // A valid saved empty array remains authoritative so intentionally cleared tasks stay cleared.
-    return canonicalTasksForLegacyUi();
+    const savedTasks = readLegacyCollectionOrCanonical<ResearchTaskItem>(
+      'bob_tasks_v2',
+      () => canonicalTasksForLegacyUi(),
+    );
+    return savedTasks.filter((task: Partial<ResearchTaskItem>) =>
+      !demoTasks.some((demo) =>
+        task?.id === demo.id &&
+        task?.title === demo.title &&
+        task?.dueDate === demo.dueDate &&
+        task?.sourceConnection === demo.sourceConnection &&
+        task?.completed === demo.completed &&
+        task?.projectId === demo.projectId
+      )
+    );
   });
 
   // Keep legacy task storage as the active UI source of truth while mirroring
@@ -798,30 +791,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createdAt: 'Yesterday, 3:20 PM',
       },
     ];
-    try {
-      const saved = localStorage.getItem('bob_notes_v1');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return parsed.filter((note: Partial<ResearchNoteItem>) =>
-            !demoNotes.some((demo) =>
-              note?.id === demo.id &&
-              note?.title === demo.title &&
-              note?.selectedText === demo.selectedText &&
-              note?.sourceTitle === demo.sourceTitle &&
-              note?.sourceUrl === demo.sourceUrl &&
-              note?.projectId === demo.projectId &&
-              note?.relevance === demo.relevance &&
-              note?.color === demo.color &&
-              note?.createdAt === demo.createdAt
-            )
-          );
-        }
-      }
-    } catch {}
-    // Recovery/read-through path: only used when the legacy key is missing or unreadable.
-    // A valid saved empty array remains authoritative so intentionally cleared notes stay cleared.
-    return canonicalNotesForLegacyUi();
+    const savedNotes = readLegacyCollectionOrCanonical<ResearchNoteItem>(
+      'bob_notes_v1',
+      () => canonicalNotesForLegacyUi(),
+    );
+    return savedNotes.filter((note: Partial<ResearchNoteItem>) =>
+      !demoNotes.some((demo) =>
+        note?.id === demo.id &&
+        note?.title === demo.title &&
+        note?.selectedText === demo.selectedText &&
+        note?.sourceTitle === demo.sourceTitle &&
+        note?.sourceUrl === demo.sourceUrl &&
+        note?.projectId === demo.projectId &&
+        note?.relevance === demo.relevance &&
+        note?.color === demo.color &&
+        note?.createdAt === demo.createdAt
+      )
+    );
   });
 
   // Begin the notes migration with a reversible dual-write: legacy storage remains the
