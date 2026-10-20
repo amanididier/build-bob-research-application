@@ -6,7 +6,7 @@ import { researchOrchestrator } from '../lib/research/researchOrchestrator';
 import { canonicalWorkspace } from '../lib/storage/canonicalRepository';
 import { migrateLegacyWorkspace } from '../lib/storage/migrateLegacyWorkspace';
 import { NoteEntity, SourceEntity, TaskEntity } from '../lib/storage/canonicalModel';
-import { canonicalNotesForLegacyUi, canonicalTasksForLegacyUi, readLegacyCollectionOrCanonical } from '../lib/storage/legacyUiAdapters';
+import { canonicalNotesForLegacyUi, canonicalTasksForLegacyUi, readLegacyCollectionOrCanonical, reconcileLegacyMirroredEntities } from '../lib/storage/legacyUiAdapters';
 
 export type AppPage =
   | 'home'
@@ -757,6 +757,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
         canonicalWorkspace.save(canonicalTask);
       }
+      reconcileLegacyMirroredEntities('task', tasks.map((task) => String(task.id || '')), canonicalWorkspace);
     } catch (error) {
       console.warn('[Bob storage] Canonical task mirror failed; legacy tasks remain available.', error);
     }
@@ -866,6 +867,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
         canonicalWorkspace.save(canonicalNote);
       }
+      reconcileLegacyMirroredEntities('note', notes.map((note) => String(note.id || '')), canonicalWorkspace);
     } catch (error) {
       // Keep legacy note persistence working even if canonical storage is unavailable.
       console.warn('[Bob storage] Canonical note mirror failed; legacy notes remain available.', error);
