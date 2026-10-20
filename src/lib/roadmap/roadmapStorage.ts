@@ -65,6 +65,11 @@ export function syncRoadmapToCanonical(
     void index;
   });
 
+  const existingRoadmapTasks = new Map(
+    repository.list<TaskEntity>({ kind: 'task', projectId: canonicalProjectId, limit: 500 })
+      .filter((task) => task.id.startsWith('roadmap-task_' + safeProjectId + '_'))
+      .map((task) => [task.id, task]),
+  );
   const keepPhaseIds = new Set([...phasesByName.values()].map((phase) => phase.id));
   for (const existing of repository.list<PhaseEntity>({ kind: 'phase', projectId: canonicalProjectId, limit: 500 })) {
     if (existing.id.startsWith('phase_roadmap_' + safeProjectId + '_') && !keepPhaseIds.has(existing.id)) {
@@ -82,8 +87,10 @@ export function syncRoadmapToCanonical(
     const phase = phasesByName.get(phaseName);
     if (!phase) return;
     const taskId = typeof rawTask.id === 'string' && rawTask.id.trim() ? safeEntityPart(rawTask.id) : 'item_' + index;
+    const canonicalTaskId = 'roadmap-task_' + safeProjectId + '_' + taskId;
+    const previousTask = existingRoadmapTasks.get(canonicalTaskId);
     const task: TaskEntity = {
-      id: 'roadmap-task_' + safeProjectId + '_' + taskId,
+      id: canonicalTaskId,
       kind: 'task',
       title: typeof rawTask.title === 'string' && rawTask.title.trim() ? rawTask.title.trim() : 'Untitled roadmap task',
       body: JSON.stringify({
@@ -93,7 +100,8 @@ export function syncRoadmapToCanonical(
       }),
       projectId: canonicalProjectId,
       phaseId: phase.id,
-      status: 'open',
+      status: previousTask?.status === 'completed' ? 'completed' : 'open',
+      completedAt: previousTask?.status === 'completed' ? previousTask.completedAt : undefined,
       tags: ['roadmap-generated'],
       scope: 'project',
       createdAt: now,
@@ -102,6 +110,50 @@ export function syncRoadmapToCanonical(
     };
     repository.save(task);
   });
+}
+
+/** Mirror execution-view completion into canonical roadmap task and phase records. */
+export function syncRoadmapProgressToCanonical(
+  projectId: string,
+  roadmapTasks: Array<Record<string, any>>,
+  completedTaskIds: string[],
+  repository: CanonicalWorkspaceRepository = canonicalWorkspace,
+): void {
+  if (!projectId) return;
+  const safeProjectId = safeEntityPart(projectId);
+  const canonicalProjectId = projectId.startsWith('project_') ? projectId : 'project_' + safeProjectId;
+  const completed = new Set(completedTaskIds);
+  const now = new Date().toISOString();
+  const phaseTaskStates = new Map<string, boolean[]>();
+
+  roadmapTasks.forEach((rawTask, index) => {
+    if (!rawTask || typeof rawTask !== 'object') return;
+    const rawId = typeof rawTask.id === 'string' && rawTask.id.trim() ? safeEntityPart(rawTask.id) : 'item_' + index;
+    const taskId = 'roadmap-task_' + safeProjectId + '_' + rawId;
+    const saved = repository.get<TaskEntity>(taskId);
+    if (!saved || saved.kind !== 'task' || !saved.tags.includes('roadmap-generated')) return;
+    const isComplete = completed.has(String(rawTask.id ?? ''));
+    repository.save({
+      ...saved,
+      status: isComplete ? 'completed' : 'open',
+      completedAt: isComplete ? (saved.completedAt ?? now) : undefined,
+    });
+    const phaseId = saved.phaseId;
+    if (phaseId) {
+      const states = phaseTaskStates.get(phaseId) ?? [];
+      states.push(isComplete);
+      phaseTaskStates.set(phaseId, states);
+    }
+  });
+
+  for (const [phaseId, states] of phaseTaskStates) {
+    const phase = repository.get<PhaseEntity>(phaseId);
+    if (!phase || phase.kind !== 'phase') continue;
+    repository.save({
+      ...phase,
+      status: states.length > 0 && states.every(Boolean) ? 'completed' : states.some(Boolean) ? 'active' : 'planned',
+    });
+  }
 }
 
 /** Load a roadmap for exactly one project, with compatibility for older saves. */
