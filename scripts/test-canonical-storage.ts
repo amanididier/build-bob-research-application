@@ -144,6 +144,10 @@ function testLegacyCollectionFallbackRules() {
   assert.deepEqual(readLegacyCollectionOrCanonical('wrong_shape_collection', fallback), fallback(),
     'non-array legacy data should fall back to canonical records');
 
+  localStorage.setItem('valid_legacy_collection', JSON.stringify([{ id: 'legacy-record' }]));
+  assert.deepEqual(readLegacyCollectionOrCanonical('valid_legacy_collection', fallback), [{ id: 'legacy-record' }],
+    'valid legacy data should remain authoritative over canonical fallback data');
+
   localStorage.setItem('intentionally_empty_collection', '[]');
   assert.deepEqual(readLegacyCollectionOrCanonical('intentionally_empty_collection', fallback), [],
     'a valid empty legacy array is authoritative and must not resurrect deleted canonical records');
@@ -219,7 +223,7 @@ function main() {
   testMigrationIsNonDestructiveAndIdempotent();
   testMigrationCanRecoverAfterInvalidRecords();
   testMigrationCanRetryCorruptCollection();
-  console.log('Canonical storage tests passed: CRUD, search filters, snapshots, timestamps, backlinks, non-destructive migration, project relationships, idempotency, canonical-to-legacy UI adapters, missing/corrupt collection fallback, valid-empty preservation, retryable partial migration recovery, and corrupt-JSON migration recovery.');
+  console.log('Canonical storage tests passed: CRUD, search filters, snapshots, timestamps, backlinks, non-destructive migration, project relationships, idempotency, canonical-to-legacy UI adapters, missing/corrupt collection fallback, legacy precedence, valid-empty preservation, retryable partial migration recovery, and corrupt-JSON migration recovery.');
 }
 
 main();
