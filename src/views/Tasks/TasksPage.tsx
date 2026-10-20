@@ -60,7 +60,7 @@ export const TasksPage: React.FC = () => {
   } = useApp();
 
   const activeProject = projects.find((p) => p.id === activeResearchId) || projects[0];
-  const activeProjectId = activeProject?.id || activeResearchId || 'urugendo';
+  const activeProjectId = activeProject?.id || activeResearchId || 'new-research';
 
   const [filter, setFilter] = useState<'all' | 'pending' | 'completed'>('all');
   const [projectFilter, setProjectFilter] = useState('all');
