@@ -37,6 +37,17 @@ function safeText(value: unknown, max = 240): string {
   return typeof value === 'string' ? value.trim().slice(0, max) : '';
 }
 
+function safeSourceUrl(value: unknown): string {
+  const candidate = safeText(value, 1000);
+  if (!candidate) return '';
+  try {
+    const parsed = new URL(candidate);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.toString().slice(0, 500) : '';
+  } catch {
+    return '';
+  }
+}
+
 const READ_TOOLS = [
   {
     name: 'get_project_overview',
@@ -89,12 +100,14 @@ const READ_TOOLS = [
 
 const CREATE_NOTE_TOOL = {
   name: 'create_note',
-  description: 'Save a note to the user’s Bob notebook. Only use when the user clearly asks to save, create, or capture a note.',
+  description: 'Save a note to the user’s Bob notebook. Preserve a source title and HTTP(S) source URL when the user or current research context provides them. Only use when the user clearly asks to save, create, or capture a note.',
   parameters: {
     type: Type.OBJECT,
     properties: {
       title: { type: Type.STRING, description: 'Short, descriptive note title.' },
       content: { type: Type.STRING, description: 'The actual note content to save.' },
+      source_title: { type: Type.STRING, description: 'Title of the source supporting this note, when available. Do not invent a source.' },
+      source_url: { type: Type.STRING, description: 'HTTP(S) URL of the source supporting this note, when available. Do not invent a URL.' },
     },
     required: ['title', 'content'],
   },
@@ -300,8 +313,8 @@ export async function executeBobWorkspaceTool(
         id: `note-bob-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         title,
         selectedText: content,
-        sourceTitle: 'Saved from Bob chat',
-        sourceUrl: '',
+        sourceTitle: safeText(args.source_title, 160) || 'Saved from Bob chat',
+        sourceUrl: safeSourceUrl(args.source_url),
         projectId,
         relevance: 85,
         color: 'emerald',

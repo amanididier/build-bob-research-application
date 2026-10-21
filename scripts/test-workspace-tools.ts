@@ -77,9 +77,23 @@ async function main() {
   assert.equal(typeof completedTask?.completedAt, 'string', 'task completion should be timestamped for accurate dashboard progress');
   assert.equal(emitted.some((event) => event.type === 'bob:workspace-tool-action' && event.detail?.type === 'complete_task' && event.detail?.taskId === 'task-a' && event.detail?.projectId === 'project-a'), true, 'the app should receive the completed task and project IDs');
 
-  const note = await executeBobWorkspaceTool('create_note', { title: 'Saved test note', content: 'Keep this finding.' }, 'project-a', 'Please save a note about the finding');
+  const note = await executeBobWorkspaceTool('create_note', {
+    title: 'Saved test note',
+    content: 'Keep this finding.',
+    source_title: 'Original research source',
+    source_url: 'https://example.org/research/evidence',
+  }, 'project-a', 'Please save a note about the finding');
   assert.equal(note.ok, true);
-  assert.equal((JSON.parse(store.get('bob_notes_v1') || '[]') as any[]).some((item) => item.title === 'Saved test note'), true);
+  const savedNote = (JSON.parse(store.get('bob_notes_v1') || '[]') as any[]).find((item) => item.title === 'Saved test note');
+  assert.equal(savedNote?.sourceTitle, 'Original research source', 'source title should be preserved on saved notes');
+  assert.equal(savedNote?.sourceUrl, 'https://example.org/research/evidence', 'source URL should be preserved on saved notes');
+
+  const unsafeSource = await executeBobWorkspaceTool('create_note', {
+    title: 'Note with unsafe source', content: 'Do not preserve a non-web URL.', source_url: 'javascript:alert(1)',
+  }, 'project-a', 'Please save a note about the finding');
+  assert.equal(unsafeSource.ok, true);
+  const unsafeSavedNote = (JSON.parse(store.get('bob_notes_v1') || '[]') as any[]).find((item) => item.title === 'Note with unsafe source');
+  assert.equal(unsafeSavedNote?.sourceUrl, '', 'only HTTP(S) source URLs should be retained');
 
 
   // When legacy collections are absent, AI retrieval should safely read canonical records.
