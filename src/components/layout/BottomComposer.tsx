@@ -354,6 +354,15 @@ export const BottomComposer: React.FC = () => {
                   aria-label="GitHub read-only access token"
                   className="w-full h-9 px-3 rounded-lg border border-[var(--line)] bg-[var(--s2)] text-[11.5px] text-[var(--t)] outline-none focus:ring-2 focus:ring-[#f5c842]/40" />
                 <p className="text-[10px] leading-relaxed text-[var(--m)] m-0">Use a fine-grained token limited to this repository with Contents: Read-only. Bob stores it encrypted with your operating system’s secure storage. Public repositories work without a token.</p>
+                {projectContext.hasGitHubToken && (
+                  <button type="button" onClick={async () => {
+                    try {
+                      await (window as any).bob?.clearGitHubToken?.();
+                      await refreshProjectContext();
+                      setProjectContextError('');
+                    } catch { setProjectContextError('Could not remove the saved GitHub token.'); }
+                  }} className="text-[10px] font-semibold text-red-600 hover:underline">Forget saved GitHub token</button>
+                )}
                 <div className="flex items-center justify-between gap-2">
                   {projectContext.github?.connected ? (
                     <button type="button" onClick={() => void disconnectProjectSource('github')} disabled={projectContextBusy} className="text-[10.5px] font-semibold text-red-600 hover:underline">Disconnect repository</button>
