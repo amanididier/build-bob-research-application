@@ -23,7 +23,7 @@ const IGNORED_DIRECTORIES = new Set([
 const IGNORED_FILE_NAMES = new Set([
   '.env', '.env.local', '.env.development', '.env.production',
   '.env.test', '.npmrc', '.pypirc', 'id_rsa', 'id_ed25519',
-  'credentials', 'secrets.json', 'service-account.json',
+  'credentials', 'credentials.json', 'secrets.json', 'service-account.json',
 ])
 
 const IGNORED_EXTENSIONS = new Set([
