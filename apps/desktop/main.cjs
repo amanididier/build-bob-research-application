@@ -1176,13 +1176,13 @@ function registerIpc() {
     const id = normalizeConversationId(projectId)
     const url = String(payload.url || '').trim()
     const token = String(payload.token || '').trim()
-    if (token) {
-      const tokenResult = saveGitHubToken(token)
-      if (!tokenResult.ok) return tokenResult
-    }
     try {
       const parsed = githubProjectReader.parseRepositoryUrl(url)
-      const repo = await githubProjectReader.listProjectFiles({ url }, readGitHubToken())
+      const repo = await githubProjectReader.listProjectFiles({ url }, token || readGitHubToken())
+      if (token) {
+        const tokenResult = saveGitHubToken(token)
+        if (!tokenResult.ok) return tokenResult
+      }
       updateConversationProject(id, {
         github: { url, owner: parsed.owner, repo: parsed.repo, branch: repo.branch, private: repo.private, htmlUrl: repo.htmlUrl, attachedAt: new Date().toISOString() },
       })
