@@ -47,6 +47,9 @@ jobs:
       - name: Test workspace tool behavior
         run: npm run test:workspace-tools
 
+      - name: Test local project reader safety boundaries
+        run: npm run test:local-project-reader
+
       - name: Test canonical storage and migration
         run: npm run test:canonical-storage
 
@@ -60,6 +63,7 @@ jobs:
         run: |
           node --check apps/desktop/main.cjs
           node --check apps/desktop/preload.cjs
+          node --check apps/desktop/localProjectReader.cjs
 
       - name: TypeScript validation
         run: npm run lint
