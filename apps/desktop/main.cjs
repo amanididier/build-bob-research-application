@@ -915,7 +915,7 @@ function readLocalProjectConfig() {
 }
 
 function assertLocalProjectRenderer(event) {
-  if (!win || win.isDestroyed() || event.sender !== win.webContents) {
+  if (!win || win.isDestroyed() || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) {
     throw new Error('Local project access is available only to Bob’s trusted desktop window.')
   }
 }
