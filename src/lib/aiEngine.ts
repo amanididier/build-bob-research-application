@@ -510,6 +510,23 @@ class BobAiManager {
     // Without the Gemini tool-calling path, never let a fallback model claim it
     // changed workspace state when no action handler could run.
     const geminiKey = this.getGeminiKey();
+    const hasProjectReadTools = workspaceToolDeclarations.some((tool) =>
+      /(?:local_project|github_project)/.test(String(tool.name))
+    );
+    const isProjectInspectionQuestion = /\b(codebase|code base|source code|repository|repo|github|file path|project files|function|class|symbol|package\.json|src\/|apps\/|components\/|read (?:the )?file|search (?:the )?code|review my code|explain this code)\b/i.test(query);
+    if (!geminiKey && hasProjectReadTools && isProjectInspectionQuestion) {
+      const answer = 'I can see that a project source is attached, but this version needs a connected Gemini API key to inspect files through its read-only project tools. Connect Gemini in Settings and ask again. I have not read or tested the project files yet.';
+      onChunk?.(answer);
+      return {
+        answer,
+        sources: citations,
+        latencyMs: Math.round(performance.now() - startTime),
+        modelTier: 'project-tools-unavailable',
+        modelName: 'Gemini API key required for project inspection',
+        memoryNodesUsed: memory.citedNodes.length,
+        provider: 'local',
+      };
+    }
     if (!geminiKey && hasWriteTools) {
       const answer = 'I need a connected Gemini API key to safely save notes or change tasks, so I did not change anything. Connect Gemini in Settings and try again.';
       onChunk?.(answer);
