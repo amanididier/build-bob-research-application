@@ -235,6 +235,10 @@ function hasWorkspaceReadIntent(query: string): boolean {
   return /\b(my|this|current|active|saved|open|selected|pending|overdue|completed|existing)\b.{0,45}\b(project|tasks?|notes?|roadmap|tabs?|sources?)\b|\b(list|show|find|search|check|what|which|summari[sz]e)\b.{0,45}\b(tasks?|notes?|roadmap|project|tabs?|sources?|research(?: memory)?|evidence)\b/i.test(query);
 }
 
+function hasGitHubProjectReadIntent(query: string): boolean {
+  return /\b(github repository|github repo|repository attached|attached repository|github code|github files|github project|remote repository|remote repo)\b/i.test(query);
+}
+
 function hasLocalProjectReadIntent(query: string): boolean {
   return /\b(local project|project folder|project files|code project|codebase|code base|source code|repository files|repo files|file path|my code|this code|my repo|my repository|this repository|the repository|the repo|in the code|in this code|in this repo|in the repo|read (?:the )?(?:file|folder|code)|search (?:the )?(?:code|codebase|project files)|where is .*defined|find (?:the )?(?:function|class|symbol|file)|(?:src|app|lib|apps|packages|components|pages|public)\/[\w./-]+)/i.test(query);
 }
@@ -242,7 +246,8 @@ function hasLocalProjectReadIntent(query: string): boolean {
 /** Tools are offered only for workspace-related requests, not ordinary conversation. */
 export function getBobWorkspaceToolDeclarations(query: string): JsonRecord[] {
   const declarations: JsonRecord[] = [];
-  if (hasLocalProjectReadIntent(query)) declarations.push(...LOCAL_PROJECT_TOOLS, ...GITHUB_PROJECT_TOOLS);
+  if (hasLocalProjectReadIntent(query)) declarations.push(...LOCAL_PROJECT_TOOLS);
+  if (hasGitHubProjectReadIntent(query)) declarations.push(...GITHUB_PROJECT_TOOLS);
   if (hasWorkspaceReadIntent(query) || hasNoteWriteIntent(query) || hasTaskAddIntent(query) || hasSingleTaskCompletionIntent(query)) {
     declarations.push(...READ_TOOLS);
   }
