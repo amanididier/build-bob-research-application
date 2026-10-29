@@ -104,16 +104,14 @@ async function listProjectFiles(repoRef, token, relativePath = '') {
   return { ...repo, files, count: files.length, truncated: items.length > MAX_TREE_FILES || Boolean(tree.truncated), readOnly: true }
 }
 
-async function readProjectFile(repoRef, token, relativePath, options = {}) {
+async function readProjectFileFromRepo(repo, token, relativePath, options = {}) {
   if (typeof relativePath !== 'string' || !relativePath.trim() || relativePath.startsWith('/') || relativePath.includes('..') || relativePath.includes('\\')) {
     throw new Error('Use a valid repository-relative file path.')
   }
   if (!isReadableTextPath(relativePath)) throw new Error('This file is excluded from GitHub project reading.')
-  const listing = await listProjectFiles(repoRef, token)
-  const file = listing.files.find(item => item.path === relativePath)
-  if (!file) throw new Error('File is not in the readable repository file list or exceeds the size limit.')
-  const data = await githubRequest(API_ROOT + '/repos/' + encodeURIComponent(listing.owner) + '/' + encodeURIComponent(listing.repo) + '/contents/' + relativePath.split('/').map(encodeURIComponent).join('/') + '?ref=' + encodeURIComponent(listing.branch), token)
+  const data = await githubRequest(API_ROOT + '/repos/' + encodeURIComponent(repo.owner) + '/' + encodeURIComponent(repo.repo) + '/contents/' + relativePath.split('/').map(encodeURIComponent).join('/') + '?ref=' + encodeURIComponent(repo.branch), token)
   if (!data || data.type !== 'file' || typeof data.content !== 'string') throw new Error('GitHub did not return a readable text file.')
+  if (Number(data.size || 0) > MAX_FILE_BYTES) throw new Error('This file exceeds the 256 KB safe reading limit.')
   const content = Buffer.from(data.content.replace(/\n/g, ''), 'base64').toString('utf8')
   if (content.includes('\u0000')) throw new Error('This file appears to be binary and cannot be read as text.')
   const lines = content.split(/\r?\n/)
@@ -127,10 +125,15 @@ async function readProjectFile(repoRef, token, relativePath, options = {}) {
     endLine,
     truncated: endLine < lines.length,
     readOnly: true,
-    repository: listing.fullName,
-    branch: listing.branch,
+    repository: repo.fullName,
+    branch: repo.branch,
     htmlUrl: data.html_url,
   }
+}
+
+async function readProjectFile(repoRef, token, relativePath, options = {}) {
+  const repo = await getRepo(repoRef, token)
+  return readProjectFileFromRepo(repo, token, relativePath, options)
 }
 
 async function searchProjectFiles(repoRef, token, query) {
@@ -140,11 +143,12 @@ async function searchProjectFiles(repoRef, token, query) {
   const matches = []
   let scannedFiles = 0
   const needle = term.toLowerCase()
-  for (const file of listing.files.slice(0, MAX_SEARCH_FILES)) {
+  const filesToScan = listing.files.slice(0, MAX_SEARCH_FILES)
+  for (const file of filesToScan) {
     if (matches.length >= MAX_MATCHES) break
     if (file.sizeBytes > MAX_FILE_BYTES) continue
     try {
-      const read = await readProjectFile(repoRef, token, file.path, { startLine: 1, endLine: 200 })
+      const read = await readProjectFileFromRepo(listing, token, file.path, { startLine: 1, endLine: 200 })
       scannedFiles += 1
       const lines = read.content.split('\n')
       for (const line of lines) {
