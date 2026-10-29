@@ -265,7 +265,7 @@ export const BottomComposer: React.FC = () => {
 
       {/* Main Bottom Floating Composer */}
       <div
-        className={`fixed z-20 bottom-5 transform -translate-x-1/2 bg-[var(--s)] border border-[#d8d8d1] dark:border-[#3b3129] rounded-[23px] shadow-[0_20px_55px_rgba(0,0,0,0.12)] p-2.5 transition-all duration-300 ease-out ${
+        className={`fixed z-20 bottom-5 transform -translate-x-1/2 relative bg-[var(--s)] border border-[#d8d8d1] dark:border-[#3b3129] rounded-[23px] shadow-[0_20px_55px_rgba(0,0,0,0.12)] p-2.5 transition-all duration-300 ease-out ${
           isSidebarClosed
             ? isExpanded ? 'left-1/2 w-[min(800px,calc(100vw-70px))]' : 'left-1/2 w-[min(480px,calc(100vw-60px))]'
             : isExpanded ? 'left-[calc(275px+(100vw-275px)/2)] w-[min(800px,calc(100vw-275px-70px))]' : 'left-[calc(275px+(100vw-275px)/2)] w-[min(500px,calc(100vw-275px-60px))]'
@@ -273,6 +273,13 @@ export const BottomComposer: React.FC = () => {
       >
         {isVoiceActive && voiceMode === 'prompt' && (
           <VoiceWaveform height={22} className="px-2 pb-1 opacity-80" />
+        )}
+
+        {projectContext.connected && (
+          <div className="flex flex-wrap items-center gap-1.5 px-2 pb-2">
+            {projectContext.local?.connected && <span className="inline-flex max-w-full items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#fff2c4] dark:bg-[#403512] text-[#705400] dark:text-[#f5d76a] text-[10.5px] font-semibold"><FolderOpen className="w-3 h-3 shrink-0" /><span className="truncate max-w-[180px]">{projectContext.local.rootName}</span><button type="button" onClick={() => void disconnectProjectSource('local')} title="Remove folder from this chat"><X className="w-3 h-3" /></button></span>}
+            {projectContext.github?.connected && <span className="inline-flex max-w-full items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--s2)] text-[var(--t)] text-[10.5px] font-semibold"><Github className="w-3 h-3 shrink-0" /><span className="truncate max-w-[180px]">{projectContext.github.owner}/{projectContext.github.repo}</span><button type="button" onClick={() => void disconnectProjectSource('github')} title="Remove GitHub repository from this chat"><X className="w-3 h-3" /></button></span>}
+          </div>
         )}
 
         <textarea
@@ -304,12 +311,79 @@ export const BottomComposer: React.FC = () => {
         <div className="flex items-center gap-1.5 pt-1">
           {/* Add files */}
           <button
-            onClick={() => setIsAddFilesOpen(true)}
-            title="Attach files"
-            className="w-8 h-8 rounded-full hover:bg-[var(--s2)] grid place-items-center text-[var(--m)] hover:text-[var(--t)] transition-colors cursor-pointer"
+            onClick={() => { setProjectMenuOpen((open) => !open); setProjectContextError(''); }}
+            title="Add context or files"
+            aria-label="Add context or files"
+            aria-expanded={projectMenuOpen}
+            className={`w-8 h-8 rounded-full grid place-items-center transition-colors cursor-pointer ${projectMenuOpen ? 'bg-[var(--ys)] text-[var(--t)]' : 'hover:bg-[var(--s2)] text-[var(--m)] hover:text-[var(--t)]'}`}
           >
             <Plus className="w-4 h-4" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
           </button>
+
+          {projectMenuOpen && (
+            <div className="absolute bottom-[calc(100%+12px)] left-2 z-50 w-[min(360px,calc(100vw-32px))] rounded-2xl border border-[var(--line)] bg-[var(--s)] shadow-[0_16px_48px_rgba(0,0,0,0.18)] p-3 space-y-3 animate-in fade-in slide-in-from-bottom-1 duration-150">
+              <div className="flex items-center justify-between gap-2 px-1">
+                <div>
+                  <p className="text-[13px] font-bold text-[var(--t)] m-0">Add to this chat</p>
+                  <p className="text-[10.5px] text-[var(--m)] mt-0.5 m-0">Optional · read-only project context</p>
+                </div>
+                <button type="button" onClick={() => setProjectMenuOpen(false)} aria-label="Close add context menu" className="w-7 h-7 rounded-full grid place-items-center hover:bg-[var(--s2)] text-[var(--m)]"><X className="w-3.5 h-3.5" /></button>
+              </div>
+
+              <button type="button" onClick={() => void attachLocalProject()} disabled={projectContextBusy}
+                className="w-full flex items-center gap-3 p-3 rounded-xl border border-[var(--line)] hover:bg-[var(--s2)] text-left disabled:opacity-50">
+                <span className="w-9 h-9 rounded-xl bg-[#fff1bd] text-[#765700] grid place-items-center shrink-0"><FolderOpen className="w-4 h-4" /></span>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-[12px] font-semibold text-[var(--t)]">{projectContext.local?.connected ? 'Change project folder' : 'Add project folder'}</span>
+                  <span className="block text-[10.5px] text-[var(--m)] mt-0.5">Choose a local directory for this conversation</span>
+                </span>
+              </button>
+
+              <div className="rounded-xl border border-[var(--line)] p-3 space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <Github className="w-4 h-4 text-[var(--t)]" />
+                  <span className="text-[12px] font-semibold text-[var(--t)]">{projectContext.github?.connected ? 'GitHub repository attached' : 'Add GitHub repository'}</span>
+                </div>
+                <input value={githubUrl} onChange={(event) => setGithubUrl(event.target.value)}
+                  placeholder="https://github.com/owner/repository"
+                  aria-label="GitHub repository URL"
+                  className="w-full h-9 px-3 rounded-lg border border-[var(--line)] bg-[var(--s2)] text-[11.5px] text-[var(--t)] outline-none focus:ring-2 focus:ring-[#f5c842]/40" />
+                <input value={githubToken} onChange={(event) => setGithubToken(event.target.value)}
+                  type="password" autoComplete="off"
+                  placeholder={projectContext.hasGitHubToken ? 'Read-only token saved securely (optional)' : 'Fine-grained read-only token (optional)'}
+                  aria-label="GitHub read-only access token"
+                  className="w-full h-9 px-3 rounded-lg border border-[var(--line)] bg-[var(--s2)] text-[11.5px] text-[var(--t)] outline-none focus:ring-2 focus:ring-[#f5c842]/40" />
+                <p className="text-[10px] leading-relaxed text-[var(--m)] m-0">Use a fine-grained token limited to this repository with Contents: Read-only. Bob stores it encrypted with your operating system’s secure storage. Public repositories work without a token.</p>
+                <div className="flex items-center justify-between gap-2">
+                  {projectContext.github?.connected ? (
+                    <button type="button" onClick={() => void disconnectProjectSource('github')} disabled={projectContextBusy} className="text-[10.5px] font-semibold text-red-600 hover:underline">Disconnect repository</button>
+                  ) : <span className="text-[10px] text-[var(--m)] flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> Read-only</span>}
+                  <button type="button" onClick={() => void attachGitHubProject()} disabled={projectContextBusy || !githubUrl.trim()}
+                    className="px-3 py-2 rounded-lg bg-[#171717] dark:bg-[#f2eee7] text-white dark:text-[#171717] text-[10.5px] font-bold disabled:opacity-40">
+                    {projectContextBusy ? 'Connecting…' : 'Connect'}
+                  </button>
+                </div>
+              </div>
+
+              {projectContext.local?.connected && (
+                <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-[var(--s2)]">
+                  <FolderOpen className="w-3.5 h-3.5 text-[#b58b00] shrink-0" />
+                  <span className="text-[10.5px] text-[var(--t)] flex-1 truncate">Folder: {projectContext.local.rootName}</span>
+                  <button type="button" onClick={() => void disconnectProjectSource('local')} disabled={projectContextBusy} className="text-[10px] font-semibold text-red-600">Remove</button>
+                </div>
+              )}
+              {projectContext.github?.connected && (
+                <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-[var(--s2)]">
+                  <Github className="w-3.5 h-3.5 shrink-0" />
+                  <span className="text-[10.5px] text-[var(--t)] flex-1 truncate">{projectContext.github.owner}/{projectContext.github.repo} · {projectContext.github.branch || 'default branch'}</span>
+                </div>
+              )}
+              {projectContextError && <p role="alert" className="text-[10.5px] text-red-600 m-0">{projectContextError}</p>}
+              <button type="button" onClick={() => { setProjectMenuOpen(false); setIsAddFilesOpen(true); }} className="w-full flex items-center gap-2 px-2 py-2 rounded-lg text-[11px] text-[var(--m)] hover:bg-[var(--s2)]">
+                <Link2 className="w-3.5 h-3.5" /> Attach files instead
+              </button>
+            </div>
+          )}
 
           {/* Context bridge — same action as extension bridge */}
           <button
