@@ -10,7 +10,6 @@ export const BottomComposer: React.FC = () => {
   const { 
     currentPage, 
     activeResearchId,
-    projects,
     sendMessage,
     isAiGenerating,
     setIsAddFilesOpen, 
