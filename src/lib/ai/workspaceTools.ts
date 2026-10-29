@@ -377,11 +377,11 @@ export async function executeBobWorkspaceTool(
     case 'get_local_project_overview': {
       const api = (window as any).bob;
       if (!api?.conversationProjectStatus || !api?.listConversationProjectFiles) {
-        return { ok: false, available: false, message: 'Local project reading is available in the Bob desktop app. Open Settings → Local project and connect a folder first.' };
+        return { ok: false, available: false, message: 'Local project reading is available in the Bob desktop app. Use the + button to attach a folder to this conversation first.' };
       }
       const status = await api.conversationProjectStatus(projectId);
       if (!status?.local?.connected) {
-        return { ok: false, connected: false, message: 'No local project folder is connected. Open Settings → Local project and choose a folder. I will not open the folder picker without your action.' };
+        return { ok: false, connected: false, message: 'No local folder is attached to this conversation. Use the + button to attach one. I will not open the folder picker without your action.' };
       }
       const listing = await api.listConversationProjectFiles(projectId, {});
       if (!listing?.ok) return { ok: false, connected: true, error: safeText(listing?.error, 300) || 'Could not list project files.' };
