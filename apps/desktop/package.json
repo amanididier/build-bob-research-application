@@ -34,6 +34,8 @@
     "files": [
       "main.cjs",
       "preload.cjs",
+      "localProjectReader.cjs",
+      "githubProjectReader.cjs",
       "bob-logo.ico",
       "bob-logo.png",
       "renderer/**",
