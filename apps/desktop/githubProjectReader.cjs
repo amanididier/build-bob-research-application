@@ -29,7 +29,7 @@ function parseRepositoryUrl(value) {
     throw new Error('Only https://github.com/owner/repository URLs are supported.')
   }
   const parts = url.pathname.split('/').filter(Boolean)
-  if (parts.length < 2 || parts.some(part => part === '.' || part === '..')) {
+  if (parts.length !== 2 || parts.some(part => part === '.' || part === '..')) {
     throw new Error('Use a repository URL like https://github.com/owner/repository.')
   }
   const owner = parts[0]
