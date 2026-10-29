@@ -32,7 +32,7 @@ import {
 } from '../../lib/ai/keyManager';
 import { bobAi } from '../../lib/aiEngine';
 
-type TabId = 'profile' | 'keys' | 'personalization' | 'memory' | 'privacy' | 'project';
+type TabId = 'profile' | 'keys' | 'personalization' | 'memory' | 'privacy';
 
 const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: 'profile', label: 'Profile', icon: User },
