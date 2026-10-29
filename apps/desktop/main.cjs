@@ -955,14 +955,17 @@ function registerIpc() {
     assertLocalProjectRenderer(event)
     const config = readLocalProjectConfig()
     if (!config) return { ok: false, error: 'No local project folder is connected. Choose one in Settings first.' }
-    return { ok: true, ...listProjectFiles(config.rootPath, options || {}) }
+    const relativePath = options && typeof options.relativePath === 'string' ? options.relativePath : undefined
+    return { ok: true, ...listProjectFiles(config.rootPath, { ...(relativePath ? { relativePath } : {}) }) }
   })
 
   ipcMain.handle('bob:localProject:read', (event, relativePath, options = {}) => {
     assertLocalProjectRenderer(event)
     const config = readLocalProjectConfig()
     if (!config) return { ok: false, error: 'No local project folder is connected. Choose one in Settings first.' }
-    return { ok: true, ...readProjectFile(config.rootPath, relativePath, options || {}) }
+    const startLine = options && Number.isInteger(options.startLine) ? Math.max(1, Math.min(options.startLine, 1000000)) : 1
+    const endLine = options && Number.isInteger(options.endLine) ? Math.max(startLine, Math.min(options.endLine, startLine + 199)) : undefined
+    return { ok: true, ...readProjectFile(config.rootPath, relativePath, { startLine, ...(endLine ? { endLine } : {}) }) }
   })
 
   ipcMain.handle('bob:localProject:search', (event, query) => {
