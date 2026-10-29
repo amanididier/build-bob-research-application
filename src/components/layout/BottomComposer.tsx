@@ -41,7 +41,7 @@ export const BottomComposer: React.FC = () => {
     try {
       const status = await bridge.conversationProjectStatus(activeResearchId);
       setProjectContext(status || { connected: false, local: { connected: false }, github: { connected: false }, hasGitHubToken: false });
-      if (status?.github?.connected && !githubUrl) setGithubUrl(status.github.url || '');
+      setGithubUrl(status?.github?.connected ? (status.github.url || '') : '');
     } catch {
       setProjectContextError('Could not load this conversation’s project context.');
     }
