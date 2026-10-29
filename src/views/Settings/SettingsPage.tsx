@@ -14,6 +14,7 @@ import {
   RefreshCw,
   Download,
   Trash2,
+  FolderOpen,
 } from 'lucide-react';
 import {
   getGeminiKey,
@@ -31,8 +32,9 @@ import {
   getGroqKey,
 } from '../../lib/ai/keyManager';
 import { bobAi } from '../../lib/aiEngine';
+import { LocalProjectPanel } from './LocalProjectPanel';
 
-type TabId = 'profile' | 'keys' | 'personalization' | 'memory' | 'privacy';
+type TabId = 'profile' | 'keys' | 'personalization' | 'memory' | 'privacy' | 'project';
 
 const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: 'profile', label: 'Profile', icon: User },
@@ -40,6 +42,7 @@ const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: 'personalization', label: 'Personalization', icon: Sparkles },
   { id: 'memory', label: 'Memory', icon: HardDrive },
   { id: 'privacy', label: 'Privacy & updates', icon: Shield },
+  { id: 'project', label: 'Local project', icon: FolderOpen },
 ];
 
 const TONE_OPTIONS = [
@@ -277,6 +280,9 @@ export const SettingsPage: React.FC = () => {
           {/* Content panel */}
           <div className="flex-1 min-w-0">
             <div className="bg-white dark:bg-[var(--s)] rounded-[20px] border border-neutral-200/80 dark:border-[var(--line)] shadow-sm p-6 md:p-8">
+              {/* LOCAL PROJECT */}
+              {tab === 'project' && <LocalProjectPanel />}
+
               {/* PROFILE */}
               {tab === 'profile' && (
                 <div className="space-y-6 max-w-lg">
