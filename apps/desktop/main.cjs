@@ -6,6 +6,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const os = require('node:os')
 const crypto = require('node:crypto')
+const { listProjectFiles, readProjectFile, searchProjectFiles } = require('./localProjectReader.cjs')
 
 let autoUpdater = null
 try {
@@ -895,7 +896,118 @@ function setupAutoUpdater() {
   })
 }
 
+function getLocalProjectConfigPath() {
+  return path.join(app.getPath('userData'), 'bob-local-project.json')
+}
+
+function readLocalProjectConfig() {
+  try {
+    const configPath = getLocalProjectConfigPath()
+    if (!fs.existsSync(configPath)) return null
+    const parsed = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+    if (!parsed || typeof parsed.rootPath !== 'string') return null
+    const realRoot = fs.realpathSync(parsed.rootPath)
+    if (!fs.statSync(realRoot).isDirectory()) return null
+    return { rootPath: realRoot, connectedAt: parsed.connectedAt || null }
+  } catch {
+    return null
+  }
+}
+
+function assertLocalProjectRenderer(event) {
+  if (!win || win.isDestroyed() || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) {
+    throw new Error('Local project access is available only to Bob’s trusted desktop window.')
+  }
+}
+
+function publicLocalProjectError(error) {
+  const message = error && typeof error.message === 'string' ? error.message : ''
+  const safeMessages = [
+    'No local project folder is connected. Choose a folder in Settings first.',
+    'Invalid project-relative path.',
+    'Only project-relative paths are allowed.',
+    'Path traversal is not allowed.',
+    'That path is excluded from project reading.',
+    'Symbolic links are not followed by Bob.',
+    'The requested path is outside the connected project.',
+    'The requested project path is not a directory.',
+    'This file is excluded from project reading.',
+    'Bob only reads supported text and source files in this phase.',
+    'The requested path is not a file.',
+    'This file is too large for safe reading (limit: 256 KB).',
+    'This file appears to be binary and cannot be read as text.',
+    'Enter at least two characters to search the project.',
+  ]
+  return safeMessages.includes(message) ? message : 'Bob could not read that project content. Check folder permissions and try again.'
+}
+
 function registerIpc() {
+  ipcMain.handle('bob:localProject:status', (event) => {
+    assertLocalProjectRenderer(event)
+    const config = readLocalProjectConfig()
+    return config
+      ? { connected: true, rootName: path.basename(config.rootPath), connectedAt: config.connectedAt, readOnly: true }
+      : { connected: false, readOnly: true }
+  })
+
+  ipcMain.handle('bob:localProject:select', async (event) => {
+    assertLocalProjectRenderer(event)
+    const result = await dialog.showOpenDialog(win, {
+      title: 'Choose a project folder for Bob to read',
+      properties: ['openDirectory']
+    })
+    if (result.canceled || !result.filePaths || !result.filePaths[0]) return { ok: false, canceled: true }
+    const selectedPath = fs.realpathSync(result.filePaths[0])
+    if (!fs.statSync(selectedPath).isDirectory()) throw new Error('Choose a folder, not a file.')
+    const config = { rootPath: selectedPath, connectedAt: new Date().toISOString(), permission: 'read-only' }
+    fs.writeFileSync(getLocalProjectConfigPath(), JSON.stringify(config, null, 2), { encoding: 'utf8', mode: 0o600 })
+    return { ok: true, connected: true, rootName: path.basename(selectedPath), connectedAt: config.connectedAt, readOnly: true }
+  })
+
+  ipcMain.handle('bob:localProject:disconnect', (event) => {
+    assertLocalProjectRenderer(event)
+    try { fs.unlinkSync(getLocalProjectConfigPath()) } catch (error) {
+      if (error.code !== 'ENOENT') throw error
+    }
+    return { ok: true, connected: false, readOnly: true }
+  })
+
+  ipcMain.handle('bob:localProject:list', (event, options = {}) => {
+    assertLocalProjectRenderer(event)
+    const config = readLocalProjectConfig()
+    if (!config) return { ok: false, error: 'No local project folder is connected. Choose one in Settings first.' }
+    const relativePath = options && typeof options.relativePath === 'string' ? options.relativePath : undefined
+    try {
+      return { ok: true, ...listProjectFiles(config.rootPath, { ...(relativePath ? { relativePath } : {}) }) }
+    } catch (error) {
+      return { ok: false, error: publicLocalProjectError(error) }
+    }
+  })
+
+  ipcMain.handle('bob:localProject:read', (event, relativePath, options = {}) => {
+    assertLocalProjectRenderer(event)
+    const config = readLocalProjectConfig()
+    if (!config) return { ok: false, error: 'No local project folder is connected. Choose one in Settings first.' }
+    const startLine = options && Number.isInteger(options.startLine) ? Math.max(1, Math.min(options.startLine, 1000000)) : 1
+    const endLine = options && Number.isInteger(options.endLine) ? Math.max(startLine, Math.min(options.endLine, startLine + 199)) : undefined
+    try {
+      return { ok: true, ...readProjectFile(config.rootPath, relativePath, { startLine, ...(endLine ? { endLine } : {}) }) }
+    } catch (error) {
+      return { ok: false, error: publicLocalProjectError(error) }
+    }
+  })
+
+  ipcMain.handle('bob:localProject:search', (event, query) => {
+    assertLocalProjectRenderer(event)
+    const config = readLocalProjectConfig()
+    if (!config) return { ok: false, error: 'No local project folder is connected. Choose one in Settings first.' }
+    try {
+      return { ok: true, ...searchProjectFiles(config.rootPath, query) }
+    } catch (error) {
+      return { ok: false, error: publicLocalProjectError(error) }
+    }
+  })
+
   ipcMain.handle('bob:workspaceStore:read', () => readCanonicalWorkspaceStore())
   ipcMain.handle('bob:workspaceStore:write', (_event, payload) => {
     if (!payload || typeof payload !== 'object') throw new Error('Missing canonical workspace write payload.')

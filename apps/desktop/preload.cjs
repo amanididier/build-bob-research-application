@@ -3,6 +3,12 @@ const { contextBridge, ipcRenderer } = require('electron')
 contextBridge.exposeInMainWorld('bob', {
   workspaceStoreRead: () => ipcRenderer.invoke('bob:workspaceStore:read'),
   workspaceStoreWrite: (store, expectedRevision) => ipcRenderer.invoke('bob:workspaceStore:write', { store, expectedRevision }),
+  localProjectStatus: () => ipcRenderer.invoke('bob:localProject:status'),
+  selectLocalProjectFolder: () => ipcRenderer.invoke('bob:localProject:select'),
+  disconnectLocalProject: () => ipcRenderer.invoke('bob:localProject:disconnect'),
+  listLocalProjectFiles: (options) => ipcRenderer.invoke('bob:localProject:list', options || {}),
+  readLocalProjectFile: (relativePath, options) => ipcRenderer.invoke('bob:localProject:read', relativePath, options || {}),
+  searchLocalProject: (query) => ipcRenderer.invoke('bob:localProject:search', query),
   get: () => ipcRenderer.invoke('bob:get'),
   setGeminiKey: (key) => ipcRenderer.invoke('bob:setGeminiKey', key),
   setVerifiedModel: (model) => ipcRenderer.invoke('bob:setVerifiedModel', model),
