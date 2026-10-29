@@ -3,7 +3,7 @@
 const API_ROOT = 'https://api.github.com'
 const MAX_TREE_FILES = 1200
 const MAX_FILE_BYTES = 256 * 1024
-const MAX_SEARCH_FILES = 160
+const MAX_SEARCH_FILES = 35
 const MAX_MATCHES = 40
 const TEXT_EXTENSIONS = new Set([
   '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.json', '.md', '.mdx', '.txt',
