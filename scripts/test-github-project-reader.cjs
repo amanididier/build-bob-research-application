@@ -19,7 +19,7 @@ assert.deepEqual(parseRepositoryUrl('https://github.com/owner/repository.git'), 
 assert.throws(() => parseRepositoryUrl('http://github.com/owner/repo'), /Only https/)
 assert.throws(() => parseRepositoryUrl('https://example.com/owner/repo'), /Only https/)
 assert.throws(() => parseRepositoryUrl('https://github.com/owner'), /Use a repository URL/)
-assert.throws(() => parseRepositoryUrl('https://github.com/owner/repo/issues'), /invalid owner|invalid/i)
+assert.throws(() => parseRepositoryUrl('https://github.com/owner/repo/issues'), /Use a repository URL/)
 
 assert.equal(isReadableTextPath('src/index.ts'), true)
 assert.equal(isReadableTextPath('README.md'), true)
