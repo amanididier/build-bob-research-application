@@ -50,6 +50,9 @@ jobs:
       - name: Test local project reader safety boundaries
         run: npm run test:local-project-reader
 
+      - name: Test GitHub project reader safety boundaries
+        run: npm run test:github-project-reader
+
       - name: Test canonical storage and migration
         run: npm run test:canonical-storage
 
@@ -64,6 +67,7 @@ jobs:
           node --check apps/desktop/main.cjs
           node --check apps/desktop/preload.cjs
           node --check apps/desktop/localProjectReader.cjs
+          node --check apps/desktop/githubProjectReader.cjs
 
       - name: TypeScript validation
         run: npm run lint
@@ -144,6 +148,7 @@ jobs:
           node --check chrome-extension/sidepanel.js
           node --check apps/desktop/main.cjs
           node --check apps/desktop/preload.cjs
+          node --check apps/desktop/githubProjectReader.cjs
 
       - name: Install desktop dependencies (retry transient native binary downloads)
         working-directory: apps/desktop
