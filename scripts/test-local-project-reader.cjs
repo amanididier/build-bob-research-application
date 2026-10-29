@@ -26,6 +26,7 @@ try {
   fs.writeFileSync(path.join(root, 'README.md'), '# Test project\n')
   fs.writeFileSync(path.join(root, '.env'), 'GEMINI_API_KEY=must-not-be-read\n')
   fs.writeFileSync(path.join(root, '.env.example'), 'PUBLIC_URL=https://example.test\n')
+  fs.writeFileSync(path.join(root, 'credentials.json'), '{"token":"must-not-be-read"}\n')
   fs.writeFileSync(path.join(root, 'node_modules', 'ignored-package', 'index.js'), 'secret package content\n')
   fs.writeFileSync(path.join(root, 'large.ts'), 'x'.repeat(300 * 1024))
 
@@ -35,6 +36,7 @@ try {
   assert(paths.includes('README.md'), 'README should be listed')
   assert(paths.includes('.env.example'), 'safe environment template should be listed')
   assert(!paths.includes('.env'), 'real environment file must be excluded')
+  assert(!paths.includes('credentials.json'), 'credential files must be excluded')
   assert(!paths.some((file) => file.includes('node_modules')), 'dependency files must be excluded')
   assert(!paths.includes('large.ts'), 'files over the size limit must not be listed')
   assert.equal(isIgnoredRelativePath('src/.env'), true)
