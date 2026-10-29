@@ -1,12 +1,13 @@
 // Bob Research Companion - Desktop Main Process
 // Bundles modern React/Vite app with native auto-updates and real Bob mascot icon.
-const { app, BrowserWindow, shell, ipcMain, session, dialog } = require('electron')
+const { app, BrowserWindow, shell, ipcMain, session, dialog, safeStorage } = require('electron')
 const http = require('node:http')
 const fs = require('node:fs')
 const path = require('node:path')
 const os = require('node:os')
 const crypto = require('node:crypto')
 const { listProjectFiles, readProjectFile, searchProjectFiles } = require('./localProjectReader.cjs')
+const githubProjectReader = require('./githubProjectReader.cjs')
 
 let autoUpdater = null
 try {
@@ -914,6 +915,92 @@ function readLocalProjectConfig() {
   }
 }
 
+function getConversationProjectConfigPath() {
+  return path.join(app.getPath('userData'), 'bob-conversation-projects.json')
+}
+
+function readConversationProjectConfigs() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(getConversationProjectConfigPath(), 'utf8'))
+    return parsed && typeof parsed === 'object' && parsed.projects && typeof parsed.projects === 'object' ? parsed : { projects: {} }
+  } catch {
+    return { projects: {} }
+  }
+}
+
+function writeConversationProjectConfigs(config) {
+  const filePath = getConversationProjectConfigPath()
+  const tempPath = filePath + '.tmp'
+  fs.writeFileSync(tempPath, JSON.stringify(config, null, 2), { encoding: 'utf8', mode: 0o600 })
+  fs.renameSync(tempPath, filePath)
+}
+
+function normalizeConversationId(value) {
+  const id = String(value || '').trim()
+  if (!/^[A-Za-z0-9_-]{1,160}$/.test(id)) throw new Error('Invalid conversation identifier.')
+  return id
+}
+
+function getConversationProject(projectId) {
+  const id = normalizeConversationId(projectId)
+  const config = readConversationProjectConfigs()
+  return config.projects[id] || null
+}
+
+function updateConversationProject(projectId, update) {
+  const id = normalizeConversationId(projectId)
+  const config = readConversationProjectConfigs()
+  const current = config.projects[id] && typeof config.projects[id] === 'object' ? config.projects[id] : {}
+  config.projects[id] = { ...current, ...update, updatedAt: new Date().toISOString() }
+  writeConversationProjectConfigs(config)
+  return config.projects[id]
+}
+
+function readGitHubToken() {
+  try {
+    const tokenPath = path.join(app.getPath('userData'), 'bob-github-token.enc')
+    if (!fs.existsSync(tokenPath) || !safeStorage.isEncryptionAvailable()) return ''
+    return safeStorage.decryptString(fs.readFileSync(tokenPath))
+  } catch {
+    return ''
+  }
+}
+
+function saveGitHubToken(token) {
+  const value = String(token || '').trim()
+  const tokenPath = path.join(app.getPath('userData'), 'bob-github-token.enc')
+  if (!value) {
+    try { fs.unlinkSync(tokenPath) } catch (error) { if (error.code !== 'ENOENT') throw error }
+    return { ok: true, hasToken: false }
+  }
+  if (!safeStorage.isEncryptionAvailable()) {
+    return { ok: false, error: 'Secure operating-system storage is unavailable, so Bob will not save this GitHub token.' }
+  }
+  fs.writeFileSync(tokenPath, safeStorage.encryptString(value), { mode: 0o600 })
+  return { ok: true, hasToken: true }
+}
+
+function publicGitHubProjectError(error) {
+  const message = error && typeof error.message === 'string' ? error.message : ''
+  const safeMessages = [
+    'Enter a valid GitHub repository URL.',
+    'Only https://github.com/owner/repository URLs are supported.',
+    'Use a repository URL like https://github.com/owner/repository.',
+    'That repository URL contains an invalid owner or repository name.',
+    'Repository or file not found, or the connected GitHub account cannot access it.',
+    'GitHub API rate limit reached. Connect a read-only GitHub token or try again later.',
+    'GitHub denied access. Check the repository visibility and read-only token permissions.',
+    'Use a valid repository-relative file path.',
+    'This file is excluded from GitHub project reading.',
+    'File is not in the readable repository file list or exceeds the size limit.',
+    'GitHub did not return a readable text file.',
+    'This file appears to be binary and cannot be read as text.',
+    'Enter at least two characters to search the GitHub project.',
+  ]
+  if (safeMessages.includes(message) || /^GitHub request failed with status \d+\.$/.test(message)) return message
+  return 'Bob could not read that GitHub repository. Check the URL, repository access, and network connection.'
+}
+
 function assertLocalProjectRenderer(event) {
   if (!win || win.isDestroyed() || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) {
     throw new Error('Local project access is available only to Bob’s trusted desktop window.')
@@ -1006,6 +1093,159 @@ function registerIpc() {
     } catch (error) {
       return { ok: false, error: publicLocalProjectError(error) }
     }
+  })
+
+  ipcMain.handle('bob:conversationProject:status', (event, projectId) => {
+    assertLocalProjectRenderer(event)
+    const entry = getConversationProject(projectId)
+    return {
+      connected: Boolean(entry && (entry.rootPath || entry.github)),
+      local: entry && entry.rootPath ? { connected: true, rootName: path.basename(entry.rootPath) } : { connected: false },
+      github: entry && entry.github ? { connected: true, url: entry.github.url, owner: entry.github.owner, repo: entry.github.repo, branch: entry.github.branch || null, private: entry.github.private === true } : { connected: false },
+      hasGitHubToken: Boolean(readGitHubToken()),
+      readOnly: true,
+    }
+  })
+
+  ipcMain.handle('bob:conversationProject:selectLocal', async (event, projectId) => {
+    assertLocalProjectRenderer(event)
+    const id = normalizeConversationId(projectId)
+    const result = await dialog.showOpenDialog(win, {
+      title: 'Attach a project folder to this conversation',
+      properties: ['openDirectory'],
+    })
+    if (result.canceled || !result.filePaths || !result.filePaths[0]) return { ok: false, canceled: true }
+    const selectedPath = fs.realpathSync(result.filePaths[0])
+    if (!fs.statSync(selectedPath).isDirectory()) return { ok: false, error: 'Choose a folder, not a file.' }
+    updateConversationProject(id, { rootPath: selectedPath, localAttachedAt: new Date().toISOString() })
+    return { ok: true, connected: true, rootName: path.basename(selectedPath), readOnly: true }
+  })
+
+  ipcMain.handle('bob:conversationProject:disconnectLocal', (event, projectId) => {
+    assertLocalProjectRenderer(event)
+    const id = normalizeConversationId(projectId)
+    const config = readConversationProjectConfigs()
+    const entry = config.projects[id]
+    if (entry) {
+      delete entry.rootPath
+      delete entry.localAttachedAt
+      if (!entry.github) delete config.projects[id]
+      writeConversationProjectConfigs(config)
+    }
+    return { ok: true, readOnly: true }
+  })
+
+  ipcMain.handle('bob:conversationProject:listLocal', (event, projectId, options = {}) => {
+    assertLocalProjectRenderer(event)
+    const entry = getConversationProject(projectId)
+    if (!entry || !entry.rootPath) return { ok: false, error: 'No local folder is attached to this conversation.' }
+    try {
+      const relativePath = options && typeof options.relativePath === 'string' ? options.relativePath : undefined
+      return { ok: true, ...listProjectFiles(entry.rootPath, { ...(relativePath ? { relativePath } : {}) }) }
+    } catch (error) {
+      return { ok: false, error: publicLocalProjectError(error) }
+    }
+  })
+
+  ipcMain.handle('bob:conversationProject:readLocal', (event, projectId, relativePath, options = {}) => {
+    assertLocalProjectRenderer(event)
+    const entry = getConversationProject(projectId)
+    if (!entry || !entry.rootPath) return { ok: false, error: 'No local folder is attached to this conversation.' }
+    const startLine = options && Number.isInteger(options.startLine) ? Math.max(1, Math.min(options.startLine, 1000000)) : 1
+    const endLine = options && Number.isInteger(options.endLine) ? Math.max(startLine, Math.min(options.endLine, startLine + 199)) : undefined
+    try {
+      return { ok: true, ...readProjectFile(entry.rootPath, relativePath, { startLine, ...(endLine ? { endLine } : {}) }) }
+    } catch (error) {
+      return { ok: false, error: publicLocalProjectError(error) }
+    }
+  })
+
+  ipcMain.handle('bob:conversationProject:searchLocal', (event, projectId, query) => {
+    assertLocalProjectRenderer(event)
+    const entry = getConversationProject(projectId)
+    if (!entry || !entry.rootPath) return { ok: false, error: 'No local folder is attached to this conversation.' }
+    try {
+      return { ok: true, ...searchProjectFiles(entry.rootPath, query) }
+    } catch (error) {
+      return { ok: false, error: publicLocalProjectError(error) }
+    }
+  })
+
+  ipcMain.handle('bob:conversationProject:attachGitHub', async (event, projectId, payload = {}) => {
+    assertLocalProjectRenderer(event)
+    const id = normalizeConversationId(projectId)
+    const url = String(payload.url || '').trim()
+    const token = String(payload.token || '').trim()
+    if (token) {
+      const tokenResult = saveGitHubToken(token)
+      if (!tokenResult.ok) return tokenResult
+    }
+    try {
+      const parsed = githubProjectReader.parseRepositoryUrl(url)
+      const repo = await githubProjectReader.listProjectFiles({ url }, readGitHubToken())
+      updateConversationProject(id, {
+        github: { url, owner: parsed.owner, repo: parsed.repo, branch: repo.branch, private: repo.private, htmlUrl: repo.htmlUrl, attachedAt: new Date().toISOString() },
+      })
+      return { ok: true, connected: true, github: { url, owner: repo.owner, repo: repo.repo, branch: repo.branch, private: repo.private, htmlUrl: repo.htmlUrl }, fileCount: repo.count, readOnly: true }
+    } catch (error) {
+      return { ok: false, error: publicGitHubProjectError(error) }
+    }
+  })
+
+  ipcMain.handle('bob:conversationProject:disconnectGitHub', (event, projectId) => {
+    assertLocalProjectRenderer(event)
+    const id = normalizeConversationId(projectId)
+    const config = readConversationProjectConfigs()
+    const entry = config.projects[id]
+    if (entry) {
+      delete entry.github
+      if (!entry.rootPath) delete config.projects[id]
+      writeConversationProjectConfigs(config)
+    }
+    return { ok: true, readOnly: true }
+  })
+
+  ipcMain.handle('bob:conversationProject:githubList', async (event, projectId, relativePath = '') => {
+    assertLocalProjectRenderer(event)
+    const entry = getConversationProject(projectId)
+    if (!entry || !entry.github) return { ok: false, error: 'No GitHub repository is attached to this conversation.' }
+    try {
+      return { ok: true, ...await githubProjectReader.listProjectFiles(entry.github, readGitHubToken(), String(relativePath || '')) }
+    } catch (error) {
+      return { ok: false, error: publicGitHubProjectError(error) }
+    }
+  })
+
+  ipcMain.handle('bob:conversationProject:githubRead', async (event, projectId, relativePath, options = {}) => {
+    assertLocalProjectRenderer(event)
+    const entry = getConversationProject(projectId)
+    if (!entry || !entry.github) return { ok: false, error: 'No GitHub repository is attached to this conversation.' }
+    try {
+      return { ok: true, ...await githubProjectReader.readProjectFile(entry.github, readGitHubToken(), relativePath, options) }
+    } catch (error) {
+      return { ok: false, error: publicGitHubProjectError(error) }
+    }
+  })
+
+  ipcMain.handle('bob:conversationProject:githubSearch', async (event, projectId, query) => {
+    assertLocalProjectRenderer(event)
+    const entry = getConversationProject(projectId)
+    if (!entry || !entry.github) return { ok: false, error: 'No GitHub repository is attached to this conversation.' }
+    try {
+      return { ok: true, ...await githubProjectReader.searchProjectFiles(entry.github, readGitHubToken(), query) }
+    } catch (error) {
+      return { ok: false, error: publicGitHubProjectError(error) }
+    }
+  })
+
+  ipcMain.handle('bob:githubToken:status', (event) => {
+    assertLocalProjectRenderer(event)
+    return { available: safeStorage.isEncryptionAvailable(), hasToken: Boolean(readGitHubToken()) }
+  })
+
+  ipcMain.handle('bob:githubToken:clear', (event) => {
+    assertLocalProjectRenderer(event)
+    return saveGitHubToken('')
   })
 
   ipcMain.handle('bob:workspaceStore:read', () => readCanonicalWorkspaceStore())
