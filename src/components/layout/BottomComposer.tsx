@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Plus, Sparkles, Mic, MicOff, CircleArrowUp, Volume2, Square, Chrome, Phone, AlertCircle, Check, Hand, Cable } from 'lucide-react';
+import { Plus, Sparkles, Mic, MicOff, CircleArrowUp, Volume2, Square, Chrome, Phone, AlertCircle, Check, Hand, Cable, FolderOpen, Github, X, Link2, ShieldCheck } from 'lucide-react';
 import { useVoiceStore } from '../../store/useVoiceStore';
 import { voiceController } from '../../lib/voice/voiceController';
 import { VoiceCallOverlay, VoiceWaveform } from '../voice/VoiceCallOverlay';
@@ -9,6 +9,8 @@ import { ModelInstallCard } from '../voice/ModelInstallCard';
 export const BottomComposer: React.FC = () => {
   const { 
     currentPage, 
+    activeResearchId,
+    projects,
     sendMessage,
     isAiGenerating,
     setIsAddFilesOpen, 
@@ -23,7 +25,93 @@ export const BottomComposer: React.FC = () => {
 
   const [prompt, setPrompt] = useState('');
   const [launcherToast, setLauncherToast] = useState<string | null>(null);
+  const [projectMenuOpen, setProjectMenuOpen] = useState(false);
+  const [projectContext, setProjectContext] = useState<any>({ connected: false, local: { connected: false }, github: { connected: false }, hasGitHubToken: false });
+  const [githubUrl, setGithubUrl] = useState('');
+  const [githubToken, setGithubToken] = useState('');
+  const [projectContextBusy, setProjectContextBusy] = useState(false);
+  const [projectContextError, setProjectContextError] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const refreshProjectContext = useCallback(async () => {
+    const bridge = typeof window !== 'undefined' ? (window as any).bob : null;
+    if (!activeResearchId || !bridge?.conversationProjectStatus) {
+      setProjectContext({ connected: false, local: { connected: false }, github: { connected: false }, hasGitHubToken: false });
+      return;
+    }
+    try {
+      const status = await bridge.conversationProjectStatus(activeResearchId);
+      setProjectContext(status || { connected: false, local: { connected: false }, github: { connected: false }, hasGitHubToken: false });
+      if (status?.github?.connected && !githubUrl) setGithubUrl(status.github.url || '');
+    } catch {
+      setProjectContextError('Could not load this conversation’s project context.');
+    }
+  }, [activeResearchId]);
+
+  useEffect(() => { void refreshProjectContext(); }, [refreshProjectContext]);
+
+  const attachLocalProject = async () => {
+    const bridge = typeof window !== 'undefined' ? (window as any).bob : null;
+    if (!activeResearchId || !bridge?.selectConversationProjectFolder) {
+      setProjectContextError('Project folders can be attached in the installed Bob desktop app.');
+      return;
+    }
+    setProjectContextBusy(true);
+    setProjectContextError('');
+    try {
+      const result = await bridge.selectConversationProjectFolder(activeResearchId);
+      if (result?.canceled) return;
+      if (!result?.ok) throw new Error(result?.error || 'Could not attach that folder.');
+      await refreshProjectContext();
+      setProjectMenuOpen(false);
+    } catch (error: any) {
+      setProjectContextError(error?.message || 'Could not attach that folder.');
+    } finally {
+      setProjectContextBusy(false);
+    }
+  };
+
+  const attachGitHubProject = async () => {
+    const bridge = typeof window !== 'undefined' ? (window as any).bob : null;
+    if (!activeResearchId || !bridge?.attachGitHubRepository) {
+      setProjectContextError('GitHub project access is available in the installed Bob desktop app.');
+      return;
+    }
+    if (!githubUrl.trim()) {
+      setProjectContextError('Paste a GitHub repository URL first.');
+      return;
+    }
+    setProjectContextBusy(true);
+    setProjectContextError('');
+    try {
+      const result = await bridge.attachGitHubRepository(activeResearchId, { url: githubUrl.trim(), token: githubToken.trim() });
+      if (!result?.ok) throw new Error(result?.error || 'Could not connect that repository.');
+      setGithubToken('');
+      await refreshProjectContext();
+      setProjectMenuOpen(false);
+    } catch (error: any) {
+      setProjectContextError(error?.message || 'Could not connect that repository.');
+    } finally {
+      setProjectContextBusy(false);
+    }
+  };
+
+  const disconnectProjectSource = async (source: 'local' | 'github') => {
+    const bridge = typeof window !== 'undefined' ? (window as any).bob : null;
+    if (!activeResearchId) return;
+    setProjectContextBusy(true);
+    setProjectContextError('');
+    try {
+      if (source === 'local') await bridge?.disconnectConversationProjectFolder?.(activeResearchId);
+      else await bridge?.disconnectGitHubRepository?.(activeResearchId);
+      await refreshProjectContext();
+    } catch (error: any) {
+      setProjectContextError(error?.message || 'Could not disconnect project context.');
+    } finally {
+      setProjectContextBusy(false);
+    }
+  };
+
 
   const {
     voiceState,
