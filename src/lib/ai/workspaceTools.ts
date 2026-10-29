@@ -198,7 +198,7 @@ function hasWorkspaceReadIntent(query: string): boolean {
 }
 
 function hasLocalProjectReadIntent(query: string): boolean {
-  return /\b(local project|project folder|codebase|code base|source code|repository files|repo files|file path|in the code|in this code|read (?:the )?(?:file|folder|code)|search (?:the )?(?:code|codebase|project files)|where is .*defined|find (?:the )?(?:function|class|symbol|file))\b/i.test(query);
+  return /\b(local project|project folder|codebase|code base|source code|repository files|repo files|file path|my code|this code|in the code|in this code|in this repo|in the repo|read (?:the )?(?:file|folder|code)|search (?:the )?(?:code|codebase|project files)|where is .*defined|find (?:the )?(?:function|class|symbol|file)|(?:src|app|lib|apps|packages|components|pages|public)\/[\w./-]+)/i.test(query);
 }
 
 /** Tools are offered only for workspace-related requests, not ordinary conversation. */
