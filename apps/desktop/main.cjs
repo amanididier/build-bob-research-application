@@ -920,6 +920,27 @@ function assertLocalProjectRenderer(event) {
   }
 }
 
+function publicLocalProjectError(error) {
+  const message = error && typeof error.message === 'string' ? error.message : ''
+  const safeMessages = [
+    'No local project folder is connected. Choose a folder in Settings first.',
+    'Invalid project-relative path.',
+    'Only project-relative paths are allowed.',
+    'Path traversal is not allowed.',
+    'That path is excluded from project reading.',
+    'Symbolic links are not followed by Bob.',
+    'The requested path is outside the connected project.',
+    'The requested project path is not a directory.',
+    'This file is excluded from project reading.',
+    'Bob only reads supported text and source files in this phase.',
+    'The requested path is not a file.',
+    'This file is too large for safe reading (limit: 256 KB).',
+    'This file appears to be binary and cannot be read as text.',
+    'Enter at least two characters to search the project.',
+  ]
+  return safeMessages.includes(message) ? message : 'Bob could not read that project content. Check folder permissions and try again.'
+}
+
 function registerIpc() {
   ipcMain.handle('bob:localProject:status', (event) => {
     assertLocalProjectRenderer(event)
@@ -956,7 +977,11 @@ function registerIpc() {
     const config = readLocalProjectConfig()
     if (!config) return { ok: false, error: 'No local project folder is connected. Choose one in Settings first.' }
     const relativePath = options && typeof options.relativePath === 'string' ? options.relativePath : undefined
-    return { ok: true, ...listProjectFiles(config.rootPath, { ...(relativePath ? { relativePath } : {}) }) }
+    try {
+      return { ok: true, ...listProjectFiles(config.rootPath, { ...(relativePath ? { relativePath } : {}) }) }
+    } catch (error) {
+      return { ok: false, error: publicLocalProjectError(error) }
+    }
   })
 
   ipcMain.handle('bob:localProject:read', (event, relativePath, options = {}) => {
@@ -965,14 +990,22 @@ function registerIpc() {
     if (!config) return { ok: false, error: 'No local project folder is connected. Choose one in Settings first.' }
     const startLine = options && Number.isInteger(options.startLine) ? Math.max(1, Math.min(options.startLine, 1000000)) : 1
     const endLine = options && Number.isInteger(options.endLine) ? Math.max(startLine, Math.min(options.endLine, startLine + 199)) : undefined
-    return { ok: true, ...readProjectFile(config.rootPath, relativePath, { startLine, ...(endLine ? { endLine } : {}) }) }
+    try {
+      return { ok: true, ...readProjectFile(config.rootPath, relativePath, { startLine, ...(endLine ? { endLine } : {}) }) }
+    } catch (error) {
+      return { ok: false, error: publicLocalProjectError(error) }
+    }
   })
 
   ipcMain.handle('bob:localProject:search', (event, query) => {
     assertLocalProjectRenderer(event)
     const config = readLocalProjectConfig()
     if (!config) return { ok: false, error: 'No local project folder is connected. Choose one in Settings first.' }
-    return { ok: true, ...searchProjectFiles(config.rootPath, query) }
+    try {
+      return { ok: true, ...searchProjectFiles(config.rootPath, query) }
+    } catch (error) {
+      return { ok: false, error: publicLocalProjectError(error) }
+    }
   })
 
   ipcMain.handle('bob:workspaceStore:read', () => readCanonicalWorkspaceStore())
