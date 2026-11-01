@@ -93,24 +93,42 @@ export const SettingsPage: React.FC = () => {
   const [localOnly, setLocalOnly] = useState(() => localStorage.getItem('bob_local_only') !== '0');
   const [saveChats, setSaveChats] = useState(() => localStorage.getItem('bob_save_chats') !== '0');
 
-  // Updates
-  const [installedVersion] = useState('1.0.95');
+  // Updates — always read the installed version from the native desktop bridge.
+  const [installedVersion, setInstalledVersion] = useState('Detecting…');
   const [updaterState, setUpdaterState] = useState<{
     status: string;
     version?: string;
+    percent?: number;
     message?: string;
-  }>({ status: 'idle', version: '1.0.95' });
+  }>({ status: 'idle', message: 'Check for the latest Bob release.' });
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
   }, []);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && (window as any).bob?.getAppInfo) {
-      (window as any).bob.getAppInfo().then((info: any) => {
-        if (info?.version) setUpdaterState((p) => ({ ...p, version: info.version }));
+    const desktop = (window as any).bob;
+    if (!desktop) {
+      setInstalledVersion('Web version');
+      return;
+    }
+    let unsubscribe: (() => void) | undefined;
+    if (typeof desktop.info === 'function') {
+      desktop.info().then((info: any) => {
+        if (info?.version) setInstalledVersion(String(info.version));
+      }).catch(() => setInstalledVersion('Unknown'));
+    }
+    if (typeof desktop.onUpdateStatus === 'function') {
+      unsubscribe = desktop.onUpdateStatus((status: any) => {
+        if (status) setUpdaterState((previous) => ({ ...previous, ...status }));
+      });
+    }
+    if (typeof desktop.getUpdateState === 'function') {
+      desktop.getUpdateState().then((status: any) => {
+        if (status) setUpdaterState((previous) => ({ ...previous, ...status }));
       }).catch(() => {});
     }
+    return () => unsubscribe?.();
   }, []);
 
   const saveProfile = () => {
@@ -212,32 +230,39 @@ export const SettingsPage: React.FC = () => {
   };
 
   const checkUpdates = async () => {
-    setUpdaterState({ status: 'checking', message: 'Checking…' });
-    if ((window as any).bob?.checkForUpdates) {
-      try {
-        const res = await (window as any).bob.checkForUpdates();
-        setUpdaterState(res || { status: 'latest', message: 'You’re up to date.' });
-      } catch {
-        setUpdaterState({ status: 'error', message: 'Could not check for updates.' });
-      }
+    const desktop = (window as any).bob;
+    if (!desktop?.checkForUpdates) {
+      setUpdaterState({ status: 'error', message: 'Open Bob Desktop to install application updates.' });
       return;
     }
+    setUpdaterState((previous) => ({ ...previous, status: 'checking', message: 'Checking GitHub Releases…' }));
     try {
-      const response = await fetch(
-        'https://api.github.com/repos/amanididier/build-bob-research-application/releases/latest',
-        { headers: { Accept: 'application/vnd.github+json' } }
-      );
-      const release = await response.json();
-      const latest = String(release.tag_name || '').replace(/^v/, '');
-      if (!latest) throw new Error('No version');
-      setUpdaterState({
-        status: latest === installedVersion ? 'latest' : 'available',
-        version: latest,
-        message: latest === installedVersion ? 'You’re on the latest version.' : `Version ${latest} is available.`,
-      });
-    } catch {
-      setUpdaterState({ status: 'error', message: 'Could not reach update server.' });
+      const result = await desktop.checkForUpdates();
+      if (result?.status) setUpdaterState((previous) => ({ ...previous, ...result }));
+    } catch (error: any) {
+      setUpdaterState((previous) => ({
+        ...previous,
+        status: 'error',
+        message: error?.message || 'Could not check for updates.',
+      }));
     }
+  };
+
+  const downloadUpdate = async () => {
+    const desktop = (window as any).bob;
+    if (!desktop?.downloadUpdate) return;
+    try {
+      setUpdaterState((previous) => ({ ...previous, status: 'downloading', percent: 0, message: 'Starting download…' }));
+      await desktop.downloadUpdate();
+    } catch (error: any) {
+      setUpdaterState((previous) => ({ ...previous, status: 'error', message: error?.message || 'Download failed.' }));
+    }
+  };
+
+  const installUpdate = async () => {
+    const desktop = (window as any).bob;
+    if (!desktop?.installUpdate) return;
+    await desktop.installUpdate();
   };
 
   const storedKey = getGeminiKey() || getGroqKey();
@@ -624,26 +649,47 @@ export const SettingsPage: React.FC = () => {
                   ))}
 
                   <div className="pt-6 border-t border-neutral-200 dark:border-[var(--line)]">
-                    <h3 className="text-[15px] font-semibold m-0 text-neutral-900 dark:text-white">Updates</h3>
-                    <p className="text-[13px] text-neutral-500 mt-1 m-0">
-                      Installed version{' '}
-                      <span className="font-semibold text-neutral-800 dark:text-white">
-                        {updaterState.version || installedVersion}
-                      </span>
-                    </p>
-                    {updaterState.message && (
-                      <p className="text-[12px] text-neutral-500 mt-2 m-0">{updaterState.message}</p>
-                    )}
-                    <button
-                      type="button"
-                      onClick={checkUpdates}
-                      className="mt-4 h-10 px-4 rounded-full border border-neutral-200 dark:border-[var(--line)] text-[13px] font-semibold inline-flex items-center gap-2 hover:bg-neutral-50 dark:hover:bg-[var(--s2)]"
-                    >
-                      <RefreshCw
-                        className={`w-3.5 h-3.5 ${updaterState.status === 'checking' ? 'animate-spin' : ''}`}
-                      />
-                      Check for updates
-                    </button>
+                    <div className="rounded-2xl border border-neutral-200 dark:border-[var(--line)] bg-neutral-50 dark:bg-[var(--s2)] p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <h3 className="text-[15px] font-semibold m-0 text-neutral-900 dark:text-white">Bob updates</h3>
+                        <span className="text-[11px] font-semibold text-neutral-500 tabular-nums">v{installedVersion}</span>
+                      </div>
+                      <p className="text-[12px] text-neutral-500 mt-1 mb-0">
+                        {updaterState.message || 'Keep Bob up to date with the latest improvements.'}
+                      </p>
+                      {updaterState.status === 'downloading' && (
+                        <div className="mt-3">
+                          <div className="flex justify-between text-[11px] text-neutral-500 mb-1">
+                            <span>Downloading update</span>
+                            <span className="tabular-nums">{Math.max(0, Math.min(100, updaterState.percent || 0))}%</span>
+                          </div>
+                          <div className="h-1.5 rounded-full bg-neutral-200 dark:bg-neutral-700 overflow-hidden">
+                            <div className="h-full rounded-full bg-[#f4bc18] transition-all" style={{ width: `${Math.max(0, Math.min(100, updaterState.percent || 0))}%` }} />
+                          </div>
+                        </div>
+                      )}
+                      <div className="flex flex-wrap gap-2 mt-4">
+                        <button
+                          type="button"
+                          onClick={checkUpdates}
+                          disabled={updaterState.status === 'checking' || updaterState.status === 'downloading'}
+                          className="h-9 px-4 rounded-full border border-neutral-200 dark:border-[var(--line)] text-[12px] font-semibold inline-flex items-center gap-2 hover:bg-white dark:hover:bg-[var(--s)] disabled:opacity-50"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${updaterState.status === 'checking' ? 'animate-spin' : ''}`} />
+                          Check for updates
+                        </button>
+                        {updaterState.status === 'available' && (
+                          <button type="button" onClick={downloadUpdate} className="h-9 px-4 rounded-full bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-[12px] font-semibold inline-flex items-center gap-2">
+                            <Download className="w-3.5 h-3.5" /> Download update
+                          </button>
+                        )}
+                        {updaterState.status === 'ready' && (
+                          <button type="button" onClick={installUpdate} className="h-9 px-4 rounded-full bg-[#f4bc18] text-neutral-900 text-[12px] font-semibold">
+                            Restart & install
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
