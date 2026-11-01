@@ -62,3 +62,24 @@ contextBridge.exposeInMainWorld('bob', {
   close: () => ipcRenderer.invoke('bob:close'),
   isMaximized: () => ipcRenderer.invoke('bob:isMaximized'),
 })
+
+contextBridge.exposeInMainWorld('bobAssistant',{
+ getState:()=>ipcRenderer.invoke('assistant:get-state'),
+ hide:()=>ipcRenderer.invoke('assistant:hide'),
+ newChat:()=>ipcRenderer.invoke('assistant:new-chat'),
+ openChat:id=>ipcRenderer.invoke('assistant:open-chat',id),
+ saveSettings:value=>ipcRenderer.invoke('assistant:save-settings',value),
+ send:value=>ipcRenderer.invoke('assistant:send',value),
+ onChunk:callback=>ipcRenderer.on('assistant:chunk',(_event,value)=>callback(value))
+})
+
+contextBridge.exposeInMainWorld('bobDesktopUpdates',{
+ check:()=>ipcRenderer.invoke('bob:checkUpdates'),
+ state:()=>ipcRenderer.invoke('bob:getUpdateState'),
+ download:()=>ipcRenderer.invoke('bob:downloadUpdate'),
+ install:()=>ipcRenderer.invoke('bob:installUpdate')
+})
+
+contextBridge.exposeInMainWorld('bobAssistantMotion',{
+ onShown:callback=>ipcRenderer.on('assistant:animate-in',()=>callback())
+})
