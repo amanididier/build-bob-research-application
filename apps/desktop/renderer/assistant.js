@@ -1,17 +1,48 @@
-
-const $=id=>document.getElementById(id),api=window.bobAssistant,updates=window.bobDesktopUpdates,motion=window.bobAssistantMotion;let state,requestId=null
-const active=()=>state.chats.items.find(c=>c.id===state.chats.activeId)
-function toast(t){$('toast').textContent=t;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),2300)}
-function render(){const h=$('history');h.replaceChildren();for(const c of state.chats.items){const b=document.createElement('button');b.textContent=c.title||'New chat';b.className=c.id===state.chats.activeId?'active':'';b.onclick=async()=>{state=await api.openChat(c.id);render()};h.append(b)}const c=active(),m=$('messages');m.replaceChildren();$('welcome').classList.toggle('hidden',!!c?.messages?.length);for(const x of c?.messages||[]){const d=document.createElement('div');d.className='message '+x.role;const s=document.createElement('span');s.textContent=x.content||'';d.append(s);m.append(d)}$('chat').scrollTop=$('chat').scrollHeight;const p=state.settings.provider;$('providerLabel').textContent=p;$('status').textContent=state.providers[p]?.hasKey?'Connected':'Set up an AI key'}
-function openSettings(){const c=state.settings;$('settings').classList.remove('hidden');$('chat').style.visibility='hidden';$('form').style.visibility='hidden';$('provider').value=c.provider;$('model').value=c.model;$('base').value=c.baseUrl;$('baseLabel').style.display=['openai','openai-compatible'].includes(c.provider)?'':'none';$('key').value='';$('keyStatus').textContent=state.providers[c.provider]?.hasKey?'Key saved securely':'No key saved';$('note').textContent=state.secureStorageAvailable?'Keys are encrypted by Windows.':'Secure storage unavailable; cannot save keys.';$('save').disabled=!state.secureStorageAvailable}
-function closeSettings(){$('settings').classList.add('hidden');$('chat').style.visibility='';$('form').style.visibility=''}
-async function save(){try{const p={provider:$('provider').value,model:$('model').value.trim(),baseUrl:$('base').value.trim()};if($('key').value.trim())p.apiKey=$('key').value.trim();state=await api.saveSettings(p);$('key').value='';render();openSettings();toast('Provider saved')}catch(e){toast(e.message)}}
-function resize(){const t=$('prompt');t.style.height='auto';t.style.height=Math.min(t.scrollHeight,180)+'px'}
-async function send(t){if(requestId||!t.trim())return;requestId=Date.now().toString(36);const id=requestId;$('prompt').value='';resize();if(!active())state=await api.newChat();active().messages.push({role:'user',content:t.trim()},{id,role:'assistant',content:''});render();$('send').disabled=true;try{const r=await api.send({text:t.trim(),requestId:id});state=r.state||state;if(!r.ok)toast(r.error)}catch(e){toast(e.message)}finally{requestId=null;$('send').disabled=false;render()}}
-$('form').onsubmit=e=>{e.preventDefault();send($('prompt').value)};$('prompt').oninput=resize;$('prompt').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('form').requestSubmit()}}
-$('new').onclick=async()=>{state=await api.newChat();closeSettings();render()};$('settingsBtn').onclick=$('settingsTop').onclick=openSettings;$('back').onclick=closeSettings;$('hide').onclick=()=>api.hide();$('menu').onclick=()=>$('side').classList.toggle('closed')
-$('provider').onchange=()=>{const p=$('provider').value;$('baseLabel').style.display=['openai','openai-compatible'].includes(p)?'':'none';$('model').value=({gemini:'gemini-3.8-flash',openai:'gpt-4.1-mini',anthropic:'claude-sonnet-4-20250514','openai-compatible':''})[p];$('key').value='';$('keyStatus').textContent=state.providers[p]?.hasKey?'Key saved securely':'No key saved'}
-$('save').onclick=save;$('test').onclick=async()=>{await save();closeSettings();await send('Reply with exactly: Connection successful.');openSettings()};$('checkUpdates').onclick=async()=>{ $('updateStatus').textContent='Checking for updates…';try{await updates.check();setTimeout(async()=>{const s=await updates.state();$('updateStatus').textContent=s.message||s.status;$('downloadUpdate').classList.toggle('hidden',s.status!=='available');$('installUpdate').classList.toggle('hidden',s.status!=='ready')},1800)}catch(e){$('updateStatus').textContent=e.message}};$('downloadUpdate').onclick=async()=>{await updates.download();$('updateStatus').textContent='Downloading update…';const timer=setInterval(async()=>{const s=await updates.state();$('updateStatus').textContent=s.message||s.status;if(s.status==='ready'){$('installUpdate').classList.remove('hidden');clearInterval(timer)}},1200)};$('installUpdate').onclick=()=>updates.install()
-api.onChunk(payload=>{if(payload.requestId!==requestId)return;const m=active()?.messages.find(x=>x.id===payload.requestId);if(m)m.content+=payload.chunk;render()});motion.onShown(()=>{const shell=document.querySelector('.shell');shell.classList.remove('enter');void shell.offsetWidth;shell.classList.add('enter')})
-window.onkeydown=e=>{if(e.key==='Escape'){api.hide();e.preventDefault()}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();$('new').click()}}
-;(async()=>{state=await api.getState();render();$('prompt').focus()})()
+const $=id=>document.getElementById(id),api=window.bobAssistant,updates=window.bobDesktopUpdates,motion=window.bobAssistantMotion;
+let state,requestId=null;
+const active=()=>state?.chats?.items?.find(c=>c.id===state.chats.activeId);
+function toast(t){$('toast').textContent=t;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),2600)}
+function expandView(){document.getElementById('shell').classList.add('expanded');api.expand();$('disclaimer').style.display='block'}
+function render(){
+ if(!state)return;
+ const c=active(),m=$('messages');m.replaceChildren();
+ $('welcome').classList.toggle('hidden',!!c?.messages?.length);
+ for(const x of c?.messages||[]){const d=document.createElement('div');d.className='message '+x.role;const s=document.createElement('span');s.textContent=x.content||'';d.append(s);m.append(d)}
+ $('chat').scrollTop=$('chat').scrollHeight;
+ const p=state.settings.provider;$('providerLabel').textContent='Bob · '+p;$('status').textContent=state.providers[p]?.hasKey?'Ready':'Set up provider';
+}
+function openSettings(){
+ const c=state.settings;$('settings').classList.add('visible');$('chat').style.visibility='hidden';$('form').style.visibility='hidden';$('provider').value=c.provider;$('model').value=c.model;$('base').value=c.baseUrl;$('baseLabel').style.display=['openai','openai-compatible'].includes(c.provider)?'':'none';$('key').value='';$('keyStatus').textContent=state.providers[c.provider]?.hasKey?'Key saved securely':'No key saved';$('note').textContent=state.secureStorageAvailable?'Keys are encrypted by Windows.':'Secure storage unavailable; cannot save keys.';$('save').disabled=!state.secureStorageAvailable;
+}
+function closeSettings(){$('settings').classList.remove('visible');$('chat').style.visibility='';$('form').style.visibility=''}
+async function save(){
+ try{const p={provider:$('provider').value,model:$('model').value.trim(),baseUrl:$('base').value.trim()};if($('key').value.trim())p.apiKey=$('key').value.trim();state=await api.saveSettings(p);$('key').value='';render();openSettings();toast('Provider saved')}
+ catch(e){toast(e.message)}
+}
+function resize(){const t=$('prompt');t.style.height='auto';t.style.height=Math.min(t.scrollHeight,105)+'px'}
+async function send(t){
+ if(requestId||!t.trim())return;
+ requestId=Date.now().toString(36);const id=requestId,text=t.trim();
+ $('prompt').value='';resize();expandView();
+ if(!active())state=await api.newChat();
+ active().messages.push({role:'user',content:text},{id,role:'assistant',content:''});
+ render();$('send').disabled=true;$('status').textContent='Thinking…';
+ try{const r=await api.send({text,requestId:id});state=r.state||state;if(!r.ok)toast(r.error||'Bob could not complete that request.')}
+ catch(e){toast(e.message)}
+ finally{requestId=null;$('send').disabled=false;render();$('status').textContent='Ready';$('prompt').focus()}
+}
+$('form').onsubmit=e=>{e.preventDefault();send($('prompt').value)};
+$('prompt').oninput=resize;
+$('prompt').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('form').requestSubmit()}};
+$('new').onclick=async()=>{state=await api.newChat();closeSettings();render();$('prompt').focus()};
+$('settingsTop').onclick=openSettings;$('back').onclick=closeSettings;$('hide').onclick=()=>api.hide();
+$('provider').onchange=()=>{const p=$('provider').value;$('baseLabel').style.display=['openai','openai-compatible'].includes(p)?'':'none';$('model').value=({gemini:'gemini-3.8-flash',openai:'gpt-4.1-mini',anthropic:'claude-sonnet-4-20250514','openai-compatible':''})[p];$('key').value='';$('keyStatus').textContent=state.providers[p]?.hasKey?'Key saved securely':'No key saved'};
+$('save').onclick=save;
+$('test').onclick=async()=>{await save();closeSettings();await send('Reply with exactly: Connection successful.');openSettings()};
+$('checkUpdates').onclick=async()=>{$('updateStatus').textContent='Checking for updates…';try{await updates.check();setTimeout(async()=>{const s=await updates.state();$('updateStatus').textContent=s.message||s.status;$('downloadUpdate').style.display=s.status==='available'?'':'none';$('installUpdate').style.display=s.status==='ready'?'':'none'},1800)}catch(e){$('updateStatus').textContent=e.message}};
+$('downloadUpdate').onclick=async()=>{await updates.download();$('updateStatus').textContent='Downloading update…';const timer=setInterval(async()=>{const s=await updates.state();$('updateStatus').textContent=s.message||s.status;if(s.status==='ready'){$('installUpdate').style.display='';clearInterval(timer)}},1200)};
+$('installUpdate').onclick=()=>updates.install();
+api.onChunk(payload=>{if(payload.requestId!==requestId)return;const m=active()?.messages.find(x=>x.id===payload.requestId);if(m){m.content+=payload.chunk;render()}});
+motion.onShown(()=>{const shell=$('shell');shell.classList.remove('enter','expanded');$('settings').classList.remove('visible');$('chat').style.visibility='';$('form').style.visibility='';void shell.offsetWidth;shell.classList.add('enter');$('prompt').value='';resize();$('prompt').focus()});
+window.onkeydown=e=>{if(e.key==='Escape'){api.hide();e.preventDefault()}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();$('new').click()}};
+(async()=>{state=await api.getState();render();$('prompt').focus()})();
