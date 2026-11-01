@@ -1,8 +1,8 @@
 const $=id=>document.getElementById(id),api=window.bobAssistant,updates=window.bobDesktopUpdates,motion=window.bobAssistantMotion;
-let state,requestId=null;
+let state,requestId=null,isExpanded=false;
 const active=()=>state?.chats?.items?.find(c=>c.id===state.chats.activeId);
 function toast(t){$('toast').textContent=t;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),2600)}
-function expandView(){document.getElementById('shell').classList.add('expanded');api.expand();$('disclaimer').style.display='block'}
+function expandView(){if(isExpanded)return;isExpanded=true;document.getElementById('shell').classList.add('expanded');api.expand();$('disclaimer').style.display='block'}
 function render(){
  if(!state)return;
  const c=active(),m=$('messages');m.replaceChildren();
@@ -42,7 +42,7 @@ $('test').onclick=async()=>{await save();closeSettings();await send('Reply with 
 $('checkUpdates').onclick=async()=>{$('updateStatus').textContent='Checking for updates…';try{await updates.check();setTimeout(async()=>{const s=await updates.state();$('updateStatus').textContent=s.message||s.status;$('downloadUpdate').style.display=s.status==='available'?'':'none';$('installUpdate').style.display=s.status==='ready'?'':'none'},1800)}catch(e){$('updateStatus').textContent=e.message}};
 $('downloadUpdate').onclick=async()=>{await updates.download();$('updateStatus').textContent='Downloading update…';const timer=setInterval(async()=>{const s=await updates.state();$('updateStatus').textContent=s.message||s.status;if(s.status==='ready'){$('installUpdate').style.display='';clearInterval(timer)}},1200)};
 $('installUpdate').onclick=()=>updates.install();
-api.onChunk(payload=>{if(payload.requestId!==requestId)return;const m=active()?.messages.find(x=>x.id===payload.requestId);if(m){m.content+=payload.chunk;render()}});
-motion.onShown(()=>{const shell=$('shell');shell.classList.remove('enter','expanded');$('settings').classList.remove('visible');$('chat').style.visibility='';$('form').style.visibility='';void shell.offsetWidth;shell.classList.add('enter');$('prompt').value='';resize();$('prompt').focus()});
+api.onChunk(payload=>{if(payload.requestId!==requestId)return;expandView();const m=active()?.messages.find(x=>x.id===payload.requestId);if(m){m.content+=payload.chunk;render()}});
+motion.onShown(()=>{const shell=$('shell');shell.classList.remove('enter','expanded');isExpanded=false;$('providerLabel').textContent='Bob · Ctrl + Space';$('settings').classList.remove('visible');$('chat').style.visibility='';$('form').style.visibility='';void shell.offsetWidth;shell.classList.add('enter');$('prompt').value='';resize();$('prompt').focus()});
 window.onkeydown=e=>{if(e.key==='Escape'){api.hide();e.preventDefault()}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();$('new').click()}};
 (async()=>{state=await api.getState();render();$('prompt').focus()})();
