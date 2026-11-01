@@ -62,3 +62,13 @@ contextBridge.exposeInMainWorld('bob', {
   close: () => ipcRenderer.invoke('bob:close'),
   isMaximized: () => ipcRenderer.invoke('bob:isMaximized'),
 })
+
+contextBridge.exposeInMainWorld('bobAssistant',{
+ getState:()=>ipcRenderer.invoke('assistant:get-state'),
+ hide:()=>ipcRenderer.invoke('assistant:hide'),
+ newChat:()=>ipcRenderer.invoke('assistant:new-chat'),
+ openChat:id=>ipcRenderer.invoke('assistant:open-chat',id),
+ saveSettings:value=>ipcRenderer.invoke('assistant:save-settings',value),
+ send:value=>ipcRenderer.invoke('assistant:send',value),
+ onChunk:callback=>ipcRenderer.on('assistant:chunk',(_event,value)=>callback(value))
+})
