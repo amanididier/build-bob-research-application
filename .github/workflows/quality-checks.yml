@@ -66,6 +66,8 @@ jobs:
         run: |
           node --check apps/desktop/main.cjs
           node --check apps/desktop/preload.cjs
+          node --check apps/desktop/assistant.cjs
+          node --check apps/desktop/renderer/assistant.js
           node --check apps/desktop/localProjectReader.cjs
           node --check apps/desktop/githubProjectReader.cjs
 
@@ -148,6 +150,8 @@ jobs:
           node --check chrome-extension/sidepanel.js
           node --check apps/desktop/main.cjs
           node --check apps/desktop/preload.cjs
+          node --check apps/desktop/assistant.cjs
+          node --check apps/desktop/renderer/assistant.js
           node --check apps/desktop/githubProjectReader.cjs
 
       - name: Install desktop dependencies (retry transient native binary downloads)
