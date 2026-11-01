@@ -27,8 +27,8 @@ async function send(t){
  if(!active())state=await api.newChat();
  active().messages.push({role:'user',content:text},{id,role:'assistant',content:''});
  render();$('send').disabled=true;$('status').textContent='Thinking…';
- try{const r=await api.send({text,requestId:id});state=r.state||state;if(!r.ok)toast(r.error||'Bob could not complete that request.')}
- catch(e){toast(e.message)}
+ try{const r=await api.send({text,requestId:id});state=r.state||state;if(!isExpanded)expandView();if(!r.ok)toast(r.error||'Bob could not complete that request.')}
+ catch(e){expandView();const pending=active()?.messages.find(x=>x.id===id);if(pending)pending.content='I could not complete that request. '+e.message;toast(e.message)}
  finally{requestId=null;$('send').disabled=false;render();$('status').textContent='Ready';$('prompt').focus()}
 }
 $('form').onsubmit=e=>{e.preventDefault();send($('prompt').value)};
