@@ -66,6 +66,7 @@ contextBridge.exposeInMainWorld('bob', {
 contextBridge.exposeInMainWorld('bobAssistant',{
  getState:()=>ipcRenderer.invoke('assistant:get-state'),
  hide:()=>ipcRenderer.invoke('assistant:hide'),
+ expand:()=>ipcRenderer.invoke('assistant:expand'),
  newChat:()=>ipcRenderer.invoke('assistant:new-chat'),
  openChat:id=>ipcRenderer.invoke('assistant:open-chat',id),
  saveSettings:value=>ipcRenderer.invoke('assistant:save-settings',value),
