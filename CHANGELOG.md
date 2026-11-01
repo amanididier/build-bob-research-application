@@ -1,5 +1,17 @@
 # Changelog
 
+## Bob v1.1.4 — 2026-11-01
+
+### Desktop assistant and updater
+- Refine the Ctrl+Space assistant composer, dark appearance, and response expansion behaviour.
+- Repair local assistant streaming so provider responses are parsed and rendered correctly.
+- Restore live update status, download progress, and restart-to-install controls in Settings.
+- Read the installed desktop version from the native app instead of displaying a hardcoded version.
+- Fix the desktop release version alignment so this build can be delivered as an in-app update.
+
+### Interface polish
+- Restore visible keyboard focus styling without removing the existing visual hierarchy.
+
 ## Bob v1.1.1 — 2026-10-17
 
 ### Research workspace UI refinement
