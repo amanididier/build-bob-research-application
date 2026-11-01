@@ -4,7 +4,7 @@
 
 ### Desktop assistant and updater
 - Refine the Ctrl+Space assistant composer, dark appearance, and response expansion behaviour.
-- Repair local assistant streaming so provider responses are parsed and rendered correctly.
+- Repair local assistant streaming and provider URL parsing so responses are received and rendered correctly.
 - Restore live update status, download progress, and restart-to-install controls in Settings.
 - Read the installed desktop version from the native app instead of displaying a hardcoded version.
 - Fix the desktop release version alignment so this build can be delivered as an in-app update.
