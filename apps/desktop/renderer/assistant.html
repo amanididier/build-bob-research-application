@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self';style-src 'self' 'unsafe-inline';script-src 'self';connect-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self';style-src 'self' 'unsafe-inline';script-src 'self';connect-src https://generativelanguage.googleapis.com https://api.openai.com https://api.anthropic.com https:">
 <title>Bob</title>
 <style>
 :root{color-scheme:light;--ink:#242424;--muted:#858585;--line:#e9e9e6;--surface:#fff;--soft:#f6f6f3;--yellow:#f4cf45}
@@ -48,7 +48,7 @@ textarea::placeholder{color:#999}
 .settings .row{display:flex;gap:8px}.settings button{height:32px;border:1px solid #ddd;border-radius:8px;background:white;padding:0 12px;cursor:pointer;font-size:11px}.settings .primary{background:#242424;color:white}
 .toast{position:absolute;left:50%;bottom:92px;transform:translateX(-50%);background:#242424;color:#fff;border-radius:9px;padding:8px 12px;font-size:11px;opacity:0;pointer-events:none;transition:opacity .15s;z-index:8;max-width:90%;white-space:normal;text-align:center}
 .toast.show{opacity:1}
-@media(prefers-reduced-motion:reduce){.shell,header,.composer{transition:none}}
+@media(prefers-color-scheme:dark){:root{color-scheme:dark;--ink:#f4f3ef;--muted:#aaa69d;--line:#37332e;--surface:#191816;--soft:#282521}.composer{background:#201e1a;border-color:#3b3730}.composer:focus-within{border-color:#625a49}textarea{color:var(--ink)}.message.user span{background:#302d27}.settings{background:#191816;color:var(--ink)}.settings input,.settings select{background:#24211d;color:var(--ink);border-color:#3b3730}.settings button{background:#24211d;color:var(--ink);border-color:#3b3730}.settings .primary{background:#f4cf45;color:#242424;border-color:#f4cf45}.toast{background:#f4cf45;color:#242424}}\nbutton:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid #d6a900;outline-offset:2px}\n@media(prefers-reduced-motion:reduce){.shell,header,.composer{transition:none}}
 </style>
 </head>
 <body>
