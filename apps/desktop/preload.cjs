@@ -72,3 +72,10 @@ contextBridge.exposeInMainWorld('bobAssistant',{
  send:value=>ipcRenderer.invoke('assistant:send',value),
  onChunk:callback=>ipcRenderer.on('assistant:chunk',(_event,value)=>callback(value))
 })
+
+contextBridge.exposeInMainWorld('bobDesktopUpdates',{
+ check:()=>ipcRenderer.invoke('bob:checkUpdates'),
+ state:()=>ipcRenderer.invoke('bob:getUpdateState'),
+ download:()=>ipcRenderer.invoke('bob:downloadUpdate'),
+ install:()=>ipcRenderer.invoke('bob:installUpdate')
+})
