@@ -1,6 +1,7 @@
 // Bob Research Companion - Desktop Main Process
 // Bundles modern React/Vite app with native auto-updates and real Bob mascot icon.
-const { app, BrowserWindow, shell, ipcMain, session, dialog, safeStorage } = require('electron')
+const { app, BrowserWindow, shell, ipcMain, session, dialog, safeStorage, globalShortcut, screen } = require('electron')
+const { createDesktopAssistant } = require('./assistant.cjs')
 const http = require('node:http')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -1547,7 +1548,7 @@ function registerIpc() {
   })
 
   ipcMain.handle('bob:close', () => {
-    if (win) win.close()
+    if (win) win.hide()
   })
 
   ipcMain.handle('bob:isMaximized', () => {
@@ -1600,6 +1601,7 @@ function createWindow() {
 
   win.setMenu(null)
   win.once('ready-to-show', () => win.show())
+  win.on('close', (event) => { if (!app.isQuitting) { event.preventDefault(); win.hide() } })
 
   win.webContents.on('did-fail-load', (_e, code, desc, url) => {
     log('Load failed:', code, desc, url)
@@ -1709,13 +1711,13 @@ function syncExtensionFilesToUserData() {
     syncExtensionFilesToUserData()
     createWindow()
     setupAutoUpdater()
+    createDesktopAssistant({ app, BrowserWindow, ipcMain, globalShortcut, safeStorage, screen })
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()
     })
   })
 
-  app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') app.quit()
-  })
+  app.on('before-quit', () => { app.isQuitting = true; globalShortcut.unregisterAll() })
+  app.on('window-all-closed', () => { if (process.platform !== 'darwin' && !app.isQuitting) app.quit() })
 }
