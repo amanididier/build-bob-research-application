@@ -1,6 +1,6 @@
 // Bob Research Companion - Desktop Main Process
 // Bundles modern React/Vite app with native auto-updates and real Bob mascot icon.
-const { app, BrowserWindow, shell, ipcMain, session, dialog, safeStorage, globalShortcut, screen } = require('electron')
+const { app, BrowserWindow, shell, ipcMain, session, dialog, safeStorage, globalShortcut, screen, Tray, Menu } = require('electron')
 const { createDesktopAssistant } = require('./assistant.cjs')
 const http = require('node:http')
 const fs = require('node:fs')
@@ -26,6 +26,8 @@ const TOKEN = process.env.BOB_BRIDGE_TOKEN || 'development-token'
 const WEB_URL = process.env.BOB_WEB_URL || 'https://build-bob-research-application.vercel.app'
 
 let win = null
+let desktopAssistant = null
+let tray = null
 let storePath = null
 let canonicalWorkspacePath = null
 let bridgeListening = false
@@ -1556,6 +1558,26 @@ function registerIpc() {
   })
 }
 
+
+function setupTray() {
+  try {
+    const iconCandidates = [path.join(__dirname, 'bob-logo.ico'), path.join(__dirname, 'bob-logo.png')]
+    const icon = iconCandidates.find(file => fs.existsSync(file))
+    if (!icon) { log('Tray icon not found; global shortcut remains available'); return }
+    tray = new Tray(icon)
+    tray.setToolTip('Bob Desktop Assistant')
+    tray.setContextMenu(Menu.buildFromTemplate([
+      { label: 'Open Bob Assistant', click: () => desktopAssistant && desktopAssistant.show() },
+      { label: 'Open Bob Workspace', click: () => { if (win) { win.show(); win.focus() } } },
+      { type: 'separator' },
+      { label: 'Quit Bob', click: () => app.quit() }
+    ]))
+    tray.on('click', () => desktopAssistant && desktopAssistant.toggle())
+  } catch (error) {
+    log('Tray initialization failed:', error.message)
+  }
+}
+
 function createWindow() {
   const iconCandidates = [
     path.join(__dirname, 'bob-logo.ico'),
@@ -1643,6 +1665,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('second-instance', () => {
     if (win) {
       if (win.isMinimized()) win.restore()
+      win.show()
       win.focus()
     }
   })
@@ -1711,7 +1734,8 @@ function syncExtensionFilesToUserData() {
     syncExtensionFilesToUserData()
     createWindow()
     setupAutoUpdater()
-    createDesktopAssistant({ app, BrowserWindow, ipcMain, globalShortcut, safeStorage, screen })
+    desktopAssistant = createDesktopAssistant({ app, BrowserWindow, ipcMain, globalShortcut, safeStorage, screen })
+    setupTray()
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()
