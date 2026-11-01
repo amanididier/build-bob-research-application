@@ -79,3 +79,7 @@ contextBridge.exposeInMainWorld('bobDesktopUpdates',{
  download:()=>ipcRenderer.invoke('bob:downloadUpdate'),
  install:()=>ipcRenderer.invoke('bob:installUpdate')
 })
+
+contextBridge.exposeInMainWorld('bobAssistantMotion',{
+ onShown:callback=>ipcRenderer.on('assistant:animate-in',()=>callback())
+})
