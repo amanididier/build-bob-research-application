@@ -9,7 +9,7 @@ function render(){
  $('welcome').classList.toggle('hidden',!!c?.messages?.length);
  for(const x of c?.messages||[]){const d=document.createElement('div');d.className='message '+x.role;const s=document.createElement('span');s.textContent=x.content||'';d.append(s);m.append(d)}
  $('chat').scrollTop=$('chat').scrollHeight;
- const p=state.settings.provider;$('providerLabel').textContent='Bob · '+p;$('status').textContent=state.providers[p]?.hasKey?'Ready':'Set up provider';
+ const p=state.settings.provider;if(!requestId)$('providerLabel').textContent='Bob · '+p;$('status').textContent=state.providers[p]?.hasKey?'Ready':'Set up provider';
 }
 function openSettings(){
  const c=state.settings;$('settings').classList.add('visible');$('chat').style.visibility='hidden';$('form').style.visibility='hidden';$('provider').value=c.provider;$('model').value=c.model;$('base').value=c.baseUrl;$('baseLabel').style.display=['openai','openai-compatible'].includes(c.provider)?'':'none';$('key').value='';$('keyStatus').textContent=state.providers[c.provider]?.hasKey?'Key saved securely':'No key saved';$('note').textContent=state.secureStorageAvailable?'Keys are encrypted by Windows.':'Secure storage unavailable; cannot save keys.';$('save').disabled=!state.secureStorageAvailable;
@@ -23,7 +23,7 @@ function resize(){const t=$('prompt');t.style.height='auto';t.style.height=Math.
 async function send(t){
  if(requestId||!t.trim())return;
  requestId=Date.now().toString(36);const id=requestId,text=t.trim();
- $('prompt').value='';resize();expandView();
+ $('prompt').value='';resize();$('providerLabel').textContent='Bob is thinking…';
  if(!active())state=await api.newChat();
  active().messages.push({role:'user',content:text},{id,role:'assistant',content:''});
  render();$('send').disabled=true;$('status').textContent='Thinking…';
